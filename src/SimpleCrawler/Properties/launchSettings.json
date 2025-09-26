@@ -2,7 +2,7 @@
   "profiles": {
     "SimpleCrawler": {
       "commandName": "Project",
-      "commandLineArgs": "-e \"https://etrack.alleima.com/en/\" -o \"D:\\tmp\\etrack.alleima.com.log\""
+      "commandLineArgs": "-e \"https://etrack.alleima.com/en/\" -o \"D:\\tmp\\etrack.alleima.com\""
     }
   }
 }

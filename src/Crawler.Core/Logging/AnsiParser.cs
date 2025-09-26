@@ -1,6 +1,6 @@
 ﻿using System.Runtime.CompilerServices;
 
-namespace SimpleCrawler.Logging;
+namespace Crawler.Core.Logging;
 
 internal sealed class AnsiParser
 {

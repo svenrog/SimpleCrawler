@@ -1,4 +1,4 @@
-﻿namespace SimpleCrawler.Models;
+﻿namespace Crawler.Core.Models;
 
 public class ScrapeResult
 {

@@ -1,9 +1,10 @@
-﻿using Microsoft.Extensions.Logging;
+﻿using Crawler.Core.Extensions;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Logging.Console;
-using SimpleCrawler.Extensions;
 
-namespace SimpleCrawler.Logging;
+namespace Crawler.Core.Logging;
+
 public sealed class CrudeLogFormatter() : ConsoleFormatter(FormatterName)
 {
     public const string FormatterName = "crude";

@@ -1,33 +1,34 @@
-﻿using HtmlAgilityPack;
+﻿using Crawler.Core.Extensions;
+using Crawler.Core.Models;
+using HtmlAgilityPack;
 using HtmlAgilityPack.CssSelectors.NetCore;
 using Microsoft.Extensions.Logging;
-using SimpleCrawler.Extensions;
-using SimpleCrawler.Models;
+using Microsoft.Extensions.Options;
 using System.Collections.Concurrent;
 
-namespace SimpleCrawler.Data;
+namespace Crawler.Core;
 
-public class Crawler
+public abstract class CrawlerBase
 {
     private readonly HtmlWeb _client;
-    private readonly Options _options;
+    private readonly CrawlerOptions _options;
     private readonly ConcurrentDictionary<string, bool> _visited;
     private readonly ConcurrentDictionary<string, bool> _pending;
     private readonly ConcurrentDictionary<string, bool> _discovered;
     private readonly ConcurrentQueue<string> _discovery;
     private readonly SemaphoreSlim _semaphore;
-    private readonly ILogger<Crawler> _logger;
+    private readonly ILogger _logger;
 
     private readonly Uri _siteUri;
     private readonly string _siteAuthority;
 
-    public Crawler(HtmlWeb client, Options options, ILogger<Crawler> logger)
+    protected CrawlerBase(HtmlWeb client, IOptions<CrawlerOptions> options, ILogger logger)
     {
         _client = client;
-        _options = options;
+        _options = options.Value;
         _logger = logger;
 
-        _siteUri = new Uri(options.Entry);
+        _siteUri = new Uri(_options.Entry);
         _siteAuthority = _siteUri.GetLeftPart(UriPartial.Authority);
 
         _semaphore = new SemaphoreSlim(1, _options.Parallellism);
@@ -37,11 +38,11 @@ public class Crawler
         _pending = [];
         _discovered = [];
 
-        _discovery.Enqueue(options.Entry);
-        _discovered.TryAdd(options.Entry, true);
+        _discovery.Enqueue(_options.Entry);
+        _discovered.TryAdd(_options.Entry, true);
     }
 
-    public async Task<ScrapeResult> Scrape(CancellationToken cancellationToken = default)
+    public async Task<IScrapeResult> Scrape(CancellationToken cancellationToken = default)
     {
         while ((!_discovery.IsEmpty || !_pending.IsEmpty) && _visited.Count < _options.MaxPages)
         {
@@ -53,11 +54,10 @@ public class Crawler
                 _ = ProcessPage(nextPage, cancellationToken);
         }
 
-        return new ScrapeResult
-        {
-            Urls = [.. _visited.Keys.Order()]
-        };
+        return await GetResult(cancellationToken);
     }
+
+    protected abstract ValueTask<IScrapeResult> GetResult(CancellationToken cancellationToken);
 
     private async Task ProcessPage(string url, CancellationToken cancellationToken)
     {
@@ -66,8 +66,10 @@ public class Crawler
 
         try
         {
-            var response = await _client.LoadFromWebAsync(url, cancellationToken);
+            var response = await LoadUrl(_client, url, cancellationToken);
             _logger.LogDebug("Response from url '{url}'", url);
+
+            await AnalyzeDocument(url, response);
 
             var links = DiscoverLinks(response);
 
@@ -101,15 +103,24 @@ public class Crawler
         }
     }
 
-    private void ClassifyPage(HtmlDocument document)
+    protected virtual ValueTask AnalyzeDocument(string url, HtmlDocument response)
     {
+        return ValueTask.CompletedTask;
+    }
 
+    protected virtual Task<HtmlDocument> LoadUrl(HtmlWeb client, string url, CancellationToken cancellationToken)
+    {
+        return client.LoadFromWebAsync(url, cancellationToken);
+    }
 
+    protected virtual IList<HtmlNode> CollectLinks(HtmlDocument document)
+    {
+        return document.DocumentNode.QuerySelectorAll("a");
     }
 
     private HashSet<string> DiscoverLinks(HtmlDocument document)
     {
-        var linkElements = document.DocumentNode.QuerySelectorAll("a");
+        var linkElements = CollectLinks(document);
         var links = new HashSet<string>(linkElements.Count, StringComparer.OrdinalIgnoreCase);
 
         foreach (var linkElement in linkElements)

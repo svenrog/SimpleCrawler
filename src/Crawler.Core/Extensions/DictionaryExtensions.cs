@@ -1,6 +1,6 @@
 ﻿using System.Collections.Concurrent;
 
-namespace SimpleCrawler.Extensions;
+namespace Crawler.Core.Extensions;
 
 public static class DictionaryExtensions
 {

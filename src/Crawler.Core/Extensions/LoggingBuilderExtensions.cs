@@ -1,9 +1,9 @@
-﻿using Microsoft.Extensions.Logging;
+﻿using Crawler.Core.Logging;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Console;
-using SimpleCrawler.Logging;
 using System.Diagnostics.CodeAnalysis;
 
-namespace SimpleCrawler.Extensions;
+namespace Crawler.Core.Extensions;
 
 public static class LoggingBuilderExtensions
 {

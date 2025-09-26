@@ -2,5 +2,7 @@
   <Folder Name="/Solution Items/">
     <File Path=".editorconfig" />
   </Folder>
+  <Project Path="src/Crawler.Alleima.ETrack/Crawler.Alleima.ETrack.csproj" Id="96fa2055-0693-4ef1-a686-345938db2738" />
+  <Project Path="src/Crawler.Core/Crawler.Core.csproj" Id="8d491ce0-221d-428e-8136-ae10e7740cce" />
   <Project Path="src/SimpleCrawler/SimpleCrawler.csproj" />
 </Solution>

@@ -1,6 +1,6 @@
-﻿using SimpleCrawler.Logging;
+﻿using Crawler.Core.Logging;
 
-namespace SimpleCrawler.Extensions;
+namespace Crawler.Core.Extensions;
 
 internal static class TextWriterExtensions
 {
