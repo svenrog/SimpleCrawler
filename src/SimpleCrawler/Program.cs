@@ -26,7 +26,7 @@ internal static class Program
 
         await parseResult.WithParsedAsync(async options =>
         {
-            builder.Services.AddSingleton(options);
+            builder.Services.AddOptions(options);
             await Run(builder);
         });
 
