@@ -14,6 +14,7 @@ public abstract class CrawlerBase<TResult>
     private readonly HttpClient _client;
     private readonly CrawlerOptions _options;
     private readonly ConcurrentHashSet<string> _pending;
+    private readonly ConcurrentHashSet<string> _processed;
     private readonly ConcurrentHashSet<string> _discovered;
     private readonly ConcurrentQueue<string> _discovery;
     private readonly SemaphoreSlim _semaphore;
@@ -36,6 +37,8 @@ public abstract class CrawlerBase<TResult>
         _semaphore = new SemaphoreSlim(1, _options.Parallellism);
 
         Visited = [];
+
+        _processed = [];
         _discovery = [];
         _pending = [];
         _discovered = [];
@@ -46,7 +49,7 @@ public abstract class CrawlerBase<TResult>
 
     public async Task<TResult> Scrape(CancellationToken cancellationToken = default)
     {
-        while ((!_discovery.IsEmpty || !_pending.IsEmpty) && Visited.Count < _options.MaxPages)
+        while ((!_discovery.IsEmpty || !_pending.IsEmpty) && _processed.Count < _options.MaxPages)
         {
             await _semaphore.WaitAsync(cancellationToken);
 
@@ -72,6 +75,8 @@ public abstract class CrawlerBase<TResult>
             if (response == null)
                 return;
 
+            Visited.Add(url);
+
             await AnalyzeDocument(url, response);
 
             var links = DiscoverLinks(response);
@@ -96,7 +101,7 @@ public abstract class CrawlerBase<TResult>
         }
         finally
         {
-            Visited.Add(url);
+            _processed.Add(url);
             _pending.Remove(url);
 
             var need = Math.Min(_options.Parallellism, _discovery.Count);
@@ -162,7 +167,7 @@ public abstract class CrawlerBase<TResult>
             if (!linkUrl.StartsWith(_siteAuthority, StringComparison.OrdinalIgnoreCase))
                 continue;
 
-            if (_discovered.Add(linkUrl))
+            if (_discovered.Contains(linkUrl))
                 continue;
 
             links.Add(linkUrl);

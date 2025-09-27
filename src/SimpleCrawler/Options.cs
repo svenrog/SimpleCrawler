@@ -13,8 +13,8 @@ public sealed class Options
     [Option('o', "outputFile", Required = true, HelpText = "The file to output to.")]
     public string Output { get; set; } = string.Empty;
 
-    [Option('t', "threads", Required = false, Default = 24, HelpText = "Parallel pages to fetch.")]
-    public int Parallellism { get; set; } = 24;
+    [Option('t', "threads", Required = false, Default = 8, HelpText = "Parallel pages to fetch.")]
+    public int Parallellism { get; set; } = 8;
 
     [Option('m', "maxPages", Required = false, Default = 10000, HelpText = "Max pages to visit.")]
     public int MaxPages { get; set; } = 10000;

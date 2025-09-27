@@ -10,7 +10,7 @@ public sealed class DefaultCrawler(HttpClient client, IOptions<CrawlerOptions> o
     {
         var result = new ScrapeResult
         {
-            Urls = [.. Visited]
+            Urls = [.. Visited.Order()]
         };
 
         return ValueTask.FromResult(result);
