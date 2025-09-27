@@ -1,9 +1,9 @@
-﻿using Crawler.Core.Extensions;
+﻿using Logging.Core.Extensions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Logging.Console;
 
-namespace Crawler.Core.Logging;
+namespace Logging.Core;
 
 public sealed class CrudeLogFormatter() : ConsoleFormatter(FormatterName)
 {
@@ -36,7 +36,7 @@ public sealed class CrudeLogFormatter() : ConsoleFormatter(FormatterName)
         var logLevelColors = GetLogLevelConsoleColors(logLevel);
         var logLevelString = GetLogLevelString(logLevel);
 
-        textWriter.WriteColoredMessage(stamp.ToString(_timeStampFormat), ConsoleColor.Black, ConsoleColor.DarkGray);
+        textWriter.WriteColoredMessage(stamp.ToString(_timeStampFormat), ConsoleColor.Black, ConsoleColor.Gray);
 
         if (logLevelString != null)
         {
@@ -47,7 +47,9 @@ public sealed class CrudeLogFormatter() : ConsoleFormatter(FormatterName)
         textWriter.Write(_loglevelPadding);
 
         var messageColor = GetLogMessageConsoleColor(logLevel);
-        textWriter.WriteColoredMessage(message, ConsoleColor.Black, messageColor);
+        var highlightColor = GetLogMessageHighlightColor(logLevel);
+
+        textWriter.WriteHighlightedMessage(message, ConsoleColor.Black, messageColor, highlightColor);
 
         if (exception != null)
         {
@@ -86,6 +88,16 @@ public sealed class CrudeLogFormatter() : ConsoleFormatter(FormatterName)
 
 
     private static ConsoleColor GetLogMessageConsoleColor(LogLevel logLevel)
+    {
+        return logLevel switch
+        {
+            LogLevel.Trace => ConsoleColor.Blue,
+            LogLevel.Debug => ConsoleColor.Blue,
+            _ => ConsoleColor.DarkGray,
+        };
+    }
+
+    private static ConsoleColor GetLogMessageHighlightColor(LogLevel logLevel)
     {
         return logLevel switch
         {

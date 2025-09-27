@@ -6,7 +6,21 @@ namespace SimpleCrawler.Extensions;
 
 internal static class ServiceCollectionExtensions
 {
-    public static void AddOptions(this IServiceCollection services, Options options)
+    public static void AddCrawler(this IServiceCollection services, Options options)
+    {
+        services.AddOptions(options);
+        services.AddHttpClient<DefaultCrawler>((provider, client) =>
+        {
+            var options = provider.GetRequiredService<Options>();
+
+            if (options.Cookie != null)
+            {
+                client.DefaultRequestHeaders.Add("Cookie", options.Cookie);
+            }
+        });
+    }
+
+    private static void AddOptions(this IServiceCollection services, Options options)
     {
         var crawlerOptions = Map(options);
         var optionsContainer = ExtensionsOptions.Create(crawlerOptions);

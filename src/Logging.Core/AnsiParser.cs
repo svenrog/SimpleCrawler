@@ -1,6 +1,6 @@
 ﻿using System.Runtime.CompilerServices;
 
-namespace Crawler.Core.Logging;
+namespace Logging.Core;
 
 internal sealed class AnsiParser
 {
@@ -128,6 +128,7 @@ internal sealed class AnsiParser
         return color switch
         {
             ConsoleColor.Black => "\e[30m",
+            ConsoleColor.DarkGray => "\e[1m\e[30m",
             ConsoleColor.DarkRed => "\e[31m",
             ConsoleColor.DarkGreen => "\e[32m",
             ConsoleColor.DarkYellow => "\e[33m",

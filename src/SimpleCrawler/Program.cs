@@ -1,10 +1,10 @@
 ﻿using CommandLine;
-using Crawler.Alleima.ETrack;
-using Crawler.Alleima.ETrack.Models;
-using Crawler.Core.Extensions;
-using HtmlAgilityPack;
+using Crawler.Core;
+using Logging.Core.Extensions;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Http;
 using Microsoft.Extensions.Logging;
 using SimpleCrawler.Extensions;
 using System.Diagnostics.CodeAnalysis;
@@ -18,15 +18,15 @@ internal static class Program
     {
         var builder = Host.CreateApplicationBuilder(arguments);
 
-        builder.Services.AddSingleton<HtmlWeb>();
-        builder.Services.AddSingleton<AlleimaCrawler>();
         builder.Logging.AddConsoleLogging();
 
         var parseResult = Parser.Default.ParseArguments<Options>(arguments);
 
         await parseResult.WithParsedAsync(async options =>
         {
-            builder.Services.AddOptions(options);
+            builder.Services.AddCrawler(options);
+            builder.Services.RemoveAll<IHttpMessageHandlerBuilderFilter>();
+
             await Run(builder);
         });
 
@@ -43,15 +43,12 @@ internal static class Program
             tokenSource.Cancel();
         };
 
-        var logger = host.Services.GetRequiredService<ILogger<AlleimaCrawler>>();
+        var logger = host.Services.GetRequiredService<ILogger<DefaultCrawler>>();
         var options = host.Services.GetRequiredService<Options>();
-        var crawler = host.Services.GetRequiredService<AlleimaCrawler>();
-        var result = (AlleimaScrapeResult)await crawler.Scrape(tokenSource.Token);
+        var crawler = host.Services.GetRequiredService<DefaultCrawler>();
+        var result = await crawler.Scrape(tokenSource.Token);
 
-        await File.WriteAllLinesAsync(options.Output + "-categories.log", result.Categories, tokenSource.Token);
-        await File.WriteAllLinesAsync(options.Output + "-products.log", result.Products, tokenSource.Token);
-        await File.WriteAllLinesAsync(options.Output + "-variations.log", result.Variations, tokenSource.Token);
-        await File.WriteAllLinesAsync(options.Output + "-other.log", result.Other, tokenSource.Token);
+        await File.WriteAllLinesAsync(options.Output, result.Urls, tokenSource.Token);
 
         logger.LogInformation("Wrote output file to '{path}'", options.Output);
     }
@@ -59,7 +56,7 @@ internal static class Program
     private static void Fail(HostApplicationBuilder builder, IEnumerable<Error> errors)
     {
         using var host = builder.Build();
-        var logger = host.Services.GetRequiredService<ILogger<AlleimaCrawler>>();
+        var logger = host.Services.GetRequiredService<ILogger<DefaultCrawler>>();
 
         logger.LogCliErrors(errors);
     }

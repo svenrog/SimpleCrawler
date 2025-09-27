@@ -1,14 +1,13 @@
-﻿using Crawler.Core.Logging;
-using Microsoft.Extensions.Logging;
+﻿using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Console;
 using System.Diagnostics.CodeAnalysis;
 
-namespace Crawler.Core.Extensions;
+namespace Logging.Core.Extensions;
 
 public static class LoggingBuilderExtensions
 {
     [DynamicDependency(DynamicallyAccessedMemberTypes.PublicConstructors, typeof(CrudeLogFormatter))]
-    public static void AddConsoleLogging(this ILoggingBuilder builder, LogLevel? minimumLevel = null)
+    public static void AddConsoleLogging(this ILoggingBuilder builder, LogLevel? minimumLevel = LogLevel.Debug)
     {
         builder.AddConsole(x =>
         {

@@ -1,20 +1,20 @@
-﻿using Crawler.Core.Extensions;
+﻿using Crawler.Core.Collections;
+using Crawler.Core.Extensions;
 using Crawler.Core.Models;
 using HtmlAgilityPack;
-using HtmlAgilityPack.CssSelectors.NetCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using System.Collections.Concurrent;
 
 namespace Crawler.Core;
 
-public abstract class CrawlerBase
+public abstract class CrawlerBase<TResult>
+    where TResult : IScrapeResult
 {
-    private readonly HtmlWeb _client;
+    private readonly HttpClient _client;
     private readonly CrawlerOptions _options;
-    private readonly ConcurrentDictionary<string, bool> _visited;
-    private readonly ConcurrentDictionary<string, bool> _pending;
-    private readonly ConcurrentDictionary<string, bool> _discovered;
+    private readonly ConcurrentHashSet<string> _pending;
+    private readonly ConcurrentHashSet<string> _discovered;
     private readonly ConcurrentQueue<string> _discovery;
     private readonly SemaphoreSlim _semaphore;
     private readonly ILogger _logger;
@@ -22,7 +22,9 @@ public abstract class CrawlerBase
     private readonly Uri _siteUri;
     private readonly string _siteAuthority;
 
-    protected CrawlerBase(HtmlWeb client, IOptions<CrawlerOptions> options, ILogger logger)
+    protected readonly ConcurrentHashSet<string> Visited;
+
+    protected CrawlerBase(HttpClient client, IOptions<CrawlerOptions> options, ILogger logger)
     {
         _client = client;
         _options = options.Value;
@@ -33,18 +35,18 @@ public abstract class CrawlerBase
 
         _semaphore = new SemaphoreSlim(1, _options.Parallellism);
 
-        _visited = [];
+        Visited = [];
         _discovery = [];
         _pending = [];
         _discovered = [];
 
         _discovery.Enqueue(_options.Entry);
-        _discovered.TryAdd(_options.Entry, true);
+        _discovered.Add(_options.Entry);
     }
 
-    public async Task<IScrapeResult> Scrape(CancellationToken cancellationToken = default)
+    public async Task<TResult> Scrape(CancellationToken cancellationToken = default)
     {
-        while ((!_discovery.IsEmpty || !_pending.IsEmpty) && _visited.Count < _options.MaxPages)
+        while ((!_discovery.IsEmpty || !_pending.IsEmpty) && Visited.Count < _options.MaxPages)
         {
             await _semaphore.WaitAsync(cancellationToken);
 
@@ -57,17 +59,18 @@ public abstract class CrawlerBase
         return await GetResult(cancellationToken);
     }
 
-    protected abstract ValueTask<IScrapeResult> GetResult(CancellationToken cancellationToken);
+    protected abstract ValueTask<TResult> GetResult(CancellationToken cancellationToken);
 
     private async Task ProcessPage(string url, CancellationToken cancellationToken)
     {
-        _pending.TryAdd(url, true);
+        _pending.Add(url);
         _logger.LogInformation("Processing url '{url}'", url);
 
         try
         {
-            var response = await LoadUrl(_client, url, cancellationToken);
-            _logger.LogDebug("Response from url '{url}'", url);
+            var response = await LoadDocument(_client, url, cancellationToken);
+            if (response == null)
+                return;
 
             await AnalyzeDocument(url, response);
 
@@ -77,7 +80,7 @@ public abstract class CrawlerBase
                 _logger.LogDebug("Found {count} outgoing links on '{url}'", links.Count, url);
 
             _discovery.EnqueueAll(links);
-            _discovered.AddKeyRange(links, true);
+            _discovered.AddRange(links);
         }
         catch (HtmlWebException ex)
         {
@@ -93,8 +96,8 @@ public abstract class CrawlerBase
         }
         finally
         {
-            _visited.TryAdd(url, true);
-            _pending.TryRemove(url, out bool _);
+            Visited.Add(url);
+            _pending.Remove(url);
 
             var need = Math.Min(_options.Parallellism, _discovery.Count);
             var release = Math.Max(1, need - 1);
@@ -108,26 +111,44 @@ public abstract class CrawlerBase
         return ValueTask.CompletedTask;
     }
 
-    protected virtual Task<HtmlDocument> LoadUrl(HtmlWeb client, string url, CancellationToken cancellationToken)
+    protected async virtual Task<HtmlDocument?> LoadDocument(HttpClient client, string url, CancellationToken cancellationToken)
     {
-        return client.LoadFromWebAsync(url, cancellationToken);
+        var response = await client.GetAsync(url, cancellationToken);
+
+        if (response.IsSuccessStatusCode)
+        {
+            _logger.LogDebug("Response '{code}' from url '{url}'", response.StatusCode, url);
+
+            using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+            var document = new HtmlDocument();
+
+            document.Load(stream);
+
+            return document;
+        }
+        else
+        {
+            _logger.LogWarning("Error {code} on url '{url}'", response.StatusCode, url);
+
+            return null;
+        }
     }
 
-    protected virtual IList<HtmlNode> CollectLinks(HtmlDocument document)
+    protected virtual HtmlNodeCollection? CollectLinks(HtmlDocument document)
     {
-        return document.DocumentNode.QuerySelectorAll("a");
+        return document.DocumentNode.SelectNodes("//a");
     }
 
     private HashSet<string> DiscoverLinks(HtmlDocument document)
     {
         var linkElements = CollectLinks(document);
-        var links = new HashSet<string>(linkElements.Count, StringComparer.OrdinalIgnoreCase);
+        var links = new HashSet<string>(linkElements?.Count ?? 0, StringComparer.OrdinalIgnoreCase);
 
-        foreach (var linkElement in linkElements)
+        foreach (var linkElement in linkElements ?? Enumerable.Empty<HtmlNode>())
         {
-            var linkValue = linkElement.Attributes["href"].Value;
+            var linkValue = linkElement.Attributes["href"]?.Value;
 
-            if (linkValue.StartsWith('#'))
+            if (linkValue == null || linkValue.StartsWith('#'))
                 continue;
 
             if (!Uri.TryCreate(linkValue, UriKind.RelativeOrAbsolute, out var linkUri))
@@ -141,7 +162,7 @@ public abstract class CrawlerBase
             if (!linkUrl.StartsWith(_siteAuthority, StringComparison.OrdinalIgnoreCase))
                 continue;
 
-            if (_discovered.ContainsKey(linkUrl))
+            if (_discovered.Add(linkUrl))
                 continue;
 
             links.Add(linkUrl);
