@@ -168,7 +168,9 @@ public abstract class CrawlerBase<TResult>
     protected virtual string? GetCanonical(HtmlDocument document)
     {
         var linkElement = document.DocumentNode.SelectSingleNode("//link[@rel='canonical']");
-        return linkElement?.Attributes["href"]?.Value;
+        var href = linkElement?.Attributes["href"]?.Value;
+
+        return GetAbsoluteUrl(href);
     }
 
     protected virtual RobotsRules GetRobotsRules(HtmlDocument document)
@@ -196,13 +198,9 @@ public abstract class CrawlerBase<TResult>
             if (InvalidateHref(href))
                 continue;
 
-            if (!Uri.TryCreate(href, UriKind.RelativeOrAbsolute, out var uri))
+            var url = GetAbsoluteUrl(href);
+            if (url == null)
                 continue;
-
-            if (!uri.IsAbsoluteUri)
-                uri = new Uri(_siteUri, uri);
-
-            var url = uri.ToString();
 
             if (!url.StartsWith(_siteAuthority, StringComparison.OrdinalIgnoreCase))
                 continue;
@@ -214,6 +212,17 @@ public abstract class CrawlerBase<TResult>
         }
 
         return urls;
+    }
+
+    protected virtual string? GetAbsoluteUrl(string? href)
+    {
+        if (!Uri.TryCreate(href, UriKind.RelativeOrAbsolute, out var uri))
+            return null;
+
+        if (!uri.IsAbsoluteUri)
+            uri = new Uri(_siteUri, uri);
+
+        return uri.ToString();
     }
 
     protected virtual bool InvalidateHref([NotNullWhen(false)] string? href)
