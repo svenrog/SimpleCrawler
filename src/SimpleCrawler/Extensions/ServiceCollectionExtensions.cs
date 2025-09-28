@@ -35,7 +35,9 @@ internal static class ServiceCollectionExtensions
         {
             Entry = options.Entry,
             MaxPages = options.MaxPages,
-            Parallellism = options.Parallellism
+            Parallelism = options.Parallelism,
+            CrawlDelay = options.CrawlDelay,
+            RespectMetaRobots = options.RespectMetaRobots,
         };
     }
 }

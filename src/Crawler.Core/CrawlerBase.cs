@@ -1,10 +1,13 @@
 ﻿using Crawler.Core.Collections;
+using Crawler.Core.Comparers;
 using Crawler.Core.Extensions;
+using Crawler.Core.Helpers;
 using Crawler.Core.Models;
 using HtmlAgilityPack;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using System.Collections.Concurrent;
+using System.Diagnostics.CodeAnalysis;
 
 namespace Crawler.Core;
 
@@ -22,6 +25,7 @@ public abstract class CrawlerBase<TResult>
 
     private readonly Uri _siteUri;
     private readonly string _siteAuthority;
+    private readonly TimeSpan _delay;
 
     protected readonly ConcurrentHashSet<string> Visited;
 
@@ -34,7 +38,8 @@ public abstract class CrawlerBase<TResult>
         _siteUri = new Uri(_options.Entry);
         _siteAuthority = _siteUri.GetLeftPart(UriPartial.Authority);
 
-        _semaphore = new SemaphoreSlim(1, _options.Parallellism);
+        _semaphore = new SemaphoreSlim(1, _options.Parallelism);
+        _delay = TimeSpan.FromSeconds(_options.CrawlDelay);
 
         Visited = [];
 
@@ -57,6 +62,9 @@ public abstract class CrawlerBase<TResult>
 
             if (nextPage != null)
                 _ = ProcessPage(nextPage, cancellationToken);
+
+            if (_delay > TimeSpan.Zero)
+                await Task.Delay(_delay, cancellationToken);
         }
 
         return await GetResult(cancellationToken);
@@ -69,20 +77,30 @@ public abstract class CrawlerBase<TResult>
         _pending.Add(url);
         _logger.LogInformation("Processing url '{url}'", url);
 
+        var canonicalUrl = (string?)null;
+
         try
         {
             var response = await LoadDocument(_client, url, cancellationToken);
             if (response == null)
                 return;
 
-            Visited.Add(url);
+            canonicalUrl = GetCanonical(response);
 
-            await AnalyzeDocument(url, response);
+            var resolvedUrl = canonicalUrl ?? url;
+
+            await AnalyzeDocument(resolvedUrl, response);
+
+            var robots = GetRobotsRules(response);
+            if (robots.Index)
+                Visited.Add(resolvedUrl);
+
+            if (!robots.Follow)
+                return;
 
             var links = DiscoverLinks(response);
-
             if (links.Count > 0)
-                _logger.LogDebug("Found {count} outgoing links on '{url}'", links.Count, url);
+                _logger.LogDebug("Found {count} outgoing links on '{url}'", links.Count, resolvedUrl);
 
             _discovery.EnqueueAll(links);
             _discovered.AddRange(links);
@@ -104,7 +122,10 @@ public abstract class CrawlerBase<TResult>
             _processed.Add(url);
             _pending.Remove(url);
 
-            var need = Math.Min(_options.Parallellism, _discovery.Count);
+            if (canonicalUrl != null)
+                _processed.Add(canonicalUrl);
+
+            var need = Math.Min(_options.Parallelism, _discovery.Count);
             var release = Math.Max(1, need - 1);
 
             _semaphore.Release(release);
@@ -144,35 +165,78 @@ public abstract class CrawlerBase<TResult>
         return document.DocumentNode.SelectNodes("//a");
     }
 
+    protected virtual string? GetCanonical(HtmlDocument document)
+    {
+        var linkElement = document.DocumentNode.SelectSingleNode("//link[@rel='canonical']");
+        return linkElement?.Attributes["href"]?.Value;
+    }
+
+    protected virtual RobotsRules GetRobotsRules(HtmlDocument document)
+    {
+        // TODO: Parse and respect robots.txt
+
+        if (!_options.RespectMetaRobots)
+            return RobotsRules.All;
+
+        var metaElement = document.DocumentNode.SelectSingleNode("//meta[@name='robots']");
+        var contentRuleValue = metaElement?.Attributes["content"]?.Value;
+
+        return IndexingHelper.ParseMetaRobots(contentRuleValue);
+    }
+
     private HashSet<string> DiscoverLinks(HtmlDocument document)
     {
-        var linkElements = CollectLinks(document);
-        var links = new HashSet<string>(linkElements?.Count ?? 0, StringComparer.OrdinalIgnoreCase);
+        var anchorElements = CollectLinks(document);
+        var urls = new HashSet<string>(anchorElements?.Count ?? 0, StringComparer.OrdinalIgnoreCase);
 
-        foreach (var linkElement in linkElements ?? Enumerable.Empty<HtmlNode>())
+        foreach (var anchorElement in anchorElements ?? Enumerable.Empty<HtmlNode>())
         {
-            var linkValue = linkElement.Attributes["href"]?.Value;
+            var href = anchorElement.Attributes["href"]?.Value;
 
-            if (linkValue == null || linkValue.StartsWith('#'))
+            if (InvalidateHref(href))
                 continue;
 
-            if (!Uri.TryCreate(linkValue, UriKind.RelativeOrAbsolute, out var linkUri))
+            if (!Uri.TryCreate(href, UriKind.RelativeOrAbsolute, out var uri))
                 continue;
 
-            if (!linkUri.IsAbsoluteUri)
-                linkUri = new Uri(_siteUri, linkUri);
+            if (!uri.IsAbsoluteUri)
+                uri = new Uri(_siteUri, uri);
 
-            var linkUrl = linkUri.ToString();
+            var url = uri.ToString();
 
-            if (!linkUrl.StartsWith(_siteAuthority, StringComparison.OrdinalIgnoreCase))
+            if (!url.StartsWith(_siteAuthority, StringComparison.OrdinalIgnoreCase))
                 continue;
 
-            if (_discovered.Contains(linkUrl))
+            if (_discovered.Contains(url))
                 continue;
 
-            links.Add(linkUrl);
+            urls.Add(url);
         }
 
-        return links;
+        return urls;
+    }
+
+    protected virtual bool InvalidateHref([NotNullWhen(false)] string? href)
+    {
+        if (href == null)
+            return true;
+
+        foreach (var linkPrefix in Constants.FilterLinkPrefixes)
+        {
+            if (href.StartsWith(linkPrefix, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+
+        var hrefSpan = href.AsSpan();
+        var fileExtension = Path.GetExtension(hrefSpan);
+        if (!fileExtension.IsEmpty)
+        {
+            if (!Constants.AllowedFileTypes.Contains(fileExtension, CharComparer.InvariantCultureIgnoreCase))
+                return true;
+        }
+
+        return false;
     }
 }

@@ -14,8 +14,14 @@ public sealed class Options
     public string Output { get; set; } = string.Empty;
 
     [Option('t', "threads", Required = false, Default = 8, HelpText = "Parallel pages to fetch.")]
-    public int Parallellism { get; set; } = 8;
+    public int Parallelism { get; set; } = 8;
 
     [Option('m', "maxPages", Required = false, Default = 10000, HelpText = "Max pages to visit.")]
     public int MaxPages { get; set; } = 10000;
+
+    [Option('d', "delay", Required = false, Default = 0, HelpText = "The crawl delay (in seconds)")]
+    public double CrawlDelay { get; set; } = 0;
+
+    [Option('r', "respectMetaRobots", Required = false, Default = true, HelpText = "If crawling should respect meta robots.")]
+    public bool RespectMetaRobots { get; set; } = true;
 }
