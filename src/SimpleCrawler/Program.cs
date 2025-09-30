@@ -1,4 +1,5 @@
 ﻿using CommandLine;
+using Crawler.Alleima.ETrack;
 using Crawler.Core;
 using Logging.Core.Extensions;
 using Microsoft.Extensions.DependencyInjection;
@@ -45,10 +46,12 @@ internal static class Program
 
         var logger = host.Services.GetRequiredService<ILogger<DefaultCrawler>>();
         var options = host.Services.GetRequiredService<Options>();
-        var crawler = host.Services.GetRequiredService<DefaultCrawler>();
+        var crawler = host.Services.GetRequiredService<AlleimaCrawler>();
         var result = await crawler.Scrape(tokenSource.Token);
 
-        await File.WriteAllLinesAsync(options.Output, result.Urls, tokenSource.Token);
+        await File.WriteAllLinesAsync(options.Output + "-products.log", result.Products, tokenSource.Token);
+        await File.WriteAllLinesAsync(options.Output + "-variations.log", result.Variations, tokenSource.Token);
+        await File.WriteAllLinesAsync(options.Output + "-categories.log", result.Categories, tokenSource.Token);
 
         logger.LogInformation("Wrote output file to '{path}'", options.Output);
     }

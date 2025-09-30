@@ -1,4 +1,5 @@
-﻿using Crawler.Core;
+﻿using Crawler.Alleima.ETrack;
+using Crawler.Core;
 using Microsoft.Extensions.DependencyInjection;
 using ExtensionsOptions = Microsoft.Extensions.Options.Options;
 
@@ -9,7 +10,7 @@ internal static class ServiceCollectionExtensions
     public static void AddCrawler(this IServiceCollection services, Options options)
     {
         services.AddOptions(options);
-        services.AddHttpClient<DefaultCrawler>((provider, client) =>
+        services.AddHttpClient<AlleimaCrawler>((provider, client) =>
         {
             var options = provider.GetRequiredService<Options>();
 
