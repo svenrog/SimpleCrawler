@@ -8,7 +8,7 @@ using PlaywrightContext = Microsoft.Playwright.Playwright;
 
 namespace Crawler.Playwright;
 
-public abstract class PlaywrightCrawler<TResult> : AbstractCrawler<IPage, IElementHandle, TResult>, IDisposable
+public abstract class PlaywrightCrawler<TResult> : AbstractCrawler<IPage, IElementHandle, TResult>, IAsyncDisposable
     where TResult : IScrapeResult
 {
     private readonly ILogger _logger;
@@ -25,17 +25,14 @@ public abstract class PlaywrightCrawler<TResult> : AbstractCrawler<IPage, IEleme
     public override async Task<TResult> Scrape(CancellationToken cancellationToken = default)
     {
         _playwright ??= await PlaywrightContext.CreateAsync();
-        _browser ??= await _playwright.Chromium.LaunchAsync();
+        _browser ??= await LaunchBrowser(_playwright);
 
-        try
-        {
-            return await base.Scrape(cancellationToken);
-        }
-        finally
-        {
-            await _browser.DisposeAsync();
-            _browser = null;
-        }
+        return await base.Scrape(cancellationToken);
+    }
+
+    protected virtual Task<IBrowser> LaunchBrowser(IPlaywright playwright)
+    {
+        return playwright.Chromium.LaunchAsync();
     }
 
     protected override async Task<IPage?> LoadResponse(string url, CancellationToken cancellationToken)
@@ -96,22 +93,24 @@ public abstract class PlaywrightCrawler<TResult> : AbstractCrawler<IPage, IEleme
         return IndexingHelper.ParseMetaRobots(contentRuleValue);
     }
 
-    protected virtual void Dispose(bool disposing)
+    public async ValueTask DisposeAsync()
+    {
+        await DisposeAsyncCore().ConfigureAwait(false);
+    }
+
+    protected virtual async ValueTask DisposeAsyncCore()
     {
         if (!_disposed)
         {
-            if (disposing)
+            if (_browser is not null)
             {
-                _playwright?.Dispose();
+                await _browser.DisposeAsync().ConfigureAwait(false);
+                _browser = null;
             }
 
+            _playwright?.Dispose();
+            _playwright = null;
             _disposed = true;
         }
-    }
-
-    public void Dispose()
-    {
-        Dispose(disposing: true);
-        GC.SuppressFinalize(this);
     }
 }

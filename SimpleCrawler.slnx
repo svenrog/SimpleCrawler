@@ -7,6 +7,10 @@
   <Folder Name="/Solution Items/">
     <File Path=".editorconfig" />
   </Folder>
+  <Folder Name="/Tests/">
+    <Project Path="tests/Crawler.Benchmarks/Crawler.Benchmarks.csproj" Id="9fe55db8-801d-42f0-88ba-cc4940d643e3" />
+    <Project Path="tests/Crawler.TestHost/Crawler.TestHost.csproj" Id="c0a85867-92a3-4a3f-b011-c070f28c203b" />
+  </Folder>
   <Project Path="src/Crawler.Alleima.ETrack/Crawler.Alleima.ETrack.csproj" Id="96fa2055-0693-4ef1-a686-345938db2738" />
   <Project Path="src/Crawler.Core/Crawler.Core.csproj" Id="8d491ce0-221d-428e-8136-ae10e7740cce" />
   <Project Path="src/Logging.Core/Logging.Core.csproj" Id="41b57501-ec82-48cc-9618-c4141f2faa1c" />
