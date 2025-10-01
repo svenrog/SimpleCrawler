@@ -6,9 +6,12 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
 
-  <ItemGroup>
-    <ProjectReference Include="..\Crawler.Core\Crawler.Core.csproj" />
-    <ProjectReference Include="..\Crawler.HtmlAgilityPack\Crawler.HtmlAgilityPack.csproj" />
-  </ItemGroup>
+	<ItemGroup>
+		<PackageReference Include="HtmlAgilityPack" Version="1.12.3" />
+	</ItemGroup>
+
+	<ItemGroup>
+	  <ProjectReference Include="..\Crawler.Core\Crawler.Core.csproj" />
+	</ItemGroup>
 
 </Project>

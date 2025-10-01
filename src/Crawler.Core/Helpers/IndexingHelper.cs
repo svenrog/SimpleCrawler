@@ -2,7 +2,7 @@
 
 namespace Crawler.Core.Helpers;
 
-internal static class IndexingHelper
+public static class IndexingHelper
 {
     public static RobotsRules ParseMetaRobots(string? contentValue)
     {

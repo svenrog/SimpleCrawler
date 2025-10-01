@@ -1,4 +1,9 @@
 <Solution>
+  <Folder Name="/Implementations/">
+    <Project Path="src/Crawler.AngleSharp/Crawler.AngleSharp.csproj" Id="723c64c0-ed52-44f6-902e-9b93ddbc2645" />
+    <Project Path="src/Crawler.HtmlAgilityPack/Crawler.HtmlAgilityPack.csproj" Id="835175c9-97b5-4ced-9d3b-3f68bfd07018" />
+    <Project Path="src/Crawler.Playwright/Crawler.Playwright.csproj" Id="cc0b2ae3-66e6-47b9-8762-8f62bff5c582" />
+  </Folder>
   <Folder Name="/Solution Items/">
     <File Path=".editorconfig" />
   </Folder>

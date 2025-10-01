@@ -1,6 +1,5 @@
 ﻿using CommandLine;
 using Crawler.Alleima.ETrack;
-using Crawler.Core;
 using Logging.Core.Extensions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -44,7 +43,7 @@ internal static class Program
             tokenSource.Cancel();
         };
 
-        var logger = host.Services.GetRequiredService<ILogger<DefaultCrawler>>();
+        var logger = host.Services.GetRequiredService<ILogger<AlleimaCrawler>>();
         var options = host.Services.GetRequiredService<Options>();
         var crawler = host.Services.GetRequiredService<AlleimaCrawler>();
         var result = await crawler.Scrape(tokenSource.Token);
@@ -59,7 +58,7 @@ internal static class Program
     private static void Fail(HostApplicationBuilder builder, IEnumerable<Error> errors)
     {
         using var host = builder.Build();
-        var logger = host.Services.GetRequiredService<ILogger<DefaultCrawler>>();
+        var logger = host.Services.GetRequiredService<ILogger<AlleimaCrawler>>();
 
         logger.LogCliErrors(errors);
     }

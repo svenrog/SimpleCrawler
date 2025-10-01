@@ -1,5 +1,6 @@
 ﻿using Crawler.Alleima.ETrack.Models;
 using Crawler.Core;
+using Crawler.HtmlAgilityPack;
 using HtmlAgilityPack;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -7,7 +8,7 @@ using System.Collections.Concurrent;
 
 namespace Crawler.Alleima.ETrack;
 
-public sealed class AlleimaCrawler(HttpClient client, IOptions<CrawlerOptions> options, ILogger<AlleimaCrawler> logger) : CrawlerBase<AlleimaScrapeResult>(client, options, logger)
+public sealed class AlleimaCrawler(HttpClient client, IOptions<CrawlerOptions> options, ILogger<AlleimaCrawler> logger) : HtmlAgilityPackCrawler<AlleimaScrapeResult>(client, options, logger)
 {
     private readonly ConcurrentDictionary<string, bool> _otherPage = [];
     private readonly ConcurrentDictionary<string, bool> _categoryPage = [];
