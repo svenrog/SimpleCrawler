@@ -15,6 +15,8 @@ public abstract class PlaywrightCrawler<TResult> : AbstractCrawler<IPage, IEleme
 
     private IPlaywright? _playwright;
     private IBrowser? _browser;
+    private IBrowserContext? _browserContext;
+
     private bool _disposed;
 
     protected PlaywrightCrawler(IOptions<CrawlerOptions> options, ILogger logger) : base(options, logger)
@@ -26,6 +28,7 @@ public abstract class PlaywrightCrawler<TResult> : AbstractCrawler<IPage, IEleme
     {
         _playwright ??= await PlaywrightContext.CreateAsync();
         _browser ??= await LaunchBrowser(_playwright);
+        _browserContext ??= await _browser.NewContextAsync();
 
         return await base.Scrape(cancellationToken);
     }
@@ -37,7 +40,7 @@ public abstract class PlaywrightCrawler<TResult> : AbstractCrawler<IPage, IEleme
 
     protected override async Task<IPage?> LoadResponse(string url, CancellationToken cancellationToken)
     {
-        var page = await _browser!.NewPageAsync();
+        var page = await _browserContext!.NewPageAsync();
         var response = await page.GotoAsync(url);
 
         await page.WaitForLoadStateAsync(LoadState.Load);
@@ -93,15 +96,30 @@ public abstract class PlaywrightCrawler<TResult> : AbstractCrawler<IPage, IEleme
         return IndexingHelper.ParseMetaRobots(contentRuleValue);
     }
 
+    protected async override Task DisposeResponse(IPage? response)
+    {
+        if (response == null)
+            return;
+
+        await response.CloseAsync();
+    }
+
     public async ValueTask DisposeAsync()
     {
         await DisposeAsyncCore().ConfigureAwait(false);
+        GC.SuppressFinalize(this);
     }
 
     protected virtual async ValueTask DisposeAsyncCore()
     {
         if (!_disposed)
         {
+            if (_browserContext is not null)
+            {
+                await _browserContext.DisposeAsync().ConfigureAwait(false);
+                _browserContext = null;
+            }
+
             if (_browser is not null)
             {
                 await _browser.DisposeAsync().ConfigureAwait(false);
