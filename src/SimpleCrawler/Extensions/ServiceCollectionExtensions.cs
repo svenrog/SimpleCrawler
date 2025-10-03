@@ -34,7 +34,6 @@ internal static class ServiceCollectionExtensions
     {
         return new CrawlerOptions
         {
-            Entry = options.Entry,
             MaxPages = options.MaxPages,
             Parallelism = options.Parallelism,
             CrawlDelay = options.CrawlDelay,

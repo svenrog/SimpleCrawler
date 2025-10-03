@@ -11,6 +11,13 @@ public static class ResultsExtensions
         return new HtmlResult(html);
     }
 
+    public static IResult Raw(this IResultExtensions resultExtensions, byte[] bytes, string mimeType)
+    {
+        ArgumentNullException.ThrowIfNull(resultExtensions);
+
+        return new RawResult(bytes, mimeType);
+    }
+
     public static IResult SerializedJson(this IResultExtensions resultExtensions, string json)
     {
         ArgumentNullException.ThrowIfNull(resultExtensions);

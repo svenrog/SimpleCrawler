@@ -7,14 +7,14 @@ namespace Crawler.Tests.Assertions;
 
 internal partial class LinkAssertions
 {
-    [GeneratedRegex("<a[^<]*?href=\"([^\"]*?)\">(.*?)<\\/a>", RegexOptions.None, 1000)]
+    [GeneratedRegex("<a[^<]*?href=\"([^\"]*?)\"[^>]*?>(.*?)<\\/a>", RegexOptions.None, 1000)]
     private static partial Regex LinkFilterRegex();
     private static readonly Regex _linkFilterRegex = LinkFilterRegex();
 
     public static List<string> GetHtmlLinks(Uri baseUri, string html)
     {
         var matches = _linkFilterRegex.Matches(html);
-        var links = new List<string>();
+        var links = new List<string>(matches.Count);
 
         foreach (Match match in matches)
         {
@@ -32,14 +32,17 @@ internal partial class LinkAssertions
     public static List<string> GetJsonLinks(Uri baseUri, string json)
     {
         var manifest = JsonSerializer.Deserialize<List<LinkModel>>(json);
-        var links = new List<string>();
-
         if (manifest == null)
-            return links;
+            return [];
 
+        var links = new List<string>(manifest.Count);
         foreach (var model in manifest)
         {
-            links.Add(model.Href);
+            var link = UriHelper.GetAbsoluteUrl(baseUri, model.Href);
+            if (link == null)
+                continue;
+
+            links.Add(link);
         }
 
         return links;

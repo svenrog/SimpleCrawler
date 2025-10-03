@@ -5,7 +5,6 @@ using Crawler.TestHost.Infrastructure.Factories;
 using Crawler.Tests.Common.Crawlers;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
@@ -35,7 +34,6 @@ public class Benchmarks
         var services = new ServiceCollection();
         var options = new CrawlerOptions
         {
-            Entry = _entry,
             CrawlDelay = 0,
             Parallelism = 4,
         };
@@ -50,61 +48,39 @@ public class Benchmarks
 
         _serviceProvider = services.BuildServiceProvider();
 
+        _htmlAgilityPackCrawler = _serviceProvider.GetRequiredService<HtmlAgilityPackCrawler>();
+        _angleSharpCrawler = _serviceProvider.GetRequiredService<AngleSharpCrawler>();
+        _playwrightCrawler = _serviceProvider.GetRequiredService<PlaywrightCrawler>();
+
         _tokenSource = new CancellationTokenSource();
 
         _host = StaticWebApplicationFactory.Create(_entry);
-        _host.RunAsync(_tokenSource.Token);
-    }
-
-    [IterationSetup(Target = nameof(HtmlAgilityPackCrawl))]
-    public void HtmlAgilityPackCrawlSetup()
-    {
-        _htmlAgilityPackCrawler = _serviceProvider.GetRequiredService<HtmlAgilityPackCrawler>();
+        _host.StartAsync(_tokenSource.Token);
     }
 
     [Benchmark]
     public async Task HtmlAgilityPackCrawl()
     {
-        await _htmlAgilityPackCrawler.Scrape(_tokenSource.Token);
-    }
-
-    [IterationSetup(Target = nameof(AngleSharpCrawl))]
-    public void AngleSharpCrawlSetup()
-    {
-        _angleSharpCrawler = _serviceProvider.GetRequiredService<AngleSharpCrawler>();
+        await _htmlAgilityPackCrawler.Scrape(_entry, _tokenSource.Token);
     }
 
     [Benchmark]
     public async Task AngleSharpCrawl()
     {
-        await _angleSharpCrawler.Scrape(_tokenSource.Token);
-    }
-
-    [IterationSetup(Target = nameof(PlaywrightCrawl))]
-    public void PlaywrightCrawlSetup()
-    {
-        _playwrightCrawler = _serviceProvider.GetRequiredService<PlaywrightCrawler>();
+        await _angleSharpCrawler.Scrape(_entry, _tokenSource.Token);
     }
 
     [Benchmark]
     public async Task PlaywrightCrawl()
     {
-        await _playwrightCrawler.Scrape(_tokenSource.Token);
-    }
-
-    [IterationCleanup(Target = nameof(PlaywrightCrawl))]
-    public void PlaywrightCrawlCleanup()
-    {
-        var valueTask = _playwrightCrawler.DisposeAsync();
-        if (valueTask.IsCompleted)
-            return;
-
-        valueTask.AsTask().GetAwaiter().GetResult();
+        await _playwrightCrawler.Scrape(_entry, _tokenSource.Token);
     }
 
     [GlobalCleanup]
     public async Task Cleanup()
     {
+        await _playwrightCrawler.DisposeAsync();
+
         await _tokenSource.CancelAsync();
         await _host.DisposeAsync();
 

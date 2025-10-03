@@ -7,6 +7,9 @@ namespace Crawler.Tests.Fixtures;
 
 public sealed class SpaHostFixture : AbstractHostFixture
 {
+    public const string HostName = "http://localhost:5262/";
+    public static readonly Uri HostUri = new(HostName);
+
     protected override WebApplication CreateHost()
     {
         return SpaWebApplicationFactory.Create(HostName);

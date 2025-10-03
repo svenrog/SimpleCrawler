@@ -5,6 +5,7 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace Crawler.Tests;
 
+[Collection("Crawler")]
 public class StaticCrawlerTests : IClassFixture<StaticHostFixture>
 {
     private readonly StaticHostFixture _context;
@@ -18,16 +19,27 @@ public class StaticCrawlerTests : IClassFixture<StaticHostFixture>
     public async Task HtmlAgilityPackCrawler_Can_Crawl()
     {
         var subject = _context.ServiceProvider.GetRequiredService<HtmlAgilityPackCrawler>();
-        var result = await subject.Scrape(_context.CancellationSource.Token);
+        var result = await subject.Scrape(StaticHostFixture.HostName, _context.CancellationSource.Token);
 
         AssertResult(result);
+    }
+
+    [Fact]
+    public async Task HtmlAgilityPackCrawler_Can_Crawl_Twice()
+    {
+        var subject = _context.ServiceProvider.GetRequiredService<HtmlAgilityPackCrawler>();
+        var firstResult = await subject.Scrape(StaticHostFixture.HostName, _context.CancellationSource.Token);
+        AssertResult(firstResult);
+
+        var secondResult = await subject.Scrape(StaticHostFixture.HostName, _context.CancellationSource.Token);
+        AssertResult(secondResult);
     }
 
     [Fact]
     public async Task AngleSharpCrawler_Can_Crawl()
     {
         var subject = _context.ServiceProvider.GetRequiredService<AngleSharpCrawler>();
-        var result = await subject.Scrape(_context.CancellationSource.Token);
+        var result = await subject.Scrape(StaticHostFixture.HostName, _context.CancellationSource.Token);
 
         AssertResult(result);
     }
@@ -36,7 +48,7 @@ public class StaticCrawlerTests : IClassFixture<StaticHostFixture>
     public async Task PlaywrightCrawler_Can_Crawl()
     {
         var subject = _context.ServiceProvider.GetRequiredService<PlaywrightCrawler>();
-        var result = await subject.Scrape(_context.CancellationSource.Token);
+        var result = await subject.Scrape(StaticHostFixture.HostName, _context.CancellationSource.Token);
 
         AssertResult(result);
     }

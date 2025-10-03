@@ -1,5 +1,6 @@
 ﻿using Crawler.TestHost.Infrastructure.Extensions;
 using Crawler.TestHost.Infrastructure.Results;
+using Crawler.TestHost.Infrastructure.Routing;
 using HttpResults = Microsoft.AspNetCore.Http.Results;
 
 namespace Crawler.TestHost.Infrastructure.Factories;
@@ -16,15 +17,11 @@ public class SpaWebApplicationFactory
         var spaHtml = ResourceHelper.GetWebRootResource("index.html");
         var builder = WebApplication.CreateSlimBuilder();
 
-        //TODO: Fix support for embedded resources
-        // Current solution will not work inside test project
-        builder.WebHost.UseStaticWebAssets();
+        builder.Services.AddSpaServices();
 
         var app = builder.Build();
 
-        // Current solution will not work inside test project
-        app.MapStaticAssets().ShortCircuit();
-
+        app.UseMiddleware<EmbeddedResourceStaticFileMiddleware>();
         app.MapGet("/{*path}", () => HttpResults.Extensions.Html(spaHtml));
 
         return app;

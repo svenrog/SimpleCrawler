@@ -7,6 +7,9 @@ namespace Crawler.Tests.Fixtures;
 
 public sealed class StaticHostFixture : AbstractHostFixture
 {
+    public const string HostName = "http://localhost:5260/";
+    public static readonly Uri HostUri = new(HostName);
+
     protected override WebApplication CreateHost()
     {
         return StaticWebApplicationFactory.Create(HostName);

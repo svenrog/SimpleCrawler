@@ -10,11 +10,8 @@ using Microsoft.Extensions.Options;
 
 namespace Crawler.Tests.Fixtures;
 
-public abstract class AbstractHostFixture : IDisposable
+public abstract class AbstractHostFixture : IAsyncDisposable
 {
-    public const string HostName = "http://localhost:5234/";
-    public static readonly Uri HostUri = new(HostName);
-
     public readonly ServiceProvider ServiceProvider;
     public readonly WebApplication Host;
     public readonly CancellationTokenSource CancellationSource;
@@ -25,7 +22,6 @@ public abstract class AbstractHostFixture : IDisposable
         var services = new ServiceCollection();
         var options = new CrawlerOptions
         {
-            Entry = HostName,
             CrawlDelay = 0,
             Parallelism = 4,
         };
@@ -51,10 +47,10 @@ public abstract class AbstractHostFixture : IDisposable
 
     protected abstract List<string> GetLinks();
 
-    public void Dispose()
+    public async ValueTask DisposeAsync()
     {
-        Host.StopAsync(CancellationSource.Token).AwaitSync();
-        Host.DisposeSync();
+        await Host.StopAsync(CancellationSource.Token);
+        await Host.DisposeAsync();
 
         CancellationSource.Dispose();
         ServiceProvider.Dispose();

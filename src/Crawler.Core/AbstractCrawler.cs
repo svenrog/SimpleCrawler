@@ -21,8 +21,9 @@ public abstract class AbstractCrawler<TResponse, TElement, TResult>
     private readonly SemaphoreSlim _semaphore;
     private readonly ILogger _logger;
 
-    private readonly Uri _siteUri;
-    private readonly string _siteAuthority;
+    private Uri _siteUri;
+    private string _siteAuthority;
+
     private readonly TimeSpan _delay;
 
     protected readonly ConcurrentHashSet<string> Visited;
@@ -32,25 +33,20 @@ public abstract class AbstractCrawler<TResponse, TElement, TResult>
         _options = options.Value;
         _logger = logger;
 
-        _siteUri = new Uri(_options.Entry);
-        _siteAuthority = _siteUri.GetLeftPart(UriPartial.Authority);
-
         _semaphore = new SemaphoreSlim(1, _options.Parallelism);
         _delay = TimeSpan.FromSeconds(_options.CrawlDelay);
 
         Visited = [];
-
         _processed = [];
         _discovery = [];
         _pending = [];
         _discovered = [];
-
-        _discovery.Enqueue(_options.Entry);
-        _discovered.Add(_options.Entry);
     }
 
-    public virtual async Task<TResult> Scrape(CancellationToken cancellationToken = default)
+    public virtual async Task<TResult> Scrape(string entry, CancellationToken cancellationToken = default)
     {
+        InitializeCrawl(entry);
+
         while ((!_discovery.IsEmpty || !_pending.IsEmpty) && _processed.Count < _options.MaxPages)
         {
             await _semaphore.WaitAsync(cancellationToken);
@@ -67,9 +63,28 @@ public abstract class AbstractCrawler<TResponse, TElement, TResult>
         return await GetResult(cancellationToken);
     }
 
+    protected virtual void InitializeCrawl(string entry)
+    {
+        var entryUri = new Uri(entry);
+
+        _siteAuthority = entryUri.GetLeftPart(UriPartial.Authority);
+        _siteUri = new Uri(_siteAuthority);
+
+        Visited.Clear();
+
+        _processed.Clear();
+        _discovery.Clear();
+        _pending.Clear();
+        _discovered.Clear();
+
+        _discovery.Enqueue(entry);
+        _discovered.Add(entry);
+
+        if (_semaphore.CurrentCount == 0)
+            _semaphore.Release();
+    }
+
     protected abstract ValueTask<TResult> GetResult(CancellationToken cancellationToken);
-
-
 
     protected virtual ValueTask AnalyzeDocument(string url, TResponse response)
     {

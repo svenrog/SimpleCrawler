@@ -46,7 +46,7 @@ internal static class Program
         var logger = host.Services.GetRequiredService<ILogger<AlleimaCrawler>>();
         var options = host.Services.GetRequiredService<Options>();
         var crawler = host.Services.GetRequiredService<AlleimaCrawler>();
-        var result = await crawler.Scrape(tokenSource.Token);
+        var result = await crawler.Scrape(options.Entry, tokenSource.Token);
 
         await File.WriteAllLinesAsync(options.Output + "-products.log", result.Products, tokenSource.Token);
         await File.WriteAllLinesAsync(options.Output + "-variations.log", result.Variations, tokenSource.Token);

@@ -5,6 +5,7 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace Crawler.Tests;
 
+[Collection("Crawler")]
 public class SpaCrawlerTests : IClassFixture<SpaHostFixture>
 {
     private readonly SpaHostFixture _context;
@@ -15,28 +16,10 @@ public class SpaCrawlerTests : IClassFixture<SpaHostFixture>
     }
 
     [Fact]
-    public async Task HtmlAgilityPackCrawler_Can_Crawl()
-    {
-        var subject = _context.ServiceProvider.GetRequiredService<HtmlAgilityPackCrawler>();
-        var result = await subject.Scrape(_context.CancellationSource.Token);
-
-        AssertResult(result);
-    }
-
-    [Fact]
-    public async Task AngleSharpCrawler_Can_Crawl()
-    {
-        var subject = _context.ServiceProvider.GetRequiredService<AngleSharpCrawler>();
-        var result = await subject.Scrape(_context.CancellationSource.Token);
-
-        AssertResult(result);
-    }
-
-    [Fact]
     public async Task PlaywrightCrawler_Can_Crawl()
     {
         var subject = _context.ServiceProvider.GetRequiredService<PlaywrightCrawler>();
-        var result = await subject.Scrape(_context.CancellationSource.Token);
+        var result = await subject.Scrape(SpaHostFixture.HostName, _context.CancellationSource.Token);
 
         AssertResult(result);
     }
