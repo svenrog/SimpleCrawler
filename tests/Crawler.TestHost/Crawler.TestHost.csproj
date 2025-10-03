@@ -9,9 +9,13 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <EmbeddedResource Include="Response\default.html">
-      <CopyToOutputDirectory>Never</CopyToOutputDirectory>
-    </EmbeddedResource>
+    <Content Remove="Response\default.json" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="Response\default.json" />
+    <EmbeddedResource Include="Response\default.html" />
+	<EmbeddedResource Include="wwwroot\**\*.*" />
   </ItemGroup>
 
 </Project>

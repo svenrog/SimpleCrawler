@@ -1,17 +1,14 @@
 ﻿using AngleSharp;
 using BenchmarkDotNet.Attributes;
-using Crawler.Benchmarks.Crawlers;
 using Crawler.Core;
-using Crawler.TestHost.Infrastructure.Extensions;
-using Crawler.TestHost.Infrastructure.Results;
+using Crawler.TestHost.Infrastructure.Factories;
+using Crawler.Tests.Common.Crawlers;
 using Microsoft.AspNetCore.Builder;
-using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
-using System;
 using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
@@ -35,8 +32,6 @@ public class Benchmarks
     [GlobalSetup]
     public void Setup()
     {
-        Environment.SetEnvironmentVariable("ASPNETCORE_URLS", _entry);
-
         var services = new ServiceCollection();
         var options = new CrawlerOptions
         {
@@ -45,28 +40,26 @@ public class Benchmarks
             Parallelism = 4,
         };
 
-        services.AddSingleton<ILogger>(NullLogger.Instance);
         services.AddSingleton(Options.Create(options));
+        services.AddSingleton<ILogger>(NullLogger.Instance);
         services.AddSingleton<HttpClient>();
         services.AddSingleton(Configuration.Default.WithDefaultLoader());
+        services.AddScoped<HtmlAgilityPackCrawler>();
+        services.AddScoped<AngleSharpCrawler>();
+        services.AddScoped<PlaywrightCrawler>();
 
         _serviceProvider = services.BuildServiceProvider();
 
-        var builder = WebApplication.CreateSlimBuilder();
-        var defaultHtml = ResourceHelper.GetResponse("default")
-            ?? throw new InvalidOperationException("Default response cannot be null here");
-
-        _host = builder.Build();
         _tokenSource = new CancellationTokenSource();
 
-        _host.MapGet("/{*path}", () => Results.Extensions.Html(defaultHtml));
+        _host = StaticWebApplicationFactory.Create(_entry);
         _host.RunAsync(_tokenSource.Token);
     }
 
     [IterationSetup(Target = nameof(HtmlAgilityPackCrawl))]
     public void HtmlAgilityPackCrawlSetup()
     {
-        _htmlAgilityPackCrawler = ActivatorUtilities.CreateInstance<HtmlAgilityPackCrawler>(_serviceProvider);
+        _htmlAgilityPackCrawler = _serviceProvider.GetRequiredService<HtmlAgilityPackCrawler>();
     }
 
     [Benchmark]
@@ -78,7 +71,7 @@ public class Benchmarks
     [IterationSetup(Target = nameof(AngleSharpCrawl))]
     public void AngleSharpCrawlSetup()
     {
-        _angleSharpCrawler = ActivatorUtilities.CreateInstance<AngleSharpCrawler>(_serviceProvider);
+        _angleSharpCrawler = _serviceProvider.GetRequiredService<AngleSharpCrawler>();
     }
 
     [Benchmark]
@@ -90,7 +83,7 @@ public class Benchmarks
     [IterationSetup(Target = nameof(PlaywrightCrawl))]
     public void PlaywrightCrawlSetup()
     {
-        _playwrightCrawler = ActivatorUtilities.CreateInstance<PlaywrightCrawler>(_serviceProvider);
+        _playwrightCrawler = _serviceProvider.GetRequiredService<PlaywrightCrawler>();
     }
 
     [Benchmark]
@@ -102,11 +95,11 @@ public class Benchmarks
     [IterationCleanup(Target = nameof(PlaywrightCrawl))]
     public void PlaywrightCrawlCleanup()
     {
-        var task = _playwrightCrawler.DisposeAsync();
-        if (task.IsCompleted)
+        var valueTask = _playwrightCrawler.DisposeAsync();
+        if (valueTask.IsCompleted)
             return;
 
-        task.AsTask().GetAwaiter().GetResult();
+        valueTask.AsTask().GetAwaiter().GetResult();
     }
 
     [GlobalCleanup]

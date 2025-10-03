@@ -1,0 +1,29 @@
+{
+    "name": "crawler.testhost",
+    "version": "0.0.1",
+    "description": "Frontend project for test host",
+    "main": "frontend/index.tsx",
+    "type": "module",
+    "dependencies": {
+        "preact": "^10.25.3",
+        "preact-iso": "^2.8.1",
+        "styled-components": "^6.1.13"
+    },
+    "devDependencies": {
+        "@preact/preset-vite": "^2.9.1",
+        "@types/react": "^19.0.2",
+        "@types/react-dom": "^19.0.2",
+        "typescript": "^5.7.2",
+        "vite": "^7.1.8"
+    },
+    "scripts": {
+        "watch": "vite",
+        "build": "vite build",
+        "preview": "npm run build && vite preview"
+    },
+    "prettier": {
+        "singleQuote": true
+    },
+    "author": "svenrog",
+    "license": "ISC"
+}

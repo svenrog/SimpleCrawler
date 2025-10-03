@@ -10,4 +10,11 @@ public static class ResultsExtensions
 
         return new HtmlResult(html);
     }
+
+    public static IResult SerializedJson(this IResultExtensions resultExtensions, string json)
+    {
+        ArgumentNullException.ThrowIfNull(resultExtensions);
+
+        return new SerializedJsonResult(json);
+    }
 }

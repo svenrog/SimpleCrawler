@@ -12,9 +12,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\src\Crawler.AngleSharp\Crawler.AngleSharp.csproj" />
-    <ProjectReference Include="..\..\src\Crawler.HtmlAgilityPack\Crawler.HtmlAgilityPack.csproj" />
-    <ProjectReference Include="..\..\src\Crawler.Playwright\Crawler.Playwright.csproj" />
     <ProjectReference Include="..\Crawler.TestHost\Crawler.TestHost.csproj" />
+    <ProjectReference Include="..\Crawler.Tests.Common\Crawler.Tests.Common.csproj" />
   </ItemGroup>
 </Project>

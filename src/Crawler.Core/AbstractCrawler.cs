@@ -1,6 +1,7 @@
 ﻿using Crawler.Core.Collections;
 using Crawler.Core.Comparers;
 using Crawler.Core.Extensions;
+using Crawler.Core.Helpers;
 using Crawler.Core.Models;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -92,13 +93,7 @@ public abstract class AbstractCrawler<TResponse, TElement, TResult>
 
     protected virtual string? GetAbsoluteUrl(string? href)
     {
-        if (!Uri.TryCreate(href, UriKind.RelativeOrAbsolute, out var uri))
-            return null;
-
-        if (!uri.IsAbsoluteUri)
-            uri = new Uri(_siteUri, uri);
-
-        return uri.ToString();
+        return UriHelper.GetAbsoluteUrl(_siteUri, href);
     }
 
     protected virtual bool InvalidateHref([NotNullWhen(false)] string? href)
