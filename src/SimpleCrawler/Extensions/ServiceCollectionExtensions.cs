@@ -1,5 +1,7 @@
 ﻿using Crawler.Alleima.ETrack;
 using Crawler.Core;
+using Crawler.Core.Robots;
+using Crawler.Core.Robots.Http;
 using Microsoft.Extensions.DependencyInjection;
 using ExtensionsOptions = Microsoft.Extensions.Options.Options;
 
@@ -13,12 +15,12 @@ internal static class ServiceCollectionExtensions
         services.AddHttpClient<AlleimaCrawler>((provider, client) =>
         {
             var options = provider.GetRequiredService<Options>();
-
             if (options.Cookie != null)
             {
                 client.DefaultRequestHeaders.Add("Cookie", options.Cookie);
             }
         });
+        services.AddHttpClient<IRobotClient, RobotWebClient>();
     }
 
     private static void AddOptions(this IServiceCollection services, Options options)

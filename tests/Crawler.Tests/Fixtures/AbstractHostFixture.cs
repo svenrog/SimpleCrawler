@@ -1,5 +1,7 @@
 ﻿using AngleSharp;
 using Crawler.Core;
+using Crawler.Core.Robots;
+using Crawler.Core.Robots.Http;
 using Crawler.Tests.Common.Crawlers;
 using Crawler.Tests.Common.Extensions;
 using Microsoft.AspNetCore.Builder;
@@ -29,6 +31,7 @@ public abstract class AbstractHostFixture : IAsyncDisposable
         services.AddSingleton(Options.Create(options));
         services.AddSingleton<HttpClient>();
         services.AddSingleton(Configuration.Default.WithDefaultLoader());
+        services.AddSingleton<IRobotClient, RobotWebClient>();
         services.AddSingleton<ILogger>(NullLogger.Instance);
 
         services.AddScoped<HtmlAgilityPackCrawler>();

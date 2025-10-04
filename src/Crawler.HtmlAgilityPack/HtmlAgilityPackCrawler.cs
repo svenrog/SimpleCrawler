@@ -1,19 +1,20 @@
 ﻿using Crawler.Core;
 using Crawler.Core.Helpers;
 using Crawler.Core.Models;
+using Crawler.Core.Robots;
 using HtmlAgilityPack;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
 namespace Crawler.HtmlAgilityPack;
 
-public abstract class HtmlAgilityPackCrawler<TResult> : AbstractCrawler<HtmlDocument, HtmlNode, TResult>
+public abstract class HtmlAgilityPackCrawler<TResult> : AbstractRobotsCrawler<HtmlDocument, HtmlNode, TResult>
     where TResult : IScrapeResult
 {
     private readonly HttpClient _client;
     private readonly ILogger _logger;
 
-    protected HtmlAgilityPackCrawler(HttpClient client, IOptions<CrawlerOptions> options, ILogger logger) : base(options, logger)
+    protected HtmlAgilityPackCrawler(HttpClient client, IRobotClient robotClient, IOptions<CrawlerOptions> options, ILogger logger) : base(robotClient, options, logger)
     {
         _client = client;
         _logger = logger;

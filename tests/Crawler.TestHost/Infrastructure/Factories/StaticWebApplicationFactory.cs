@@ -18,7 +18,7 @@ public class StaticWebApplicationFactory
 
         var app = builder.Build();
 
-        app.MapGet("/{*path}", () => HttpResults.Extensions.Html(defaultHtml));
+        app.MapDefaultHtmlResponse(defaultHtml);
 
         return app;
     }

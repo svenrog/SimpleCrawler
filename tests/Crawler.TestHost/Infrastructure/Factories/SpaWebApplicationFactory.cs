@@ -1,7 +1,6 @@
 ﻿using Crawler.TestHost.Infrastructure.Extensions;
 using Crawler.TestHost.Infrastructure.Results;
 using Crawler.TestHost.Infrastructure.Routing;
-using HttpResults = Microsoft.AspNetCore.Http.Results;
 
 namespace Crawler.TestHost.Infrastructure.Factories;
 
@@ -22,7 +21,7 @@ public class SpaWebApplicationFactory
         var app = builder.Build();
 
         app.UseMiddleware<EmbeddedResourceStaticFileMiddleware>();
-        app.MapGet("/{*path}", () => HttpResults.Extensions.Html(spaHtml));
+        app.MapDefaultHtmlResponse(spaHtml);
 
         return app;
     }

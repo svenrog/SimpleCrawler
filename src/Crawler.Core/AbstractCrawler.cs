@@ -21,8 +21,8 @@ public abstract class AbstractCrawler<TResponse, TElement, TResult>
     private readonly SemaphoreSlim _semaphore;
     private readonly ILogger _logger;
 
-    private Uri _siteUri;
-    private string _siteAuthority;
+    private Uri? _siteUri;
+    private string? _siteAuthority;
 
     private readonly TimeSpan _delay;
 
@@ -45,7 +45,7 @@ public abstract class AbstractCrawler<TResponse, TElement, TResult>
 
     public virtual async Task<TResult> Scrape(string entry, CancellationToken cancellationToken = default)
     {
-        InitializeCrawl(entry);
+        await InitializeCrawl(entry, cancellationToken);
 
         while ((!_discovery.IsEmpty || !_pending.IsEmpty) && _processed.Count < _options.MaxPages)
         {
@@ -63,7 +63,7 @@ public abstract class AbstractCrawler<TResponse, TElement, TResult>
         return await GetResult(cancellationToken);
     }
 
-    protected virtual void InitializeCrawl(string entry)
+    protected virtual ValueTask InitializeCrawl(string entry, CancellationToken cancellationToken)
     {
         var entryUri = new Uri(entry);
 
@@ -82,6 +82,8 @@ public abstract class AbstractCrawler<TResponse, TElement, TResult>
 
         if (_semaphore.CurrentCount == 0)
             _semaphore.Release();
+
+        return ValueTask.CompletedTask;
     }
 
     protected abstract ValueTask<TResult> GetResult(CancellationToken cancellationToken);
@@ -206,23 +208,41 @@ public abstract class AbstractCrawler<TResponse, TElement, TResult>
         foreach (var anchorElement in anchorElements)
         {
             var href = await GetAttribute(anchorElement, "href");
-
-            if (InvalidateHref(href))
-                continue;
-
-            var url = GetAbsoluteUrl(href);
+            var url = GetUndiscoveredUrl(href);
             if (url == null)
-                continue;
-
-            if (!url.StartsWith(_siteAuthority, StringComparison.OrdinalIgnoreCase))
-                continue;
-
-            if (_discovered.Contains(url))
                 continue;
 
             urls.Add(url);
         }
 
         return urls;
+    }
+
+    protected virtual void DiscoverLink(string href)
+    {
+        var url = GetUndiscoveredUrl(href);
+        if (url == null)
+            return;
+
+        _discovered.Add(url);
+        _discovery.Enqueue(url);
+    }
+
+    protected virtual string? GetUndiscoveredUrl(string? href)
+    {
+        if (InvalidateHref(href))
+            return null;
+
+        var url = GetAbsoluteUrl(href);
+        if (url == null)
+            return null;
+
+        if (!url.StartsWith(_siteAuthority!, StringComparison.OrdinalIgnoreCase))
+            return null;
+
+        if (_discovered.Contains(url))
+            return null;
+
+        return url;
     }
 }

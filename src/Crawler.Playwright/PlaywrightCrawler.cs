@@ -1,6 +1,7 @@
 ﻿using Crawler.Core;
 using Crawler.Core.Helpers;
 using Crawler.Core.Models;
+using Crawler.Core.Robots;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Microsoft.Playwright;
@@ -8,7 +9,7 @@ using PlaywrightContext = Microsoft.Playwright.Playwright;
 
 namespace Crawler.Playwright;
 
-public abstract class PlaywrightCrawler<TResult> : AbstractCrawler<IPage, IElementHandle, TResult>, IAsyncDisposable
+public abstract class PlaywrightCrawler<TResult> : AbstractRobotsCrawler<IPage, IElementHandle, TResult>, IAsyncDisposable
     where TResult : IScrapeResult
 {
     private readonly ILogger _logger;
@@ -19,7 +20,7 @@ public abstract class PlaywrightCrawler<TResult> : AbstractCrawler<IPage, IEleme
 
     private bool _disposed;
 
-    protected PlaywrightCrawler(IOptions<CrawlerOptions> options, ILogger logger) : base(options, logger)
+    protected PlaywrightCrawler(IRobotClient robotClient, IOptions<CrawlerOptions> options, ILogger logger) : base(robotClient, options, logger)
     {
         _logger = logger;
     }

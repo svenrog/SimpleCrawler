@@ -3,17 +3,18 @@ using AngleSharp.Dom;
 using Crawler.Core;
 using Crawler.Core.Helpers;
 using Crawler.Core.Models;
+using Crawler.Core.Robots;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
 namespace Crawler.AngleSharp;
 
-public abstract class AngleSharpCrawler<TResult> : AbstractCrawler<IDocument, IElement, TResult>
+public abstract class AngleSharpCrawler<TResult> : AbstractRobotsCrawler<IDocument, IElement, TResult>
     where TResult : IScrapeResult
 {
     private readonly IConfiguration _configuration;
 
-    protected AngleSharpCrawler(IConfiguration configuration, IOptions<CrawlerOptions> options, ILogger logger) : base(options, logger)
+    protected AngleSharpCrawler(IConfiguration configuration, IRobotClient robotClient, IOptions<CrawlerOptions> options, ILogger logger) : base(robotClient, options, logger)
     {
         _configuration = configuration;
     }
