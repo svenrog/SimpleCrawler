@@ -1,14 +1,10 @@
-﻿using AngleSharp;
+﻿using Crawler.AngleSharp;
 using Crawler.Core;
-using Crawler.Core.Robots;
-using Crawler.Core.Robots.Http;
-using Crawler.Tests.Common.Crawlers;
 using Crawler.Tests.Common.Extensions;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
-using Microsoft.Extensions.Options;
 
 namespace Crawler.Tests.Fixtures;
 
@@ -24,18 +20,16 @@ public abstract class AbstractHostFixture : IAsyncDisposable
         var services = new ServiceCollection();
         var options = CreateOptions();
 
-        services.AddSingleton(Options.Create(options));
-        services.AddSingleton<HttpClient>();
-        services.AddSingleton(Configuration.Default.WithDefaultLoader());
-        services.AddSingleton<IRobotClient, RobotWebClient>();
+        services.AddAngleSharpCrawler(options);
+        services.AddHtmlAgilityPackCrawler(options);
+        services.AddPlaywrightCrawler(options);
+
         services.AddSingleton<ILogger>(NullLogger.Instance);
+        services.AddScoped<CancellationTokenSource>();
 
-        services.AddScoped<HtmlAgilityPackCrawler>();
-        services.AddScoped<AngleSharpCrawler>();
-        services.AddScoped<PlaywrightCrawler>();
-
-        CancellationSource = new CancellationTokenSource();
         ServiceProvider = services.BuildServiceProvider();
+        CancellationSource = ServiceProvider.GetRequiredService<CancellationTokenSource>();
+
         Host = CreateHost();
         Host.StartAsync(CancellationSource.Token).AwaitSync();
 
@@ -61,9 +55,7 @@ public abstract class AbstractHostFixture : IAsyncDisposable
     {
         await Host.StopAsync(CancellationSource.Token);
         await Host.DisposeAsync();
-
-        CancellationSource.Dispose();
-        ServiceProvider.Dispose();
+        await ServiceProvider.DisposeAsync();
 
         GC.SuppressFinalize(this);
     }

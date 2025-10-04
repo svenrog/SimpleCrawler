@@ -1,5 +1,7 @@
-﻿using Crawler.Core.Models;
-using Crawler.Tests.Common.Crawlers;
+﻿using Crawler.AngleSharp;
+using Crawler.Core.Models;
+using Crawler.HtmlAgilityPack;
+using Crawler.Playwright;
 using Crawler.Tests.Fixtures;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -18,7 +20,7 @@ public class StaticCrawlerTests : IClassFixture<StaticHostFixture>
     [Fact]
     public async Task HtmlAgilityPackCrawler_Can_Crawl()
     {
-        var subject = _context.ServiceProvider.GetRequiredService<HtmlAgilityPackCrawler>();
+        var subject = _context.ServiceProvider.GetRequiredService<DefaultHtmlAgilityPackCrawler>();
         var result = await subject.Start(StaticHostFixture.HostName, _context.CancellationSource.Token);
 
         AssertResult(result);
@@ -27,7 +29,7 @@ public class StaticCrawlerTests : IClassFixture<StaticHostFixture>
     [Fact]
     public async Task HtmlAgilityPackCrawler_Can_Crawl_Twice()
     {
-        var subject = _context.ServiceProvider.GetRequiredService<HtmlAgilityPackCrawler>();
+        var subject = _context.ServiceProvider.GetRequiredService<DefaultHtmlAgilityPackCrawler>();
         var firstResult = await subject.Start(StaticHostFixture.HostName, _context.CancellationSource.Token);
         AssertResult(firstResult);
 
@@ -38,7 +40,7 @@ public class StaticCrawlerTests : IClassFixture<StaticHostFixture>
     [Fact]
     public async Task AngleSharpCrawler_Can_Crawl()
     {
-        var subject = _context.ServiceProvider.GetRequiredService<AngleSharpCrawler>();
+        var subject = _context.ServiceProvider.GetRequiredService<DefaultAngleSharpCrawler>();
         var result = await subject.Start(StaticHostFixture.HostName, _context.CancellationSource.Token);
 
         AssertResult(result);
@@ -47,7 +49,7 @@ public class StaticCrawlerTests : IClassFixture<StaticHostFixture>
     [Fact]
     public async Task PlaywrightCrawler_Can_Crawl()
     {
-        var subject = _context.ServiceProvider.GetRequiredService<PlaywrightCrawler>();
+        var subject = _context.ServiceProvider.GetRequiredService<DefaultPlaywrightCrawler>();
         var result = await subject.Start(StaticHostFixture.HostName, _context.CancellationSource.Token);
 
         AssertResult(result);

@@ -29,7 +29,7 @@ public class RobotsTxt : IRobotsTxt
         _client = client;
         _userAgentRules = userAgentRules;
         _userAgentCrawlDirectives = userAgentCrawlDirectives;
-        _userAgents = _userAgentRules.Keys.Concat(_userAgentCrawlDirectives.Keys).ToHashSet();
+        _userAgents = [.. _userAgentRules.Keys, .. _userAgentCrawlDirectives.Keys];
         _host = host;
         _sitemapUrls = sitemapUrls;
     }
@@ -73,7 +73,7 @@ public class RobotsTxt : IRobotsTxt
     {
         if (!_userAgentRules.TryGetValue(userAgent, out var rules) && !_userAgentRules.TryGetValue(ProductToken.Wildcard, out rules))
         {
-            ruleChecker = new RobotRuleChecker([]);
+            ruleChecker = RobotRuleChecker.Empty;
             return false;
         }
 

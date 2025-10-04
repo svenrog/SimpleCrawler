@@ -13,10 +13,12 @@ namespace Crawler.Core.Robots.Http;
 public class RobotWebClient : IRobotClient
 {
     private readonly HttpClient _httpClient;
+    private readonly RobotOptions _options;
 
-    public RobotWebClient(HttpClient httpClient)
+    public RobotWebClient(HttpClient httpClient, RobotOptions? options = null)
     {
         _httpClient = httpClient;
+        _options = options ?? RobotOptions.Default;
     }
 
     public async Task<IRobotsTxt> LoadRobotsTxtAsync(Uri url, CancellationToken cancellationToken = default)
@@ -40,7 +42,7 @@ public class RobotWebClient : IRobotClient
                 If a server status code indicates that the robots.txt file is unavailable to the crawler,
                 then the crawler MAY access any resources on the server.
             */
-            return new RobotsTxt(this, new Dictionary<ProductToken, HashSet<UrlRule>>(), new Dictionary<ProductToken, int>(), null, new HashSet<Uri>());
+            return new RobotsTxt(this, new Dictionary<ProductToken, HashSet<UrlRule>>(), new Dictionary<ProductToken, int>(), null, []);
         }
 
         if (statusCodeNumber >= 500)
@@ -52,13 +54,13 @@ public class RobotWebClient : IRobotClient
             */
             var userAgentRules = new Dictionary<ProductToken, HashSet<UrlRule>>
             {
-                { ProductToken.Wildcard, new HashSet<UrlRule> { new (RuleType.Disallow, "/") } }
+                { ProductToken.Wildcard, new HashSet<UrlRule> { new (RuleType.Disallow, new UrlPathPattern("/")) } }
             };
-            return new RobotsTxt(this, userAgentRules, new Dictionary<ProductToken, int>(), null, new HashSet<Uri>());
+            return new RobotsTxt(this, userAgentRules, new Dictionary<ProductToken, int>(), null, []);
         }
 
         await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
-        return await new RobotsTxtParser(this).ReadFromStreamAsync(stream, cancellationToken);
+        return await new RobotsTxtParser(this, _options).ReadFromStreamAsync(stream, cancellationToken);
     }
 
     public async IAsyncEnumerable<UrlSetItem> LoadSitemapsAsync(Uri uri, DateTime? modifiedSince, [EnumeratorCancellation] CancellationToken cancellationToken)

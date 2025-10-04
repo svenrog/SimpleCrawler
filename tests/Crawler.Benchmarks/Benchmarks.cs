@@ -1,14 +1,13 @@
-﻿using AngleSharp;
-using BenchmarkDotNet.Attributes;
+﻿using BenchmarkDotNet.Attributes;
+using Crawler.AngleSharp;
 using Crawler.Core;
+using Crawler.HtmlAgilityPack;
+using Crawler.Playwright;
 using Crawler.TestHost.Infrastructure.Factories;
-using Crawler.Tests.Common.Crawlers;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
-using Microsoft.Extensions.Options;
-using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -24,9 +23,9 @@ public class Benchmarks
     private CancellationTokenSource _tokenSource;
     private ServiceProvider _serviceProvider;
 
-    private HtmlAgilityPackCrawler _htmlAgilityPackCrawler;
-    private AngleSharpCrawler _angleSharpCrawler;
-    private PlaywrightCrawler _playwrightCrawler;
+    private DefaultHtmlAgilityPackCrawler _htmlAgilityPackCrawler;
+    private DefaultAngleSharpCrawler _angleSharpCrawler;
+    private DefaultPlaywrightCrawler _playwrightCrawler;
 
     [GlobalSetup]
     public void Setup()
@@ -35,24 +34,22 @@ public class Benchmarks
         var options = new CrawlerOptions
         {
             CrawlDelay = 0,
-            Parallelism = 4,
+            Parallelism = 8,
         };
 
-        services.AddSingleton(Options.Create(options));
+        services.AddHtmlAgilityPackCrawler(options);
+        services.AddAngleSharpCrawler(options);
+        services.AddPlaywrightCrawler(options);
         services.AddSingleton<ILogger>(NullLogger.Instance);
-        services.AddSingleton<HttpClient>();
-        services.AddSingleton(Configuration.Default.WithDefaultLoader());
-        services.AddScoped<HtmlAgilityPackCrawler>();
-        services.AddScoped<AngleSharpCrawler>();
-        services.AddScoped<PlaywrightCrawler>();
+        services.AddScoped<CancellationTokenSource>();
 
         _serviceProvider = services.BuildServiceProvider();
 
-        _htmlAgilityPackCrawler = _serviceProvider.GetRequiredService<HtmlAgilityPackCrawler>();
-        _angleSharpCrawler = _serviceProvider.GetRequiredService<AngleSharpCrawler>();
-        _playwrightCrawler = _serviceProvider.GetRequiredService<PlaywrightCrawler>();
+        _htmlAgilityPackCrawler = _serviceProvider.GetRequiredService<DefaultHtmlAgilityPackCrawler>();
+        _angleSharpCrawler = _serviceProvider.GetRequiredService<DefaultAngleSharpCrawler>();
+        _playwrightCrawler = _serviceProvider.GetRequiredService<DefaultPlaywrightCrawler>();
 
-        _tokenSource = new CancellationTokenSource();
+        _tokenSource = _serviceProvider.GetRequiredService<CancellationTokenSource>();
 
         _host = StaticWebApplicationFactory.Create(_entry);
         _host.StartAsync(_tokenSource.Token);
@@ -64,13 +61,13 @@ public class Benchmarks
         await _htmlAgilityPackCrawler.Start(_entry, _tokenSource.Token);
     }
 
-    [Benchmark]
+    //[Benchmark]
     public async Task AngleSharpCrawl()
     {
         await _angleSharpCrawler.Start(_entry, _tokenSource.Token);
     }
 
-    [Benchmark]
+    //[Benchmark]
     public async Task PlaywrightCrawl()
     {
         await _playwrightCrawler.Start(_entry, _tokenSource.Token);
@@ -79,16 +76,11 @@ public class Benchmarks
     [GlobalCleanup]
     public async Task Cleanup()
     {
-        await _playwrightCrawler.DisposeAsync();
-
         await _tokenSource.CancelAsync();
         await _host.DisposeAsync();
 
-        _tokenSource.Dispose();
-        _tokenSource = null;
-
-        _serviceProvider.Dispose();
+        await _serviceProvider.DisposeAsync();
         _serviceProvider = null;
+        _tokenSource = null;
     }
-
 }

@@ -11,8 +11,8 @@ namespace Crawler.Core.Robots;
 /// </summary>
 public static class SimpleTextSitemapParser
 {
-    private const int MaxLines = 50000;
-    private const int ByteCount50MiB = 52_428_800;
+    private const int _maxLines = 50000;
+    private const int _byteCount50MiB = 52_428_800;
 
     /// <summary>
     /// Parses a <see cref="Sitemap"/> from a <see cref="Stream"/>
@@ -31,7 +31,7 @@ public static class SimpleTextSitemapParser
             /*
               Each text file ... and must be no larger than 50MiB (52,428,800 bytes)
             */
-            if (stream.Position > ByteCount50MiB) throw new SitemapException("Reached parsing limit");
+            if (stream.Position > _byteCount50MiB) throw new SitemapException("Reached parsing limit");
 
             if (string.IsNullOrWhiteSpace(line)) continue;
 
@@ -40,7 +40,7 @@ public static class SimpleTextSitemapParser
             /*
               Each text file can contain a maximum of 50,000 URLs
             */
-            if (lineCount > MaxLines) throw new SitemapException("Reached line limit");
+            if (lineCount > _maxLines) throw new SitemapException("Reached line limit");
 
             /*
               The text file must have one URL per line. The URLs cannot contain embedded new lines.

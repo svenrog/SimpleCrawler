@@ -12,6 +12,7 @@ namespace Crawler.Playwright;
 public abstract class PlaywrightCrawler<TResult> : AbstractRobotsCrawler<IPage, IElementHandle, TResult>, IAsyncDisposable
     where TResult : IScrapeResult
 {
+    private readonly CrawlerOptions _options;
     private readonly ILogger _logger;
 
     private IPlaywright? _playwright;
@@ -22,6 +23,7 @@ public abstract class PlaywrightCrawler<TResult> : AbstractRobotsCrawler<IPage, 
 
     protected PlaywrightCrawler(IRobotClient robotClient, IOptions<CrawlerOptions> options, ILogger logger) : base(robotClient, options, logger)
     {
+        _options = options.Value;
         _logger = logger;
     }
 
@@ -29,7 +31,7 @@ public abstract class PlaywrightCrawler<TResult> : AbstractRobotsCrawler<IPage, 
     {
         _playwright ??= await PlaywrightContext.CreateAsync();
         _browser ??= await LaunchBrowser(_playwright);
-        _browserContext ??= await _browser.NewContextAsync();
+        _browserContext ??= await _browser.NewContextAsync(GetContextOptions());
 
         return await base.Start(entry, cancellationToken);
     }
@@ -37,6 +39,14 @@ public abstract class PlaywrightCrawler<TResult> : AbstractRobotsCrawler<IPage, 
     protected virtual Task<IBrowser> LaunchBrowser(IPlaywright playwright)
     {
         return playwright.Chromium.LaunchAsync();
+    }
+
+    protected virtual BrowserNewContextOptions GetContextOptions()
+    {
+        return new BrowserNewContextOptions
+        {
+            UserAgent = _options.UserAgent
+        };
     }
 
     protected override async Task<IPage?> LoadResponse(string url, CancellationToken cancellationToken)

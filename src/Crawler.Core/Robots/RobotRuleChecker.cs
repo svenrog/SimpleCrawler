@@ -10,16 +10,19 @@ namespace Crawler.Core.Robots;
 public class RobotRuleChecker : IRobotRuleChecker
 {
     public static readonly RobotRuleChecker Empty = new([]);
+    private static readonly RuleTypeComparer _ruleComparer = new();
 
     private readonly HashSet<UrlRule> _rules;
+    private readonly RobotOptions _options;
 
     /// <summary>
     /// Creates a rule checker with a specified set of rules
     /// </summary>
     /// <param name="rules">A set of path rules</param>
-    public RobotRuleChecker(HashSet<UrlRule> rules)
+    public RobotRuleChecker(HashSet<UrlRule> rules, RobotOptions? options = null)
     {
         _rules = rules;
+        _options = options ?? RobotOptions.Default;
     }
 
     /// <inheritdoc />
@@ -31,21 +34,13 @@ public class RobotRuleChecker : IRobotRuleChecker
         if (_rules.Count == 0 || path == "/robots.txt")
             return true;
 
-        var ruleMatch = _rules.Where(rule => rule.Pattern.Matches(path))
+        var uriPath = new UriPath(path, _options.EnableRfc3986Normalization);
+
+        var ruleMatch = _rules.Where(rule => rule.Pattern.Matches(uriPath))
                               .OrderByDescending(rule => rule.Pattern.Length)
-                              .ThenBy(rule => rule.Type, new RuleTypeComparer())
+                              .ThenBy(rule => rule.Type, _ruleComparer)
                               .FirstOrDefault();
 
         return ruleMatch is null || ruleMatch.Type == RuleType.Allow;
-    }
-
-    private class RuleTypeComparer : IComparer<RuleType>
-    {
-        public int Compare(RuleType ruleType, RuleType _) => ruleType switch
-        {
-            RuleType.Allow => -1,
-            RuleType.Disallow => 1,
-            _ => throw new ArgumentOutOfRangeException(nameof(ruleType), "Invalid rule type")
-        };
     }
 }

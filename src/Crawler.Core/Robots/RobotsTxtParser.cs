@@ -11,24 +11,26 @@ namespace Crawler.Core.Robots;
 /// </summary>
 public class RobotsTxtParser
 {
-    private const long ByteCount500KiB = 500 * 1024;
+    private const long _byteCount500KiB = 500 * 1024;
 
-    private static readonly string UserAgentDirective = "User-agent: ";
-    private static readonly string CrawlDelayDirective = "Crawl-delay: ";
-    private static readonly string HostDirective = "Host: ";
-    private static readonly string SitemapDirective = "Sitemap: ";
-    private static readonly string AllowDirective = "Allow: ";
-    private static readonly string DisallowDirective = "Disallow: ";
+    private static readonly string _userAgentDirective = "User-agent: ";
+    private static readonly string _crawlDelayDirective = "Crawl-delay: ";
+    private static readonly string _hostDirective = "Host: ";
+    private static readonly string _sitemapDirective = "Sitemap: ";
+    private static readonly string _allowDirective = "Allow: ";
+    private static readonly string _disallowDirective = "Disallow: ";
 
     private readonly IRobotClient _robotClient;
+    private readonly RobotOptions _options;
 
     /// <summary>
     /// Creates a robots.txt parser
     /// </summary>
     /// <param name="robotClient">Client used to send requests to the website</param>
-    public RobotsTxtParser(IRobotClient robotClient)
+    public RobotsTxtParser(IRobotClient robotClient, RobotOptions? options = null)
     {
         _robotClient = robotClient;
+        _options = options ?? RobotOptions.Default;
     }
 
     /// <summary>
@@ -61,18 +63,18 @@ public class RobotsTxtParser
             using var streamReader = new StreamReader(stream, Encoding.UTF8);
             while ((line = await streamReader.ReadLineAsync(cancellationToken)) is not null && !cancellationToken.IsCancellationRequested)
             {
-                if (stream.Position > ByteCount500KiB) throw new RobotsTxtException("Reached parsing limit");
+                if (stream.Position > _byteCount500KiB) throw new RobotsTxtException("Reached parsing limit");
 
                 if (line.StartsWith('#')) continue;
 
-                if (line.StartsWith(UserAgentDirective, StringComparison.InvariantCultureIgnoreCase))
+                if (line.StartsWith(_userAgentDirective, StringComparison.InvariantCultureIgnoreCase))
                 {
                     if (!previousLineWasUserAgent) currentUserAgents.Clear();
-                    var currentUserAgent = GetValueOfDirective(line, UserAgentDirective);
+                    var currentUserAgent = GetValueOfDirective(line, _userAgentDirective);
                     if (ProductToken.TryParse(currentUserAgent, out var productToken))
                     {
                         currentUserAgents.Add(productToken);
-                        userAgentRules.TryAdd(productToken, new HashSet<UrlRule>());
+                        userAgentRules.TryAdd(productToken, []);
                         previousLineWasUserAgent = true;
                     }
                     continue;
@@ -80,14 +82,14 @@ public class RobotsTxtParser
 
                 if (currentUserAgents.Count == 0)
                 {
-                    if (line.StartsWith(SitemapDirective, StringComparison.InvariantCultureIgnoreCase))
+                    if (line.StartsWith(_sitemapDirective, StringComparison.InvariantCultureIgnoreCase))
                     {
-                        var sitemapValue = GetValueOfDirective(line, SitemapDirective);
+                        var sitemapValue = GetValueOfDirective(line, _sitemapDirective);
                         if (Uri.TryCreate(sitemapValue, UriKind.Absolute, out var sitemapAddress)) sitemaps.Add(sitemapAddress);
                     }
-                    else if (host is null && line.StartsWith(HostDirective, StringComparison.InvariantCultureIgnoreCase))
+                    else if (host is null && line.StartsWith(_hostDirective, StringComparison.InvariantCultureIgnoreCase))
                     {
-                        var hostValue = GetValueOfDirective(line, HostDirective);
+                        var hostValue = GetValueOfDirective(line, _hostDirective);
                         if (Uri.IsWellFormedUriString(hostValue, UriKind.Absolute)
                             && Uri.TryCreate(hostValue, UriKind.Absolute, out var uri)) hostValue = uri.Host;
                         var hostNameType = Uri.CheckHostName(hostValue);
@@ -96,19 +98,23 @@ public class RobotsTxtParser
                 }
                 else
                 {
-                    if (line.StartsWith(DisallowDirective, StringComparison.InvariantCultureIgnoreCase))
+                    if (line.StartsWith(_disallowDirective, StringComparison.InvariantCultureIgnoreCase))
                     {
-                        var disallowValue = GetValueOfDirective(line, DisallowDirective);
-                        foreach (var userAgent in currentUserAgents) userAgentRules[userAgent].Add(new UrlRule(RuleType.Disallow, disallowValue));
+                        var disallowValue = GetValueOfDirective(line, _disallowDirective);
+                        var disallowPattern = new UrlPathPattern(disallowValue, _options.EnableRfc3986Normalization);
+
+                        foreach (var userAgent in currentUserAgents) userAgentRules[userAgent].Add(new UrlRule(RuleType.Disallow, disallowPattern));
                     }
-                    else if (line.StartsWith(AllowDirective, StringComparison.InvariantCultureIgnoreCase))
+                    else if (line.StartsWith(_allowDirective, StringComparison.InvariantCultureIgnoreCase))
                     {
-                        var allowedValue = GetValueOfDirective(line, AllowDirective);
-                        foreach (var userAgent in currentUserAgents) userAgentRules[userAgent].Add(new UrlRule(RuleType.Allow, allowedValue));
+                        var allowedValue = GetValueOfDirective(line, _allowDirective);
+                        var allowPattern = new UrlPathPattern(allowedValue, _options.EnableRfc3986Normalization);
+
+                        foreach (var userAgent in currentUserAgents) userAgentRules[userAgent].Add(new UrlRule(RuleType.Allow, allowPattern));
                     }
-                    else if (line.StartsWith(CrawlDelayDirective, StringComparison.InvariantCultureIgnoreCase))
+                    else if (line.StartsWith(_crawlDelayDirective, StringComparison.InvariantCultureIgnoreCase))
                     {
-                        var crawlDelayValue = GetValueOfDirective(line, CrawlDelayDirective);
+                        var crawlDelayValue = GetValueOfDirective(line, _crawlDelayDirective);
                         if (int.TryParse(crawlDelayValue, out var parsedCrawlDelay))
                         {
                             foreach (var userAgent in currentUserAgents) userAgentCrawlDirectives.TryAdd(userAgent, parsedCrawlDelay);

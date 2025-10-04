@@ -1,5 +1,5 @@
 ﻿using Crawler.Core.Models;
-using Crawler.Tests.Common.Crawlers;
+using Crawler.Playwright;
 using Crawler.Tests.Fixtures;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -18,7 +18,7 @@ public class SpaCrawlerTests : IClassFixture<SpaHostFixture>
     [Fact]
     public async Task PlaywrightCrawler_Can_Crawl()
     {
-        var subject = _context.ServiceProvider.GetRequiredService<PlaywrightCrawler>();
+        var subject = _context.ServiceProvider.GetRequiredService<DefaultPlaywrightCrawler>();
         var result = await subject.Start(SpaHostFixture.HostName, _context.CancellationSource.Token);
 
         AssertResult(result);

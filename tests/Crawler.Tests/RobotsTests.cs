@@ -1,5 +1,5 @@
 ﻿using Crawler.Core.Models;
-using Crawler.Tests.Common.Crawlers;
+using Crawler.HtmlAgilityPack;
 using Crawler.Tests.Fixtures;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -18,7 +18,7 @@ public class RobotsTests : IClassFixture<RobotsHostFixture>
     [Fact]
     public async Task HtmlAgilityPackCrawler_Can_Crawl_Using_Sitemap()
     {
-        var subject = _context.ServiceProvider.GetRequiredService<HtmlAgilityPackCrawler>();
+        var subject = _context.ServiceProvider.GetRequiredService<DefaultHtmlAgilityPackCrawler>();
         var result = await subject.Start(RobotsHostFixture.HostName, _context.CancellationSource.Token);
 
         AssertResult(result);
