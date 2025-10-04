@@ -12,7 +12,7 @@ namespace Crawler.Core.Robots;
 public partial class ProductToken : IEquatable<string>, IEquatable<ProductToken>
 {
     public static readonly ProductToken Wildcard = new("*");
-    private static Regex ValidationPattern = ProductTokenValidationRegex();
+    private static readonly Regex _validationPattern = ProductTokenValidationRegex();
 
     private readonly string _value;
 
@@ -26,7 +26,7 @@ public partial class ProductToken : IEquatable<string>, IEquatable<ProductToken>
     /// <exception cref="ArgumentOutOfRangeException">Product token is formatted incorrectly</exception>
     public static ProductToken Parse(string value)
     {
-        if (value != Wildcard._value && !ValidationPattern.IsMatch(value))
+        if (value != Wildcard._value && !_validationPattern.IsMatch(value))
         {
             throw new ArgumentOutOfRangeException(
                 nameof(value),
@@ -45,7 +45,7 @@ public partial class ProductToken : IEquatable<string>, IEquatable<ProductToken>
     public static bool TryParse(string value, out ProductToken productToken)
     {
         productToken = Wildcard;
-        if (value != Wildcard._value && !ValidationPattern.IsMatch(value)) return false;
+        if (value != Wildcard._value && !_validationPattern.IsMatch(value)) return false;
         productToken = new ProductToken(value);
         return true;
     }

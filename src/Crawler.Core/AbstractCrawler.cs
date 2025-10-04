@@ -110,7 +110,7 @@ public abstract class AbstractCrawler<TResponse, TElement, TResult>
 
     protected virtual string? GetAbsoluteUrl(string? href)
     {
-        return UriHelper.GetAbsoluteUrl(_siteUri, href);
+        return UriHelper.GetAbsoluteUrl(_siteUri!, href);
     }
 
     protected virtual bool InvalidateHref([NotNullWhen(false)] string? href)

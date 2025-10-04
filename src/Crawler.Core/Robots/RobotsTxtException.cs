@@ -26,7 +26,9 @@ public class RobotsTxtException : Exception
     }
 
     [ExcludeFromCodeCoverage]
+#pragma warning disable SYSLIB0051 // Type or member is obsolete
     protected RobotsTxtException(SerializationInfo info, StreamingContext context) : base(info, context)
+#pragma warning restore SYSLIB0051 // Type or member is obsolete
     {
     }
 }
