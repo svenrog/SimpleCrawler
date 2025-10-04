@@ -7,19 +7,6 @@ namespace Crawler.Core.Robots;
 /// <summary>
 /// Provides the ability to check accessibility of URLs for a robot
 /// </summary>
-public interface IRobotRuleChecker
-{
-    /// <summary>
-    /// Checks if the robot is allowed to access the path
-    /// </summary>
-    /// <param name="path">The path to check</param>
-    /// <returns>True if the robots is allowed to access the path; otherwise false</returns>
-    bool IsAllowed(string path);
-}
-
-/// <summary>
-/// Provides the ability to check accessibility of URLs for a robot
-/// </summary>
 public class RobotRuleChecker : IRobotRuleChecker
 {
     private readonly HashSet<UrlRule> _rules;
