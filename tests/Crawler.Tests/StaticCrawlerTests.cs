@@ -19,7 +19,7 @@ public class StaticCrawlerTests : IClassFixture<StaticHostFixture>
     public async Task HtmlAgilityPackCrawler_Can_Crawl()
     {
         var subject = _context.ServiceProvider.GetRequiredService<HtmlAgilityPackCrawler>();
-        var result = await subject.Scrape(StaticHostFixture.HostName, _context.CancellationSource.Token);
+        var result = await subject.Start(StaticHostFixture.HostName, _context.CancellationSource.Token);
 
         AssertResult(result);
     }
@@ -28,10 +28,10 @@ public class StaticCrawlerTests : IClassFixture<StaticHostFixture>
     public async Task HtmlAgilityPackCrawler_Can_Crawl_Twice()
     {
         var subject = _context.ServiceProvider.GetRequiredService<HtmlAgilityPackCrawler>();
-        var firstResult = await subject.Scrape(StaticHostFixture.HostName, _context.CancellationSource.Token);
+        var firstResult = await subject.Start(StaticHostFixture.HostName, _context.CancellationSource.Token);
         AssertResult(firstResult);
 
-        var secondResult = await subject.Scrape(StaticHostFixture.HostName, _context.CancellationSource.Token);
+        var secondResult = await subject.Start(StaticHostFixture.HostName, _context.CancellationSource.Token);
         AssertResult(secondResult);
     }
 
@@ -39,7 +39,7 @@ public class StaticCrawlerTests : IClassFixture<StaticHostFixture>
     public async Task AngleSharpCrawler_Can_Crawl()
     {
         var subject = _context.ServiceProvider.GetRequiredService<AngleSharpCrawler>();
-        var result = await subject.Scrape(StaticHostFixture.HostName, _context.CancellationSource.Token);
+        var result = await subject.Start(StaticHostFixture.HostName, _context.CancellationSource.Token);
 
         AssertResult(result);
     }
@@ -48,7 +48,7 @@ public class StaticCrawlerTests : IClassFixture<StaticHostFixture>
     public async Task PlaywrightCrawler_Can_Crawl()
     {
         var subject = _context.ServiceProvider.GetRequiredService<PlaywrightCrawler>();
-        var result = await subject.Scrape(StaticHostFixture.HostName, _context.CancellationSource.Token);
+        var result = await subject.Start(StaticHostFixture.HostName, _context.CancellationSource.Token);
 
         AssertResult(result);
     }

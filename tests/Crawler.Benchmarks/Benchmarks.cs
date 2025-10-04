@@ -61,19 +61,19 @@ public class Benchmarks
     [Benchmark]
     public async Task HtmlAgilityPackCrawl()
     {
-        await _htmlAgilityPackCrawler.Scrape(_entry, _tokenSource.Token);
+        await _htmlAgilityPackCrawler.Start(_entry, _tokenSource.Token);
     }
 
     [Benchmark]
     public async Task AngleSharpCrawl()
     {
-        await _angleSharpCrawler.Scrape(_entry, _tokenSource.Token);
+        await _angleSharpCrawler.Start(_entry, _tokenSource.Token);
     }
 
     [Benchmark]
     public async Task PlaywrightCrawl()
     {
-        await _playwrightCrawler.Scrape(_entry, _tokenSource.Token);
+        await _playwrightCrawler.Start(_entry, _tokenSource.Token);
     }
 
     [GlobalCleanup]

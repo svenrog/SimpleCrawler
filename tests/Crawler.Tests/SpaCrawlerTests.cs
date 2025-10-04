@@ -19,7 +19,7 @@ public class SpaCrawlerTests : IClassFixture<SpaHostFixture>
     public async Task PlaywrightCrawler_Can_Crawl()
     {
         var subject = _context.ServiceProvider.GetRequiredService<PlaywrightCrawler>();
-        var result = await subject.Scrape(SpaHostFixture.HostName, _context.CancellationSource.Token);
+        var result = await subject.Start(SpaHostFixture.HostName, _context.CancellationSource.Token);
 
         AssertResult(result);
     }

@@ -25,13 +25,13 @@ public abstract class PlaywrightCrawler<TResult> : AbstractRobotsCrawler<IPage, 
         _logger = logger;
     }
 
-    public override async Task<TResult> Scrape(string entry, CancellationToken cancellationToken = default)
+    public override async Task<TResult> Start(string entry, CancellationToken cancellationToken = default)
     {
         _playwright ??= await PlaywrightContext.CreateAsync();
         _browser ??= await LaunchBrowser(_playwright);
         _browserContext ??= await _browser.NewContextAsync();
 
-        return await base.Scrape(entry, cancellationToken);
+        return await base.Start(entry, cancellationToken);
     }
 
     protected virtual Task<IBrowser> LaunchBrowser(IPlaywright playwright)

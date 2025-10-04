@@ -43,7 +43,7 @@ public abstract class AbstractCrawler<TResponse, TElement, TResult>
         _discovered = [];
     }
 
-    public virtual async Task<TResult> Scrape(string entry, CancellationToken cancellationToken = default)
+    public virtual async Task<TResult> Start(string entry, CancellationToken cancellationToken = default)
     {
         await InitializeCrawl(entry, cancellationToken);
 
