@@ -6,7 +6,7 @@ public partial class Program
 {
     public static void Main(string[] args)
     {
-        var app = SpaWebApplicationFactory.Create();
+        var app = StaticWebApplicationFactory.Create();
         app.Run();
     }
 }

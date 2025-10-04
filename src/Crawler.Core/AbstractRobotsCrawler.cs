@@ -30,11 +30,11 @@ public abstract class AbstractRobotsCrawler<TResponse, TElement, TResult> : Abst
         var entryUri = new Uri(entry);
         var robots = await _robotClient.LoadRobotsTxtAsync(entryUri, cancellationToken);
 
-        if (robots.TryGetCrawlDelay(_userAgent, out var crawlDelay))
+        if (robots.TryGetCrawlDelay(_userAgent, out var crawlDelay) && _options.RespectRobotsTxt)
             _options.CrawlDelay = crawlDelay;
 
         if (!robots.TryGetRules(_userAgent, out _robotRules))
-            _robotRules = new RobotRuleChecker([]);
+            _robotRules = RobotRuleChecker.Empty;
 
         await base.InitializeCrawl(entry, cancellationToken);
 

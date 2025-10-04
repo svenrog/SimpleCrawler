@@ -22,11 +22,7 @@ public abstract class AbstractHostFixture : IAsyncDisposable
     public AbstractHostFixture()
     {
         var services = new ServiceCollection();
-        var options = new CrawlerOptions
-        {
-            CrawlDelay = 0,
-            Parallelism = 4,
-        };
+        var options = CreateOptions();
 
         services.AddSingleton(Options.Create(options));
         services.AddSingleton<HttpClient>();
@@ -44,6 +40,17 @@ public abstract class AbstractHostFixture : IAsyncDisposable
         Host.StartAsync(CancellationSource.Token).AwaitSync();
 
         Links = GetLinks();
+    }
+
+    protected virtual CrawlerOptions CreateOptions()
+    {
+        return new CrawlerOptions
+        {
+            CrawlDelay = 0,
+            Parallelism = 4,
+            RespectMetaRobots = false,
+            RespectRobotsTxt = false,
+        };
     }
 
     protected abstract WebApplication CreateHost();

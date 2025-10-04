@@ -6,17 +6,15 @@ namespace Crawler.TestHost.Infrastructure.Routing;
 
 public class EmbeddedResourceRouteResolver
 {
-    private readonly Assembly _assembly;
-    private readonly AssemblyName _assemblyName;
+    private static readonly Assembly _assembly = typeof(EmbeddedResourceRouteResolver).Assembly;
+    private static readonly AssemblyName _assemblyName = _assembly.GetName();
+
     private readonly Lazy<Dictionary<string, byte[]>> _resources;
     private readonly FileExtensionContentTypeProvider _extensionProvider;
 
     public EmbeddedResourceRouteResolver(FileExtensionContentTypeProvider extensionProvider)
     {
-        _assembly = typeof(EmbeddedResourceRouteResolver).Assembly;
-        _assemblyName = _assembly.GetName();
         _extensionProvider = extensionProvider;
-
         _resources = new Lazy<Dictionary<string, byte[]>>(CompileResources);
     }
 

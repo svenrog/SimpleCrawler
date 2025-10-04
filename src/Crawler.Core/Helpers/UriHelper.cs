@@ -12,4 +12,20 @@ public static class UriHelper
 
         return uri.ToString();
     }
+
+    public static List<string> GetAbsoluteUrls(Uri baseUri, IEnumerable<string> hrefs)
+    {
+        var links = new List<string>();
+
+        foreach (var href in hrefs)
+        {
+            var link = GetAbsoluteUrl(baseUri, href);
+            if (link == null)
+                continue;
+
+            links.Add(link);
+        }
+
+        return links;
+    }
 }

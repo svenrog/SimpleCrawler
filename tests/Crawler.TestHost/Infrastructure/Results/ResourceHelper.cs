@@ -1,25 +1,30 @@
-﻿namespace Crawler.TestHost.Infrastructure.Results;
+﻿using System.Reflection;
+
+namespace Crawler.TestHost.Infrastructure.Results;
 
 public static class ResourceHelper
 {
+    private static readonly Assembly _assembly = typeof(ResourceHelper).Assembly;
+    private static readonly AssemblyName _assemblyName = _assembly.GetName();
+
     public static byte[] GetWebRootResourceBytes(ReadOnlySpan<char> resourceFile)
     {
-        return GetResponseBytes($"Crawler.TestHost.wwwroot.{resourceFile}");
+        return GetResponseBytes($"{_assemblyName.Name}.wwwroot.{resourceFile}");
     }
 
     public static string GetWebRootResource(ReadOnlySpan<char> resourceFile)
     {
-        return GetResponseString($"Crawler.TestHost.wwwroot.{resourceFile}");
+        return GetResponseString($"{_assemblyName.Name}.wwwroot.{resourceFile}");
     }
 
     public static string GetHtmlResponse(ReadOnlySpan<char> responseName)
     {
-        return GetResponseString($"Crawler.TestHost.Response.{responseName}.html");
+        return GetResponseString($"{_assemblyName.Name}.Response.{responseName}.html");
     }
 
     public static string GetJsonResponse(ReadOnlySpan<char> responseName)
     {
-        return GetResponseString($"Crawler.TestHost.Response.{responseName}.json");
+        return GetResponseString($"{_assemblyName.Name}.Response.{responseName}.json");
     }
 
     private static string GetResponseString(string resourceName)

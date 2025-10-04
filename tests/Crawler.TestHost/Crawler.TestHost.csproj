@@ -9,12 +9,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <Content Remove="Response\default.json" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <EmbeddedResource Include="Response\default.json" />
-    <EmbeddedResource Include="Response\default.html" />
+    <EmbeddedResource Include="Response\**\*.*" />
 	<EmbeddedResource Include="wwwroot\**\*.*" />
   </ItemGroup>
 
