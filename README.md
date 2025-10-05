@@ -1,0 +1,38 @@
+[![Platform](https://img.shields.io/badge/Platform-.NET%2010-blue.svg?style=flat)](https://docs.microsoft.com/en-us/dotnet/)
+
+# Simple crawler project
+
+This project stemmed from the need to crawl a single site for the purpose of load testing it. Extracting relevant urls along the way. It iteratively grew in size and currently has some useful features.
+
+| Feature    | Support |
+| ---------- | ------- |
+| Parallel crawling | :heavy_check_mark: |
+| Crawl javascript rendered sites | :wavy_dash:* |
+| Meta robots | :heavy_check_mark: |
+| Robots.txt | :heavy_check_mark: |
+_* Depends on integration, Playwright has support, others not._
+
+| Integration    | Support |
+| ---------- | ------- |
+| [HtmlAgilityPack](https://html-agility-pack.net/) integration | :heavy_check_mark: |
+| [AngleSharp](https://anglesharp.github.io/) integration | :heavy_check_mark: |
+| [Playwright](https://playwright.dev/) integration | :heavy_check_mark: |
+| [Selenium](https://www.selenium.dev/) integration | :x: |
+| [Puppeteer](https://pptr.dev/) integration | :x: |
+
+## Running the .exe
+
+Executing the binary will crawl a single domain using the default `HtmlAgilityPack` crawler.
+
+```
+smpcrawl -e "<entry url>" -o "<output file>"
+```
+
+Full list of possible options can be found [here](./src/SimpleCrawler/Options.cs)
+Adjusting which implementation is used can be done by referencing another implementation project and switching service collection extension [here](./src/SimpleCrawler/Extensions/ServiceCollectionExtensions.cs).
+
+## A note on Robots.txt
+
+This implementation is based on the work of Adam Shirt that is found [here](https://github.com/drmathias/robots).
+The matching engine has been fundamentally reworked by me for performance reasons.
+A full attributation and license can be found under [`Crawler.Core.Robots`].

@@ -6,6 +6,8 @@
   </Folder>
   <Folder Name="/Solution Items/">
     <File Path=".editorconfig" />
+    <File Path="LICENSE.txt" />
+    <File Path="README.md" />
   </Folder>
   <Folder Name="/Tests/">
     <Project Path="tests/Crawler.Benchmarks/Crawler.Benchmarks.csproj" Id="9fe55db8-801d-42f0-88ba-cc4940d643e3" />
