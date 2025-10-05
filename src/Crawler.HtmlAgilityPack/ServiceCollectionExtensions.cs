@@ -22,13 +22,13 @@ public static class ServiceCollectionExtensions
         services.AddLogging();
         services.AddHttpClient<DefaultHtmlAgilityPackCrawler>((provider, client) =>
         {
-            ConfigurationHelper.ConfigureClient(client, provider.GetRequiredService<IOptions<CrawlerOptions>>());
             config?.Invoke(provider, client);
+            ConfigurationHelper.ConfigureClient(client, provider.GetRequiredService<IOptions<CrawlerOptions>>());
         });
         services.AddHttpClient<IRobotClient, RobotWebClient>((provider, client) =>
         {
-            ConfigurationHelper.ConfigureClient(client, provider.GetRequiredService<IOptions<CrawlerOptions>>());
             config?.Invoke(provider, client);
+            ConfigurationHelper.ConfigureClient(client, provider.GetRequiredService<IOptions<CrawlerOptions>>());
         });
         return services;
     }

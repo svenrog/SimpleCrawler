@@ -15,14 +15,7 @@ public static class LoggingBuilderExtensions
         })
         .AddConsoleFormatter<CrudeLogFormatter, ConsoleFormatterOptions>();
 
-#if DEBUG
-        minimumLevel ??= LogLevel.Trace;
-#endif
-
-#pragma warning disable S2589 // Boolean expressions should not be gratuitous
         if (minimumLevel.HasValue)
             builder.SetMinimumLevel(minimumLevel.Value);
-#pragma warning restore S2589 // Boolean expressions should not be gratuitous
-
     }
 }

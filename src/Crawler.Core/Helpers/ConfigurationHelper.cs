@@ -9,6 +9,9 @@ public static class ConfigurationHelper
         if (string.IsNullOrEmpty(options.UserAgent))
             return;
 
+        if (client.DefaultRequestHeaders.Contains("User-Agent"))
+            return;
+
         client.DefaultRequestHeaders.Add("User-Agent", options.UserAgent);
     }
 
