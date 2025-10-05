@@ -39,10 +39,14 @@ public sealed class UrlPathPattern
     /// <returns>True if the path matches or is a sub-path; otherwise false</returns>
     public bool Matches(UriPath path)
     {
-        if (Length == 0 || !path.Value.StartsWith(_patternParts[0]))
+        if (Length == 0 || !path.Value.StartsWith(_patternParts[0], StringComparison.Ordinal))
             return false;
 
+        if (_matchSubPaths)
+            return true;
+
         var currentIndex = _patternParts[0].Length;
+
         for (var x = 1; x < _patternParts.Length; x++)
         {
             var matchIndex = path.Value.IndexOf(_patternParts[x], currentIndex);
@@ -52,6 +56,6 @@ public sealed class UrlPathPattern
             currentIndex = matchIndex + _patternParts[x].Length;
         }
 
-        return _matchSubPaths || currentIndex == path.Length;
+        return currentIndex == path.Length;
     }
 }

@@ -15,7 +15,7 @@ namespace Crawler.Benchmarks;
 
 [MemoryDiagnoser]
 [ShortRunJob]
-public class Benchmarks
+public class CrawlerBenchmarks
 {
     private const string _entry = "http://localhost:5228/";
 
