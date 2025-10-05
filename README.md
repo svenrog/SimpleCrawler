@@ -7,19 +7,18 @@ This project stemmed from the need to crawl a single site for the purpose of loa
 | Feature    | Support |
 | ---------- | ------- |
 | Parallel crawling | :100: |
-| Handles javascript rendered sites | :wavy_dash:* |
 | Meta robots | :heavy_check_mark: |
 | Robots.txt | :heavy_check_mark: |
 
 _* Depends on integration, Playwright has support, others not._
 
-| Integration    | Support |
+| Integration  | Static responses | Client (js) rendering |
 | ---------- | ------- |
-| [HtmlAgilityPack](https://html-agility-pack.net/) | :heavy_check_mark: |
-| [AngleSharp](https://anglesharp.github.io/) | :heavy_check_mark: |
-| [Playwright](https://playwright.dev/) | :heavy_check_mark: |
-| [Selenium](https://www.selenium.dev/) | :x: |
-| [Puppeteer](https://pptr.dev/) | :x: |
+| [HtmlAgilityPack](https://html-agility-pack.net/) | :heavy_check_mark: | :x:  |
+| [AngleSharp](https://anglesharp.github.io/) | :heavy_check_mark: | :x: |
+| [Playwright](https://playwright.dev/) | :heavy_check_mark: | :heavy_check_mark: |
+| [Selenium](https://www.selenium.dev/) | :x: |  |
+| [Puppeteer](https://pptr.dev/) | :x: |  |
 
 ## Running the .exe
 
