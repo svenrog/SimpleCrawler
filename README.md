@@ -6,8 +6,8 @@ This project stemmed from the need to crawl a single site for the purpose of loa
 
 | Feature    | Support |
 | ---------- | ------- |
-| Parallel crawling | :heavy_check_mark: |
-| Crawl javascript rendered sites | :wavy_dash:* |
+| Parallel crawling | :100: |
+| Handles javascript rendered sites | :wavy_dash:* |
 | Meta robots | :heavy_check_mark: |
 | Robots.txt | :heavy_check_mark: |
 
@@ -15,11 +15,11 @@ _* Depends on integration, Playwright has support, others not._
 
 | Integration    | Support |
 | ---------- | ------- |
-| [HtmlAgilityPack](https://html-agility-pack.net/) integration | :heavy_check_mark: |
-| [AngleSharp](https://anglesharp.github.io/) integration | :heavy_check_mark: |
-| [Playwright](https://playwright.dev/) integration | :heavy_check_mark: |
-| [Selenium](https://www.selenium.dev/) integration | :x: |
-| [Puppeteer](https://pptr.dev/) integration | :x: |
+| [HtmlAgilityPack](https://html-agility-pack.net/) | :heavy_check_mark: |
+| [AngleSharp](https://anglesharp.github.io/) | :heavy_check_mark: |
+| [Playwright](https://playwright.dev/) | :heavy_check_mark: |
+| [Selenium](https://www.selenium.dev/) | :x: |
+| [Puppeteer](https://pptr.dev/) | :x: |
 
 ## Running the .exe
 
@@ -35,5 +35,5 @@ Adjusting which implementation is used can be done by referencing another implem
 ## A note on Robots.txt
 
 This implementation is based on the work of Adam Shirt that is found [here](https://github.com/drmathias/robots).
-The matching engine has been fundamentally reworked by me for performance reasons.
+The matching engine has been reworked by me for performance reasons.
 A full attributation and license can be found under [`Crawler.Core.Robots`](./src/Crawler.Core/Robots/).
