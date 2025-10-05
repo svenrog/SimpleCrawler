@@ -9,6 +9,7 @@ This project stemmed from the need to crawl a single site for the purpose of loa
 | Parallel crawling | :100: |
 | Meta robots | :heavy_check_mark: |
 | Robots.txt | :heavy_check_mark: |
+| Modern .NET features | :heavy_check_mark: |
 
 | Integration  | Static responses | Client (js) rendering |
 | ---------- | ------- | ------- |
