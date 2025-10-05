@@ -2,7 +2,7 @@
 
 # Simple crawler project
 
-This project stemmed from the need to crawl a single site for the purpose of load testing it. Extracting relevant urls along the way. It iteratively grew in size and currently has some useful features.
+This project stemmed from the need to crawl a single domain in preparation of load testing, extracting relevant urls along the way. It iteratively grew in size and currently has some useful features.
 
 | Feature    | Support |
 | ---------- | ------- |
