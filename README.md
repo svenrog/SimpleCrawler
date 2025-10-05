@@ -9,6 +9,7 @@ This project stemmed from the need to crawl a single domain in preparation of lo
 | Parallel crawling | :100: |
 | Meta robots | :heavy_check_mark: |
 | Robots.txt | :heavy_check_mark: |
+| Console colors | :rainbow: |
 | Modern .NET features | :heavy_check_mark: |
 
 | Integration  | Static responses | Client (js) rendering |
@@ -30,6 +31,12 @@ Full list of possible options can be found [here](./src/SimpleCrawler/Options.cs
 Adjusting which implementation is used can be done by referencing another implementation project and switching service collection extension [here](./src/SimpleCrawler/Extensions/ServiceCollectionExtensions.cs).
 
 ## Some things of note
+
+### Console colors
+
+The application uses a [custom log formatter](./src/Logging.Core/CrudeLogFormatter.cs) to set colors in the console.
+
+### Static files from embedded resources
 
 Among the test projects there are [TestHosts](./tests/Crawler.TestHost/Infrastructure/Factories/SpaWebApplicationFactory.cs) capable of serving embedded resources as static files, this makes it possible to start the server entirely from memory. A prerequisite for using it across projects.
 
