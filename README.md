@@ -25,7 +25,8 @@ Executing the binary will crawl a single domain using the default `HtmlAgilityPa
 smpcrawl -e "<entry url>" -o "<output file>"
 ```
 
-Full list of possible options can be found [here](./src/SimpleCrawler/Options.cs)
+Full list of possible options can be found [here](./src/SimpleCrawler/Options.cs).
+
 Adjusting which implementation is used can be done by referencing another implementation project and switching service collection extension [here](./src/SimpleCrawler/Extensions/ServiceCollectionExtensions.cs).
 
 ## Some things of note
