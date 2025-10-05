@@ -1,5 +1,7 @@
 ﻿using Crawler.AngleSharp;
 using Crawler.Core;
+using Crawler.HtmlAgilityPack;
+using Crawler.Playwright;
 using Crawler.Tests.Common.Extensions;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.DependencyInjection;
@@ -25,6 +27,8 @@ public abstract class AbstractHostFixture : IAsyncDisposable
         services.AddPlaywrightCrawler(options);
 
         services.AddSingleton<ILogger>(NullLogger.Instance);
+        services.AddSingleton(typeof(ILogger<>), typeof(NullLogger<>));
+
         services.AddScoped<CancellationTokenSource>();
 
         ServiceProvider = services.BuildServiceProvider();

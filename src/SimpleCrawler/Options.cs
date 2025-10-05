@@ -22,6 +22,9 @@ public sealed class Options
     [Option('d', "delay", Required = false, Default = 0, HelpText = "The crawl delay (in seconds)")]
     public double CrawlDelay { get; set; } = 0;
 
-    [Option('r', "respectMetaRobots", Required = false, Default = true, HelpText = "If crawling should respect meta robots.")]
-    public bool RespectMetaRobots { get; set; } = true;
+    [Option('r', "respectRobots", Required = false, Default = true, HelpText = "If crawling should respect meta robots and robots.txt rules.")]
+    public bool RespectRobots { get; set; } = true;
+
+    [Option('a', "userAgent", Required = false, HelpText = "This sets the user agent of the browser.")]
+    public string? UserAgent { get; set; }
 }

@@ -8,7 +8,7 @@ namespace Crawler.HtmlAgilityPack;
 
 public sealed class DefaultHtmlAgilityPackCrawler : HtmlAgilityPackCrawler<ScrapeResult>
 {
-    public DefaultHtmlAgilityPackCrawler(HttpClient client, IRobotClient robotClient, IOptions<CrawlerOptions> options, ILogger logger) : base(client, robotClient, options, logger)
+    public DefaultHtmlAgilityPackCrawler(HttpClient client, IRobotClient robotClient, IOptions<CrawlerOptions> options, ILogger<DefaultHtmlAgilityPackCrawler> logger) : base(client, robotClient, options, logger)
     {
     }
 

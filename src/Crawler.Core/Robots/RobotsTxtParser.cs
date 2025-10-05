@@ -21,16 +21,14 @@ public class RobotsTxtParser
     private static readonly string _disallowDirective = "Disallow: ";
 
     private readonly IRobotClient _robotClient;
-    private readonly RobotOptions _options;
 
     /// <summary>
     /// Creates a robots.txt parser
     /// </summary>
     /// <param name="robotClient">Client used to send requests to the website</param>
-    public RobotsTxtParser(IRobotClient robotClient, RobotOptions? options = null)
+    public RobotsTxtParser(IRobotClient robotClient)
     {
         _robotClient = robotClient;
-        _options = options ?? RobotOptions.Default;
     }
 
     /// <summary>
@@ -101,14 +99,14 @@ public class RobotsTxtParser
                     if (line.StartsWith(_disallowDirective, StringComparison.InvariantCultureIgnoreCase))
                     {
                         var disallowValue = GetValueOfDirective(line, _disallowDirective);
-                        var disallowPattern = new UrlPathPattern(disallowValue, _options.EnableRfc3986Normalization);
+                        var disallowPattern = new UrlPathPattern(disallowValue);
 
                         foreach (var userAgent in currentUserAgents) userAgentRules[userAgent].Add(new UrlRule(RuleType.Disallow, disallowPattern));
                     }
                     else if (line.StartsWith(_allowDirective, StringComparison.InvariantCultureIgnoreCase))
                     {
                         var allowedValue = GetValueOfDirective(line, _allowDirective);
-                        var allowPattern = new UrlPathPattern(allowedValue, _options.EnableRfc3986Normalization);
+                        var allowPattern = new UrlPathPattern(allowedValue);
 
                         foreach (var userAgent in currentUserAgents) userAgentRules[userAgent].Add(new UrlRule(RuleType.Allow, allowPattern));
                     }

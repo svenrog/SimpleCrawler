@@ -1,5 +1,5 @@
 ﻿using CommandLine;
-using Crawler.Alleima.ETrack;
+using Crawler.HtmlAgilityPack;
 using Logging.Core.Extensions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -29,7 +29,6 @@ internal static class Program
 
             await Run(builder);
         });
-
         parseResult.WithNotParsed((errors) => Fail(builder, errors));
     }
 
@@ -43,14 +42,13 @@ internal static class Program
             tokenSource.Cancel();
         };
 
-        var logger = host.Services.GetRequiredService<ILogger<AlleimaCrawler>>();
+        var logger = host.Services.GetRequiredService<ILogger<DefaultHtmlAgilityPackCrawler>>();
         var options = host.Services.GetRequiredService<Options>();
-        var crawler = host.Services.GetRequiredService<AlleimaCrawler>();
+        var crawler = host.Services.GetRequiredService<DefaultHtmlAgilityPackCrawler>();
+
         var result = await crawler.Start(options.Entry, tokenSource.Token);
 
-        await File.WriteAllLinesAsync(options.Output + "-products.log", result.Products, tokenSource.Token);
-        await File.WriteAllLinesAsync(options.Output + "-variations.log", result.Variations, tokenSource.Token);
-        await File.WriteAllLinesAsync(options.Output + "-categories.log", result.Categories, tokenSource.Token);
+        await File.WriteAllLinesAsync(options.Output, result.Urls, tokenSource.Token);
 
         logger.LogInformation("Wrote output file to '{path}'", options.Output);
     }
@@ -58,7 +56,7 @@ internal static class Program
     private static void Fail(HostApplicationBuilder builder, IEnumerable<Error> errors)
     {
         using var host = builder.Build();
-        var logger = host.Services.GetRequiredService<ILogger<AlleimaCrawler>>();
+        var logger = host.Services.GetRequiredService<ILogger<DefaultHtmlAgilityPackCrawler>>();
 
         logger.LogCliErrors(errors);
     }

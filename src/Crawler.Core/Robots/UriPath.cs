@@ -7,11 +7,11 @@ public class UriPath
 {
     private readonly string _value;
 
-    public UriPath(string value, bool? normalize = null)
+    public UriPath(string value)
     {
-        if (normalize.HasValue && normalize.Value)
+        if (PathHelpers.IsUrlEncoded(value))
         {
-            _value = PathHelpers.PreparePathForComparison(value);
+            _value = PathHelpers.ConvertToUtf16ForComparison(value);
         }
         else
         {

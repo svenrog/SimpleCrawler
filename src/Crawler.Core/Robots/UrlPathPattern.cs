@@ -8,7 +8,7 @@ public sealed class UrlPathPattern
     private readonly bool _matchSubPaths;
     private readonly string[] _patternParts;
 
-    public UrlPathPattern(string value, bool normalize = false)
+    public UrlPathPattern(string value)
     {
         Length = value.Length;
 
@@ -17,9 +17,9 @@ public sealed class UrlPathPattern
 
         var parts = value.Split('*', StringSplitOptions.None);
 
-        if (normalize)
+        if (PathHelpers.IsUrlEncoded(value))
         {
-            _patternParts = [.. parts.Select(PathHelpers.PreparePathForComparison)];
+            _patternParts = [.. parts.Select(PathHelpers.ConvertToUtf16ForComparison)];
         }
         else
         {

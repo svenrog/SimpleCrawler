@@ -1,7 +1,5 @@
-﻿using Crawler.Alleima.ETrack;
-using Crawler.Core;
-using Crawler.Core.Robots;
-using Crawler.Core.Robots.Http;
+﻿using Crawler.Core;
+using Crawler.HtmlAgilityPack;
 using Microsoft.Extensions.DependencyInjection;
 using ExtensionsOptions = Microsoft.Extensions.Options.Options;
 
@@ -12,15 +10,7 @@ internal static class ServiceCollectionExtensions
     public static void AddCrawler(this IServiceCollection services, Options options)
     {
         services.AddOptions(options);
-        services.AddHttpClient<AlleimaCrawler>((provider, client) =>
-        {
-            var options = provider.GetRequiredService<Options>();
-            if (options.Cookie != null)
-            {
-                client.DefaultRequestHeaders.Add("Cookie", options.Cookie);
-            }
-        });
-        services.AddHttpClient<IRobotClient, RobotWebClient>();
+        services.AddHtmlAgilityPackCrawler();
     }
 
     private static void AddOptions(this IServiceCollection services, Options options)
@@ -39,7 +29,9 @@ internal static class ServiceCollectionExtensions
             MaxPages = options.MaxPages,
             Parallelism = options.Parallelism,
             CrawlDelay = options.CrawlDelay,
-            RespectMetaRobots = options.RespectMetaRobots,
+            RespectMetaRobots = options.RespectRobots,
+            RespectRobotsTxt = options.RespectRobots,
+            UserAgent = options.UserAgent,
         };
     }
 }

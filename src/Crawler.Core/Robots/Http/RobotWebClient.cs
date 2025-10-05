@@ -13,12 +13,11 @@ namespace Crawler.Core.Robots.Http;
 public class RobotWebClient : IRobotClient
 {
     private readonly HttpClient _httpClient;
-    private readonly RobotOptions _options;
 
-    public RobotWebClient(HttpClient httpClient, RobotOptions? options = null)
+
+    public RobotWebClient(HttpClient httpClient)
     {
         _httpClient = httpClient;
-        _options = options ?? RobotOptions.Default;
     }
 
     public async Task<IRobotsTxt> LoadRobotsTxtAsync(Uri url, CancellationToken cancellationToken = default)
@@ -60,7 +59,7 @@ public class RobotWebClient : IRobotClient
         }
 
         await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
-        return await new RobotsTxtParser(this, _options).ReadFromStreamAsync(stream, cancellationToken);
+        return await new RobotsTxtParser(this).ReadFromStreamAsync(stream, cancellationToken);
     }
 
     public async IAsyncEnumerable<UrlSetItem> LoadSitemapsAsync(Uri uri, DateTime? modifiedSince, [EnumeratorCancellation] CancellationToken cancellationToken)

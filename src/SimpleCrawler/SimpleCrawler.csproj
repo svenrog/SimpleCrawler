@@ -18,8 +18,8 @@
 	</ItemGroup>
 
 	<ItemGroup>
-	  <ProjectReference Include="..\Crawler.Alleima.ETrack\Crawler.Alleima.ETrack.csproj" />
 	  <ProjectReference Include="..\Crawler.Core\Crawler.Core.csproj" />
+	  <ProjectReference Include="..\Crawler.HtmlAgilityPack\Crawler.HtmlAgilityPack.csproj" />
 	  <ProjectReference Include="..\Logging.Core\Logging.Core.csproj" />
 	</ItemGroup>
 

@@ -11,4 +11,8 @@
 		<PackageReference Include="Microsoft.Extensions.Options" Version="9.0.9" />
 	</ItemGroup>
 
+	<ItemGroup>
+		<InternalsVisibleTo Include="Robots.Parser.Tests" />
+	</ItemGroup>
+
 </Project>

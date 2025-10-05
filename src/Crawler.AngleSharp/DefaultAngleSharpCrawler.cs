@@ -9,7 +9,7 @@ namespace Crawler.AngleSharp;
 
 public sealed class DefaultAngleSharpCrawler : AngleSharpCrawler<ScrapeResult>
 {
-    public DefaultAngleSharpCrawler(IConfiguration configuration, IRobotClient robotClient, IOptions<CrawlerOptions> options, ILogger logger) : base(configuration, robotClient, options, logger)
+    public DefaultAngleSharpCrawler(IConfiguration configuration, IRobotClient robotClient, IOptions<CrawlerOptions> options, ILogger<DefaultAngleSharpCrawler> logger) : base(configuration, robotClient, options, logger)
     {
     }
 

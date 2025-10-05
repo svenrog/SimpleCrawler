@@ -2,6 +2,7 @@
 // Licensed under MIT. See the LICENSE file in the project root for more information
 // https://github.com/drmathias/robots
 
+using System.Globalization;
 using System.Runtime.CompilerServices;
 using System.Xml;
 using System.Xml.Linq;
@@ -133,10 +134,12 @@ public class SitemapParser
 
                     var changeFrequencyString = node.Element(_sitemapNamespace + "changefreq")?.Value;
                     var priorityString = node.Element(_sitemapNamespace + "priority")?.Value;
+
                     changeFrequency = changeFrequencyString is not null
                         ? Enum.Parse<ChangeFrequency>(changeFrequencyString, ignoreCase: true)
                         : null;
-                    priority = priorityString is not null ? decimal.Parse(priorityString) : null;
+
+                    priority = priorityString is not null ? decimal.Parse(priorityString, CultureInfo.InvariantCulture) : null;
                 }
                 catch (Exception e)
                 {
