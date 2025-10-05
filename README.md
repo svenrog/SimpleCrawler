@@ -31,7 +31,7 @@ Adjusting which implementation is used can be done by referencing another implem
 
 Among the test projects there are [TestHosts](./tests/Crawler.TestHost/Infrastructure/Factories/SpaWebApplicationFactory.cs) capable of serving embedded resources as static files, this makes it possible to start the server entirely from memory. A prerequisite for using it across projects.
 
-### A note on Robots.txt
+### Robots.txt
 
 This implementation is based on the work of Adam Shirt that is found [here](https://github.com/drmathias/robots).
 The matching engine has been reworked by me for performance reasons.
