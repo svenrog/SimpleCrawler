@@ -1,0 +1,1 @@
+import{u as i}from"./index-BjAIwWLi.js";import{C as e,T as r,D as o,W as n}from"./styles-CpsjTM-_.js";function l({}){return i(n,{color:"#222",children:i(e,{children:[i(r,{children:["Oops, it looks like this page is ",i("em",{children:"missing"})]}),i(o,{children:"Try something else."})]})})}export{l as default};

@@ -7,16 +7,20 @@
 		<Nullable>enable</Nullable>
 		<PublishAot>true</PublishAot>
 		<InvariantGlobalization>true</InvariantGlobalization>
+		<ServerGarbageCollection>true</ServerGarbageCollection>
+		<AssemblyName>smpcrawl</AssemblyName>
 	</PropertyGroup>
 
 	<ItemGroup>
-		<PackageReference Include="HtmlAgilityPack" Version="1.12.3" />
 		<PackageReference Include="CommandLineParser" Version="2.9.1" />
-		<PackageReference Include="HtmlAgilityPack.CssSelectors.NetCore" Version="1.2.1" />
+		<PackageReference Include="Microsoft.Extensions.Hosting" Version="9.0.9" />
+		<PackageReference Include="Microsoft.Extensions.Http" Version="10.0.0-rc.1.25451.107" />
 	</ItemGroup>
 
 	<ItemGroup>
-		<PackageReference Include="Microsoft.Extensions.Hosting" Version="9.0.9" />
+	  <ProjectReference Include="..\Crawler.Core\Crawler.Core.csproj" />
+	  <ProjectReference Include="..\Crawler.HtmlAgilityPack\Crawler.HtmlAgilityPack.csproj" />
+	  <ProjectReference Include="..\Logging.Core\Logging.Core.csproj" />
 	</ItemGroup>
 
 </Project>

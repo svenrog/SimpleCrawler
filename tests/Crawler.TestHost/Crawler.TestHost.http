@@ -1,0 +1,11 @@
+@Crawler.TestHost_HostAddress = http://localhost:5139
+
+GET {{Crawler.TestHost_HostAddress}}/todos/
+Accept: application/json
+
+###
+
+GET {{Crawler.TestHost_HostAddress}}/todos/1
+Accept: application/json
+
+###
