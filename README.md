@@ -9,8 +9,8 @@ This project stemmed from the need to crawl a single domain in preparation of lo
 | Parallel crawling | :100: |
 | Meta robots | :heavy_check_mark: |
 | Robots.txt | :heavy_check_mark: |
-| Console colors | :rainbow: |
 | Modern .NET features | :heavy_check_mark: |
+| Console colors | :rainbow: |
 
 | Integration  | Static responses | Client (js) rendering |
 | ---------- | ------- | ------- |
