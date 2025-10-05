@@ -10,6 +10,7 @@ This project stemmed from the need to crawl a single site for the purpose of loa
 | Crawl javascript rendered sites | :wavy_dash:* |
 | Meta robots | :heavy_check_mark: |
 | Robots.txt | :heavy_check_mark: |
+
 _* Depends on integration, Playwright has support, others not._
 
 | Integration    | Support |
@@ -35,4 +36,4 @@ Adjusting which implementation is used can be done by referencing another implem
 
 This implementation is based on the work of Adam Shirt that is found [here](https://github.com/drmathias/robots).
 The matching engine has been fundamentally reworked by me for performance reasons.
-A full attributation and license can be found under [`Crawler.Core.Robots`].
+A full attributation and license can be found under [`Crawler.Core.Robots`](./src/Crawler.Core/Robots/).
