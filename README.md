@@ -32,6 +32,10 @@ smpcrawl -e "<entry url>" -o "<output file>"
 Full list of possible options can be found [here](./src/SimpleCrawler/Options.cs)
 Adjusting which implementation is used can be done by referencing another implementation project and switching service collection extension [here](./src/SimpleCrawler/Extensions/ServiceCollectionExtensions.cs).
 
+## Some things of note
+
+Among the test projects there are [TestHosts](./tests/Crawler.TestHost/Infrastructure/Factories/SpaWebApplicationFactory.cs) capable of serving embedded resources as static files, this makes it possible to start the server entirely from memory. A prerequisite for using it across projects.
+
 ## A note on Robots.txt
 
 This implementation is based on the work of Adam Shirt that is found [here](https://github.com/drmathias/robots).
