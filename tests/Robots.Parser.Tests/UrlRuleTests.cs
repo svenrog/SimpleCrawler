@@ -82,6 +82,21 @@ public class UrlRuleTests
     }
 
     [Fact]
+    public void Matches_Querystring_ReturnFalse()
+    {
+        // Arrange
+        var pattern = new UrlPathPattern("/*?_rsc=*");
+        var urlRule = new UrlRule(RuleType.Disallow, pattern);
+
+        // Act
+        var path = new UriPath("/some/");
+        var matches = urlRule.Pattern.Matches(path);
+
+        // Assert
+        matches.Should().Be(false);
+    }
+
+    [Fact]
     public void Matches_SubdirectoryMatch_ReturnTrue()
     {
         // Arrange

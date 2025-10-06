@@ -42,9 +42,6 @@ public sealed class UrlPathPattern
         if (Length == 0 || !path.Value.StartsWith(_patternParts[0], StringComparison.Ordinal))
             return false;
 
-        if (_matchSubPaths)
-            return true;
-
         var currentIndex = _patternParts[0].Length;
 
         for (var x = 1; x < _patternParts.Length; x++)
@@ -56,6 +53,6 @@ public sealed class UrlPathPattern
             currentIndex = matchIndex + _patternParts[x].Length;
         }
 
-        return currentIndex == path.Length;
+        return _matchSubPaths || currentIndex == path.Length;
     }
 }
