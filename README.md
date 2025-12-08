@@ -50,7 +50,7 @@ new CrawlerOptions
 }
 ```
 
-## Some things of note
+## Other things of note
 
 ### Console colors
 
