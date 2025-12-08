@@ -2,6 +2,7 @@
 using Crawler.Core.Models;
 using Crawler.HtmlAgilityPack;
 using Crawler.Playwright;
+using Crawler.Puppeteer;
 using Crawler.Tests.Fixtures;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -50,6 +51,15 @@ public class StaticCrawlerTests : IClassFixture<StaticHostFixture>
     public async Task PlaywrightCrawler_Can_Crawl()
     {
         var subject = _context.ServiceProvider.GetRequiredService<DefaultPlaywrightCrawler>();
+        var result = await subject.Start(StaticHostFixture.HostName, _context.CancellationSource.Token);
+
+        AssertResult(result);
+    }
+
+    [Fact]
+    public async Task PuppeteerCrawler_Can_Crawl()
+    {
+        var subject = _context.ServiceProvider.GetRequiredService<DefaultPuppeteerCrawler>();
         var result = await subject.Start(StaticHostFixture.HostName, _context.CancellationSource.Token);
 
         AssertResult(result);

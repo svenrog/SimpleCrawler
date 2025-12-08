@@ -3,6 +3,7 @@ using Crawler.AngleSharp;
 using Crawler.Core;
 using Crawler.HtmlAgilityPack;
 using Crawler.Playwright;
+using Crawler.Puppeteer;
 using Crawler.TestHost.Infrastructure.Factories;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.DependencyInjection;
@@ -26,6 +27,7 @@ public class CrawlerBenchmarks
     private DefaultHtmlAgilityPackCrawler _htmlAgilityPackCrawler;
     private DefaultAngleSharpCrawler _angleSharpCrawler;
     private DefaultPlaywrightCrawler _playwrightCrawler;
+    private DefaultPuppeteerCrawler _puppeteerCrawler;
 
     [GlobalSetup]
     public void Setup()
@@ -48,6 +50,7 @@ public class CrawlerBenchmarks
         _htmlAgilityPackCrawler = _serviceProvider.GetRequiredService<DefaultHtmlAgilityPackCrawler>();
         _angleSharpCrawler = _serviceProvider.GetRequiredService<DefaultAngleSharpCrawler>();
         _playwrightCrawler = _serviceProvider.GetRequiredService<DefaultPlaywrightCrawler>();
+        _puppeteerCrawler = _serviceProvider.GetService<DefaultPuppeteerCrawler>();
 
         _tokenSource = _serviceProvider.GetRequiredService<CancellationTokenSource>();
 
@@ -71,6 +74,12 @@ public class CrawlerBenchmarks
     public async Task PlaywrightCrawl()
     {
         await _playwrightCrawler.Start(_entry, _tokenSource.Token);
+    }
+
+    [Benchmark]
+    public async Task PuppeteerCrawl()
+    {
+        await _puppeteerCrawler.Start(_entry, _tokenSource.Token);
     }
 
     [GlobalCleanup]

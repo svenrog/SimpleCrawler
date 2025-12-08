@@ -16,6 +16,7 @@
 		<ProjectReference Include="..\..\src\Crawler.Core\Crawler.Core.csproj" />
 		<ProjectReference Include="..\..\src\Crawler.HtmlAgilityPack\Crawler.HtmlAgilityPack.csproj" />
 		<ProjectReference Include="..\..\src\Crawler.Playwright\Crawler.Playwright.csproj" />
+		<ProjectReference Include="..\..\src\Crawler.Puppeteer\Crawler.Puppeteer.csproj" />
 	</ItemGroup>
 
 </Project>

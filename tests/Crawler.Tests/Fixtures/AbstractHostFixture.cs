@@ -2,6 +2,7 @@
 using Crawler.Core;
 using Crawler.HtmlAgilityPack;
 using Crawler.Playwright;
+using Crawler.Puppeteer;
 using Crawler.Tests.Common.Extensions;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.DependencyInjection;
@@ -25,6 +26,7 @@ public abstract class AbstractHostFixture : IAsyncDisposable
         services.AddAngleSharpCrawler(options);
         services.AddHtmlAgilityPackCrawler(options);
         services.AddPlaywrightCrawler(options);
+        services.AddPuppeteerCrawler(options);
 
         services.AddSingleton<ILogger>(NullLogger.Instance);
         services.AddSingleton(typeof(ILogger<>), typeof(NullLogger<>));
@@ -45,7 +47,7 @@ public abstract class AbstractHostFixture : IAsyncDisposable
         return new CrawlerOptions
         {
             CrawlDelay = 0,
-            Parallelism = 4,
+            Parallelism = 8,
             RespectMetaRobots = false,
             RespectRobotsTxt = false,
         };

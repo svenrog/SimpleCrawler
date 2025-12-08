@@ -6,7 +6,7 @@ This project stemmed from the need to crawl a single domain in preparation of lo
 
 | Feature    | Support |
 | ---------- | ------- |
-| Parallel crawling | :100: |
+| Parallel crawling | :heavy_check_mark: |
 | Meta robots | :heavy_check_mark: |
 | Robots.txt | :heavy_check_mark: |
 | Modern .NET features | :heavy_check_mark: |
@@ -15,8 +15,9 @@ This project stemmed from the need to crawl a single domain in preparation of lo
 | Integration  | Static responses | Client (js) rendering |
 | ---------- | ------- | ------- |
 | [HtmlAgilityPack](https://html-agility-pack.net/) | :heavy_check_mark: | :x: |
-| [AngleSharp](https://anglesharp.github.io/) | :heavy_check_mark: | :poop: |
+| [AngleSharp](https://anglesharp.github.io/) | :heavy_check_mark: | :x: |
 | [Playwright](https://playwright.dev/) | :heavy_check_mark: | :heavy_check_mark: |
+| [Puppeteer Sharp](https://www.puppeteersharp.com/) | :interrobang: | :interrobang: |
 
 ## Running the .exe
 
@@ -29,6 +30,25 @@ smpcrawl -e "<entry url>" -o "<output file>"
 Full list of possible options can be found [here](./src/SimpleCrawler/Options.cs).
 
 Adjusting which implementation is used can be done by referencing another implementation project and switching service collection extension [here](./src/SimpleCrawler/Extensions/ServiceCollectionExtensions.cs).
+
+
+## Notes on implementations
+
+### Anglesharp
+
+The Anglesharp maintainers claims the library handles JavaScript with AngleSharp.Js. In reality it only does so on an experimental level, complex libraries like React do not work.
+
+### Puppeteer
+
+This implementation does not handle parallel execution above 2 well. There might be an issue in the library or in this implementation. Currently when using it the following settings work best.
+
+```
+new CrawlerOptions 
+{
+    Parallelism = 2,
+    ...
+}
+```
 
 ## Some things of note
 
