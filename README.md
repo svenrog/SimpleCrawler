@@ -42,8 +42,8 @@ The Anglesharp maintainers claims the library handles JavaScript with AngleSharp
 ### Selenium WebDriver
 
 This package isn't a good fit for this codebase and is dated. 
-There hasn't been any discussions in the Google Groups for years and the maintainers seem hesitant to implement async.
-https://groups.google.com/g/selenium-developers/c/nk8IywKyJ08
+There hasn't been any discussions in the Google Groups for years and the maintainers [seem hesitant to implement async](https://groups.google.com/g/selenium-developers/c/nk8IywKyJ08).
+
 
 ## Other things of note
 
