@@ -42,6 +42,7 @@ public class CrawlerBenchmarks
         services.AddHtmlAgilityPackCrawler(options);
         services.AddAngleSharpCrawler(options);
         services.AddPlaywrightCrawler(options);
+        services.AddPuppeteerCrawler(options);
         services.AddSingleton<ILogger>(NullLogger.Instance);
         services.AddScoped<CancellationTokenSource>();
 
