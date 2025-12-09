@@ -17,7 +17,8 @@ This project stemmed from the need to crawl a single domain in preparation of lo
 | [HtmlAgilityPack](https://html-agility-pack.net/) | :heavy_check_mark: | :x: |
 | [AngleSharp](https://anglesharp.github.io/) | :heavy_check_mark: | :x: |
 | [Playwright](https://playwright.dev/) | :heavy_check_mark: | :heavy_check_mark: |
-| [Puppeteer Sharp](https://www.puppeteersharp.com/) | :interrobang: | :interrobang: |
+| [Puppeteer Sharp](https://www.puppeteersharp.com/) | :heavy_check_mark: | :heavy_check_mark: |
+| [Selenium WebDriver](https://www.selenium.dev/) | :skull: | :skull: |
 
 ## Running the .exe
 
@@ -38,17 +39,9 @@ Adjusting which implementation is used can be done by referencing another implem
 
 The Anglesharp maintainers claims the library handles JavaScript with AngleSharp.Js. In reality it only does so on an experimental level, complex libraries like React do not work.
 
-### Puppeteer
+### Selenium WebDriver
 
-This implementation does not handle parallel execution above 2 well. There might be an issue in the library or in this implementation. Currently when using it the following settings work best.
-
-```
-new CrawlerOptions 
-{
-    Parallelism = 2,
-    ...
-}
-```
+This package isn't a good fit for this codebase.
 
 ## Other things of note
 

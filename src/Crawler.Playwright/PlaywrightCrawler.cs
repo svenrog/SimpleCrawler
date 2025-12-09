@@ -59,7 +59,7 @@ public abstract class PlaywrightCrawler<TResult> : AbstractRobotsCrawler<IPage, 
         if (response == null)
         {
             _logger.LogWarning("No response from '{url}'", url);
-            await page.CloseAsync();
+            await DisposeResponse(page);
 
             return null;
         }
@@ -71,7 +71,7 @@ public abstract class PlaywrightCrawler<TResult> : AbstractRobotsCrawler<IPage, 
         else
         {
             _logger.LogWarning("Error {code} on url '{url}'", response.Status, url);
-            await page.CloseAsync();
+            await DisposeResponse(page);
 
             return null;
         }

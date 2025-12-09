@@ -42,11 +42,11 @@ public abstract class PuppeteerCrawler<TResult> : AbstractRobotsCrawler<IPage, I
         var page = await _browserContext!.NewPageAsync();
         await ConfigurePage(page);
 
-        var response = await page.GoToAsync(url, waitUntil: WaitUntilNavigation.Load);
+        var response = await page.GoToAsync(url, GetNavigationOptions());
         if (response == null)
         {
             _logger.LogWarning("No response from '{url}'", url);
-            await page.DisposeAsync();
+            await DisposeResponse(page);
 
             return null;
         }
@@ -58,11 +58,17 @@ public abstract class PuppeteerCrawler<TResult> : AbstractRobotsCrawler<IPage, I
         else
         {
             _logger.LogWarning("Error {code} on url '{url}'", response.Status, url);
-            await page.DisposeAsync();
+            await DisposeResponse(page);
 
             return null;
         }
     }
+
+    protected virtual NavigationOptions GetNavigationOptions()
+    {
+        return Constants.DefaultNavigationOptions;
+    }
+
     protected virtual async ValueTask ConfigurePage(IPage page)
     {
         if (_options.UserAgent != null)
