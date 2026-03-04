@@ -1,6 +1,6 @@
 ﻿using CommandLine;
 using Crawler.HtmlAgilityPack;
-using Logging.Core.Extensions;
+using Crude.Logging.Console.Extensions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
