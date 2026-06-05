@@ -28,12 +28,14 @@ public static class ServiceCollectionExtensions
         {
             ConfigurationHelper.ConfigureClient(client, provider.GetRequiredService<IOptions<CrawlerOptions>>());
             config?.Invoke(provider, client);
-        });
+        }).ConfigurePrimaryHttpMessageHandler(provider =>
+            ConfigurationHelper.CreatePrimaryHandler(provider.GetRequiredService<IOptions<CrawlerOptions>>()));
         services.AddHttpClient<IRobotClient, RobotWebClient>((provider, client) =>
         {
             ConfigurationHelper.ConfigureClient(client, provider.GetRequiredService<IOptions<CrawlerOptions>>());
             config?.Invoke(provider, client);
-        });
+        }).ConfigurePrimaryHttpMessageHandler(provider =>
+            ConfigurationHelper.CreatePrimaryHandler(provider.GetRequiredService<IOptions<CrawlerOptions>>()));
         services.TryAddSingleton((provider) =>
             Configuration.Default
                 .WithRequester(provider.GetRequiredService<HttpClientRequester>())
