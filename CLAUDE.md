@@ -1,0 +1,33 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## What this is
+
+A high-performance single-domain web crawler (CLI: `smpcrawl`) built to gather URLs for load testing, respecting `robots.txt` and meta-robots. The crawler logic lives in `Crawler.Core` and is parameterized over a pluggable HTML/rendering backend.
+
+## Build, test, run
+
+- Solution file is `SimpleCrawler.slnx` (modern XML solution format), targeting **.NET 10**. `dotnet build` / `dotnet test` operate on it.
+- Run a single test: `dotnet test --filter "FullyQualifiedName~TestName"`.
+- Tests use **xUnit v3** (pre-release `xunit.v3`), FluentAssertions, and Moq — not xUnit v2 idioms.
+- Benchmarks are a runnable BenchmarkDotNet console app: `dotnet run -c Release --project tests/Crawler.Benchmarks`. Always run benchmarks in Release.
+- The CLI publishes with **NativeAOT** (`PublishAot`, `InvariantGlobalization`, `ServerGarbageCollection`). Keep new code in `SimpleCrawler`/`Crawler.Core` AOT-compatible — avoid unbounded reflection; `Program.cs` uses `DynamicDependency` where reflection is unavoidable.
+
+## Architecture
+
+- `Crawler.Core` — abstract base (`AbstractCrawler.cs`, semaphore-based parallelism), the custom `robots.txt`/sitemap parser, and shared crawling logic.
+- One project per HTML/rendering backend: `Crawler.HtmlAgilityPack` (default, static), `Crawler.AngleSharp` (static), `Crawler.Playwright` and `Crawler.Puppeteer` (headless browser, JS rendering). Every project under `/src` is part of the solution; there are no out-of-solution experiments.
+- `Crawler.TestHost` serves embedded resources as static files so integration test servers run entirely from memory.
+
+## Switching the active crawler backend
+
+The CLI is wired to one backend at a time. To change it, edit `src/SimpleCrawler/Extensions/ServiceCollectionExtensions.cs` (`AddCrawler` calls `services.AddHtmlAgilityPackCrawler(...)`) to call the target backend's `AddXyzCrawler` extension, and add the corresponding project reference to `SimpleCrawler.csproj`.
+
+## Code style
+
+`.editorconfig` deviates from defaults: primary constructors are disabled (`csharp_style_prefer_primary_constructors = false` / IDE0290) — use traditional constructors. `CA1873` (expensive logging) is silenced. `ImplicitUsings` is enabled across projects.
+
+## Git
+
+Use feature branches and open a PR against `master`.
