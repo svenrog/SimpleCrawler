@@ -31,14 +31,37 @@ public abstract class PlaywrightCrawler<TResult> : AbstractRobotsCrawler<IPage, 
     {
         _playwright ??= await PlaywrightContext.CreateAsync();
         _browser ??= await LaunchBrowser(_playwright);
-        _browserContext ??= await _browser.NewContextAsync(GetContextOptions());
+
+        if (_browserContext is null)
+        {
+            _browserContext = await _browser.NewContextAsync(GetContextOptions());
+
+            if (_options.BlockNonEssentialResources)
+                await _browserContext.RouteAsync("**/*", BlockNonEssentialResource);
+        }
 
         return await base.Start(entry, cancellationToken);
     }
 
     protected virtual Task<IBrowser> LaunchBrowser(IPlaywright playwright)
     {
-        return playwright.Chromium.LaunchAsync();
+        return playwright.Chromium.LaunchAsync(new BrowserTypeLaunchOptions
+        {
+            Args =
+            [
+                "--disable-gpu",
+                "--disable-dev-shm-usage",
+                "--disable-extensions",
+                "--disable-background-networking",
+            ]
+        });
+    }
+
+    private static Task BlockNonEssentialResource(IRoute route)
+    {
+        return route.Request.ResourceType is "image" or "media" or "font" or "stylesheet"
+            ? route.AbortAsync()
+            : route.ContinueAsync();
     }
 
     protected virtual BrowserNewContextOptions GetContextOptions()
@@ -53,8 +76,6 @@ public abstract class PlaywrightCrawler<TResult> : AbstractRobotsCrawler<IPage, 
     {
         var page = await _browserContext!.NewPageAsync();
         var response = await page.GotoAsync(url);
-
-        await page.WaitForLoadStateAsync(LoadState.Load);
 
         if (response == null)
         {
@@ -75,6 +96,14 @@ public abstract class PlaywrightCrawler<TResult> : AbstractRobotsCrawler<IPage, 
 
             return null;
         }
+    }
+
+    protected override async ValueTask<PageExtract> ExtractPageData(IPage response)
+    {
+        var json = await response.EvaluateAsync(RenderedPageExtractor.Script);
+        var (canonicalHref, robotsContent, linkHrefs) = RenderedPageExtractor.Parse(json.GetValueOrDefault());
+
+        return new PageExtract(GetAbsoluteUrl(canonicalHref), IndexingHelper.ParseMetaRobots(robotsContent), linkHrefs);
     }
 
     protected override async ValueTask<IEnumerable<IElementHandle>> CollectLinks(IPage response)
