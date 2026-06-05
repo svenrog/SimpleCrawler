@@ -10,7 +10,6 @@ namespace Crawler.Core.Robots;
 public class RobotRuleChecker : IRobotRuleChecker
 {
     public static readonly RobotRuleChecker Empty = new([]);
-    private static readonly RuleTypeComparer _ruleComparer = new();
 
     private readonly HashSet<UrlRule> _rules;
 
@@ -34,10 +33,19 @@ public class RobotRuleChecker : IRobotRuleChecker
 
         var uriPath = new UriPath(path);
 
-        var ruleMatch = _rules.Where(rule => rule.Pattern.Matches(uriPath))
-                              .OrderByDescending(rule => rule.Pattern.Length)
-                              .ThenBy(rule => rule.Type, _ruleComparer)
-                              .FirstOrDefault();
+        UrlRule? ruleMatch = null;
+        foreach (var rule in _rules)
+        {
+            if (!rule.Pattern.Matches(uriPath))
+                continue;
+
+            if (ruleMatch is null
+                || rule.Pattern.Length > ruleMatch.Pattern.Length
+                || (rule.Pattern.Length == ruleMatch.Pattern.Length && rule.Type == RuleType.Allow))
+            {
+                ruleMatch = rule;
+            }
+        }
 
         return ruleMatch is null || ruleMatch.Type == RuleType.Allow;
     }
