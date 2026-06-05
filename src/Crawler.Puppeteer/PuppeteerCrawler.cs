@@ -5,6 +5,7 @@ using Crawler.Core.Robots;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using PuppeteerSharp;
+using System.Collections.Concurrent;
 using System.Text.Json;
 using PuppeteerController = PuppeteerSharp.Puppeteer;
 
@@ -19,12 +20,15 @@ public abstract class PuppeteerCrawler<TResult> : AbstractRobotsCrawler<IPage, I
     private IBrowser? _browser;
     private IBrowserContext? _browserContext;
 
+    private readonly ConcurrentQueue<IPage> _pagePool;
+
     private bool _disposed;
 
     protected PuppeteerCrawler(IRobotClient robotClient, IOptions<CrawlerOptions> options, ILogger logger) : base(robotClient, options, logger)
     {
         _options = options.Value;
         _logger = logger;
+        _pagePool = new ConcurrentQueue<IPage>();
     }
 
     public override async Task<TResult> Start(string entry, CancellationToken cancellationToken = default)
@@ -40,8 +44,7 @@ public abstract class PuppeteerCrawler<TResult> : AbstractRobotsCrawler<IPage, I
 
     protected override async Task<IPage?> LoadResponse(string url, CancellationToken cancellationToken)
     {
-        var page = await _browserContext!.NewPageAsync();
-        await ConfigurePage(page);
+        var page = await AcquirePage();
 
         var response = await page.GoToAsync(url, GetNavigationOptions());
         if (response == null)
@@ -63,6 +66,17 @@ public abstract class PuppeteerCrawler<TResult> : AbstractRobotsCrawler<IPage, I
 
             return null;
         }
+    }
+
+    private async ValueTask<IPage> AcquirePage()
+    {
+        if (_pagePool.TryDequeue(out var page))
+            return page;
+
+        page = await _browserContext!.NewPageAsync();
+        await ConfigurePage(page);
+
+        return page;
     }
 
     protected virtual NavigationOptions GetNavigationOptions()
@@ -164,12 +178,12 @@ public abstract class PuppeteerCrawler<TResult> : AbstractRobotsCrawler<IPage, I
         };
     }
 
-    protected async override Task DisposeResponse(IPage? response)
+    protected override Task DisposeResponse(IPage? response)
     {
-        if (response == null)
-            return;
+        if (response != null)
+            _pagePool.Enqueue(response);
 
-        await response.DisposeAsync();
+        return Task.CompletedTask;
     }
 
     public async ValueTask DisposeAsync()
@@ -182,6 +196,9 @@ public abstract class PuppeteerCrawler<TResult> : AbstractRobotsCrawler<IPage, I
     {
         if (!_disposed)
         {
+            while (_pagePool.TryDequeue(out var page))
+                await page.DisposeAsync().ConfigureAwait(false);
+
             if (_browserContext is not null)
             {
                 await _browserContext.CloseAsync().ConfigureAwait(false);
