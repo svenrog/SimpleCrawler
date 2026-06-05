@@ -28,6 +28,10 @@ The CLI is wired to one backend at a time. To change it, edit `src/SimpleCrawler
 
 `.editorconfig` deviates from defaults: primary constructors are disabled (`csharp_style_prefer_primary_constructors = false` / IDE0290) — use traditional constructors. `CA1873` (expensive logging) is silenced. `ImplicitUsings` is enabled across projects.
 
+All private fields are `_camelCase`, including static and const ones.
+
+Avoid comments. Default to none — let names and structure carry the meaning. Add a comment only when behaviour is genuinely surprising without it (a non-obvious constraint, workaround, or rationale), never to restate what the code already says.
+
 ## Git
 
 Use feature branches and open a PR against `master`.

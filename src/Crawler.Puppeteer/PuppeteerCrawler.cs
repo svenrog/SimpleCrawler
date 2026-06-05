@@ -5,6 +5,7 @@ using Crawler.Core.Robots;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using PuppeteerSharp;
+using System.Text.Json;
 using PuppeteerController = PuppeteerSharp.Puppeteer;
 
 namespace Crawler.Puppeteer;
@@ -75,6 +76,36 @@ public abstract class PuppeteerCrawler<TResult> : AbstractRobotsCrawler<IPage, I
         {
             await page.SetUserAgentAsync(_options.UserAgent);
         }
+
+        if (_options.BlockNonEssentialResources)
+        {
+            await page.SetRequestInterceptionAsync(true);
+            page.Request += BlockNonEssentialResource;
+        }
+    }
+
+    private static async void BlockNonEssentialResource(object? sender, RequestEventArgs e)
+    {
+        try
+        {
+            var type = e.Request.ResourceType;
+            if (type is ResourceType.Image or ResourceType.Media or ResourceType.Font or ResourceType.StyleSheet)
+                await e.Request.AbortAsync();
+            else
+                await e.Request.ContinueAsync();
+        }
+        catch
+        {
+            // The request may already be handled by the time this fires; ignore the race.
+        }
+    }
+
+    protected override async ValueTask<PageExtract> ExtractPageData(IPage response)
+    {
+        var json = await response.EvaluateFunctionAsync<JsonElement>(RenderedPageExtractor.Script);
+        var (canonicalHref, robotsContent, linkHrefs) = RenderedPageExtractor.Parse(json);
+
+        return new PageExtract(GetAbsoluteUrl(canonicalHref), IndexingHelper.ParseMetaRobots(robotsContent), linkHrefs);
     }
 
     protected override async ValueTask<IEnumerable<IElementHandle>> CollectLinks(IPage response)

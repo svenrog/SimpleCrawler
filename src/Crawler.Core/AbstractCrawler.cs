@@ -95,6 +95,22 @@ public abstract class AbstractCrawler<TResponse, TElement, TResult>
 
     protected abstract Task<TResponse?> LoadResponse(string url, CancellationToken cancellationToken);
 
+    protected virtual async ValueTask<PageExtract> ExtractPageData(TResponse response)
+    {
+        var canonicalUrl = await GetCanonical(response);
+        var robots = await GetRobotsRules(response);
+
+        var anchors = await CollectLinks(response);
+        if (!anchors.TryGetNonEnumeratedCount(out var count))
+            count = 0;
+
+        var hrefs = new List<string?>(count);
+        foreach (var anchor in anchors)
+            hrefs.Add(await GetAttribute(anchor, "href"));
+
+        return new PageExtract(canonicalUrl, robots, hrefs);
+    }
+
     protected virtual Task DisposeResponse(TResponse? response)
     {
         return Task.CompletedTask;
@@ -151,20 +167,22 @@ public abstract class AbstractCrawler<TResponse, TElement, TResult>
             if (response == null)
                 return;
 
-            canonicalUrl = await GetCanonical(response);
+            var pageData = await ExtractPageData(response);
+
+            canonicalUrl = pageData.CanonicalUrl;
 
             var resolvedUrl = canonicalUrl ?? url;
 
             await AnalyzeDocument(resolvedUrl, response);
 
-            var robots = _options.RespectMetaRobots ? RobotsRules.All : await GetRobotsRules(response);
+            var robots = _options.RespectMetaRobots ? pageData.Robots : RobotsRules.All;
             if (robots.Index)
                 Visited.Add(resolvedUrl);
 
             if (!robots.Follow)
                 return;
 
-            var links = await DiscoverLinks(response);
+            var links = FilterHrefs(pageData.LinkHrefs);
             if (links.Count > 0)
                 _logger.LogDebug("Found {count} outgoing links on '{url}'", links.Count, resolvedUrl);
 
@@ -196,18 +214,12 @@ public abstract class AbstractCrawler<TResponse, TElement, TResult>
         }
     }
 
-    private async ValueTask<HashSet<string>> DiscoverLinks(TResponse document)
+    private HashSet<string> FilterHrefs(IReadOnlyList<string?> hrefs)
     {
-        var anchorElements = await CollectLinks(document);
+        var urls = new HashSet<string>(hrefs.Count, StringComparer.OrdinalIgnoreCase);
 
-        if (!anchorElements.TryGetNonEnumeratedCount(out int elementCount))
-            elementCount = 0;
-
-        var urls = new HashSet<string>(elementCount, StringComparer.OrdinalIgnoreCase);
-
-        foreach (var anchorElement in anchorElements)
+        foreach (var href in hrefs)
         {
-            var href = await GetAttribute(anchorElement, "href");
             var url = GetUndiscoveredUrl(href);
             if (url == null)
                 continue;

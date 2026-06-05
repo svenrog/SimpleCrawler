@@ -6,6 +6,6 @@ internal static class Constants
 {
     public static readonly NavigationOptions DefaultNavigationOptions = new()
     {
-        WaitUntil = [WaitUntilNavigation.Networkidle0]
+        WaitUntil = [WaitUntilNavigation.Load]
     };
 }
