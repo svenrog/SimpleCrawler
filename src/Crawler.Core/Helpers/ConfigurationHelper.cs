@@ -1,4 +1,5 @@
 ﻿using Microsoft.Extensions.Options;
+using System.Net;
 
 namespace Crawler.Core.Helpers;
 
@@ -6,6 +7,10 @@ public static class ConfigurationHelper
 {
     public static void ConfigureClient(HttpClient client, CrawlerOptions options)
     {
+        // Single-domain crawling benefits from HTTP/2 multiplexing; fall back to 1.1 where unsupported.
+        client.DefaultRequestVersion = HttpVersion.Version20;
+        client.DefaultVersionPolicy = HttpVersionPolicy.RequestVersionOrLower;
+
         if (string.IsNullOrEmpty(options.UserAgent))
             return;
 
@@ -18,5 +23,22 @@ public static class ConfigurationHelper
     public static void ConfigureClient(HttpClient client, IOptions<CrawlerOptions> options)
     {
         ConfigureClient(client, options.Value);
+    }
+
+    public static SocketsHttpHandler CreatePrimaryHandler(CrawlerOptions options)
+    {
+        return new SocketsHttpHandler
+        {
+            MaxConnectionsPerServer = Math.Max(1, options.Parallelism),
+            EnableMultipleHttp2Connections = true,
+            PooledConnectionLifetime = TimeSpan.FromMinutes(10),
+            PooledConnectionIdleTimeout = TimeSpan.FromMinutes(1),
+            AutomaticDecompression = DecompressionMethods.All,
+        };
+    }
+
+    public static SocketsHttpHandler CreatePrimaryHandler(IOptions<CrawlerOptions> options)
+    {
+        return CreatePrimaryHandler(options.Value);
     }
 }
