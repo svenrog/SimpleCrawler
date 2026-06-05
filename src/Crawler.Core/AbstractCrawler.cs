@@ -15,13 +15,13 @@ public abstract class AbstractCrawler<TResponse, TResult>
     where TResult : IScrapeResult
 {
     private readonly CrawlerOptions _options;
-    private readonly ConcurrentHashSet<string> _processed;
     private readonly ConcurrentHashSet<string> _discovered;
     private readonly SemaphoreSlim _throttleGate;
     private readonly ILogger _logger;
 
     private Channel<string> _channel;
     private int _outstanding;
+    private int _processedCount;
     private long _nextSlotTimestamp;
 
     private Uri? _siteUri;
@@ -40,7 +40,6 @@ public abstract class AbstractCrawler<TResponse, TResult>
         _delay = TimeSpan.FromSeconds(_options.CrawlDelay);
 
         Visited = [];
-        _processed = [];
         _discovered = [];
         _channel = CreateChannel();
     }
@@ -68,11 +67,11 @@ public abstract class AbstractCrawler<TResponse, TResult>
         _siteUri = new Uri(_siteAuthority);
 
         Visited.Clear();
-        _processed.Clear();
         _discovered.Clear();
 
         _channel = CreateChannel();
         _outstanding = 0;
+        _processedCount = 0;
         _nextSlotTimestamp = 0;
 
         Enqueue(entry);
@@ -100,7 +99,7 @@ public abstract class AbstractCrawler<TResponse, TResult>
             {
                 try
                 {
-                    if (_processed.Count < _options.MaxPages)
+                    if (Volatile.Read(ref _processedCount) < _options.MaxPages)
                     {
                         await Throttle(cancellationToken);
                         await ProcessPage(url, cancellationToken);
@@ -239,10 +238,7 @@ public abstract class AbstractCrawler<TResponse, TResult>
         }
         finally
         {
-            _processed.Add(url);
-
-            if (canonicalUrl != null)
-                _processed.Add(canonicalUrl);
+            Interlocked.Increment(ref _processedCount);
 
             await DisposeResponse(response);
         }

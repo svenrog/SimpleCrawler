@@ -9,8 +9,6 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
-using System.Threading;
-using System.Threading.Tasks;
 
 namespace Crawler.Benchmarks;
 

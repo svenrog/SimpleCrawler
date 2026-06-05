@@ -9,25 +9,41 @@ public static class IndexingHelper
         if (contentValue == null)
             return RobotsRules.All;
 
-        var contentRules = contentValue.ToLower().Split(", ");
         var index = false;
         var follow = false;
 
-        foreach (var contentRule in contentRules)
+        var span = contentValue.AsSpan();
+        foreach (var range in span.SplitAny(", \t"))
         {
-            switch (contentRule)
-            {
-                case "index": index = true; break;
-                case "follow": follow = true; break;
-                case "noindex": index = false; break;
-                case "nofollow": follow = false; break;
-                case "all": index = true; follow = true; break;
-                case "none": index = false; follow = false; break;
-                default: break;
-            }
+            var token = span[range].Trim();
+            if (token.IsEmpty)
+                continue;
+
+            var (ruleIndex, ruleFollow) = ParseRule(token);
+            index = ruleIndex ?? index;
+            follow = ruleFollow ?? follow;
         }
 
         return new RobotsRules(index, follow);
     }
 
+    private static (bool? Index, bool? Follow) ParseRule(ReadOnlySpan<char> rule)
+    {
+        if (rule.Length > 8)
+            return (null, null);
+
+        Span<char> normalized = stackalloc char[rule.Length];
+        rule.ToLowerInvariant(normalized);
+
+        return normalized switch
+        {
+            "index" => (true, null),
+            "follow" => (null, true),
+            "noindex" => (false, null),
+            "nofollow" => (null, false),
+            "all" => (true, true),
+            "none" => (false, false),
+            _ => (null, null),
+        };
+    }
 }
