@@ -5,6 +5,7 @@ using Crawler.Core.Robots;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Microsoft.Playwright;
+using System.Collections.Concurrent;
 using PlaywrightContext = Microsoft.Playwright.Playwright;
 
 namespace Crawler.Playwright;
@@ -19,12 +20,15 @@ public abstract class PlaywrightCrawler<TResult> : AbstractRobotsCrawler<IPage, 
     private IBrowser? _browser;
     private IBrowserContext? _browserContext;
 
+    private readonly ConcurrentQueue<IPage> _pagePool;
+
     private bool _disposed;
 
     protected PlaywrightCrawler(IRobotClient robotClient, IOptions<CrawlerOptions> options, ILogger logger) : base(robotClient, options, logger)
     {
         _options = options.Value;
         _logger = logger;
+        _pagePool = new ConcurrentQueue<IPage>();
     }
 
     public override async Task<TResult> Start(string entry, CancellationToken cancellationToken = default)
@@ -74,7 +78,7 @@ public abstract class PlaywrightCrawler<TResult> : AbstractRobotsCrawler<IPage, 
 
     protected override async Task<IPage?> LoadResponse(string url, CancellationToken cancellationToken)
     {
-        var page = await _browserContext!.NewPageAsync();
+        var page = await AcquirePage();
         var response = await page.GotoAsync(url);
 
         if (response == null)
@@ -136,12 +140,20 @@ public abstract class PlaywrightCrawler<TResult> : AbstractRobotsCrawler<IPage, 
         return IndexingHelper.ParseMetaRobots(contentRuleValue);
     }
 
-    protected async override Task DisposeResponse(IPage? response)
+    private async ValueTask<IPage> AcquirePage()
     {
-        if (response == null)
-            return;
+        if (_pagePool.TryDequeue(out var page))
+            return page;
 
-        await response.CloseAsync();
+        return await _browserContext!.NewPageAsync();
+    }
+
+    protected override Task DisposeResponse(IPage? response)
+    {
+        if (response != null)
+            _pagePool.Enqueue(response);
+
+        return Task.CompletedTask;
     }
 
     public async ValueTask DisposeAsync()
@@ -154,6 +166,9 @@ public abstract class PlaywrightCrawler<TResult> : AbstractRobotsCrawler<IPage, 
     {
         if (!_disposed)
         {
+            while (_pagePool.TryDequeue(out var page))
+                await page.CloseAsync().ConfigureAwait(false);
+
             if (_browserContext is not null)
             {
                 await _browserContext.DisposeAsync().ConfigureAwait(false);
