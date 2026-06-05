@@ -9,7 +9,7 @@ using Microsoft.Extensions.Options;
 
 namespace Crawler.AngleSharp;
 
-public abstract class AngleSharpCrawler<TResult> : AbstractRobotsCrawler<IDocument, IElement, TResult>
+public abstract class AngleSharpCrawler<TResult> : AbstractStaticHtmlCrawler<IDocument, IElement, TResult>
     where TResult : IScrapeResult
 {
     private readonly IConfiguration _configuration;

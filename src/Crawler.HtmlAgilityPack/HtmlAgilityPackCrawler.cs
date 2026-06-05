@@ -8,7 +8,7 @@ using Microsoft.Extensions.Options;
 
 namespace Crawler.HtmlAgilityPack;
 
-public abstract class HtmlAgilityPackCrawler<TResult> : AbstractRobotsCrawler<HtmlDocument, HtmlNode, TResult>
+public abstract class HtmlAgilityPackCrawler<TResult> : AbstractStaticHtmlCrawler<HtmlDocument, HtmlNode, TResult>
     where TResult : IScrapeResult
 {
     private readonly HttpClient _client;

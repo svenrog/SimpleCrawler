@@ -11,7 +11,7 @@ using System.Threading.Channels;
 
 namespace Crawler.Core;
 
-public abstract class AbstractCrawler<TResponse, TElement, TResult>
+public abstract class AbstractCrawler<TResponse, TResult>
     where TResult : IScrapeResult
 {
     private readonly CrawlerOptions _options;
@@ -158,34 +158,12 @@ public abstract class AbstractCrawler<TResponse, TElement, TResult>
 
     protected abstract Task<TResponse?> LoadResponse(string url, CancellationToken cancellationToken);
 
-    protected virtual async ValueTask<PageExtract> ExtractPageData(TResponse response)
-    {
-        var canonicalUrl = await GetCanonical(response);
-        var robots = await GetRobotsRules(response);
-
-        var anchors = await CollectLinks(response);
-        if (!anchors.TryGetNonEnumeratedCount(out var count))
-            count = 0;
-
-        var hrefs = new List<string?>(count);
-        foreach (var anchor in anchors)
-            hrefs.Add(await GetAttribute(anchor, "href"));
-
-        return new PageExtract(canonicalUrl, robots, hrefs);
-    }
+    protected abstract ValueTask<PageExtract> ExtractPageData(TResponse response);
 
     protected virtual Task DisposeResponse(TResponse? response)
     {
         return Task.CompletedTask;
     }
-
-    protected abstract ValueTask<IEnumerable<TElement>> CollectLinks(TResponse response);
-
-    protected abstract ValueTask<string?> GetCanonical(TResponse response);
-
-    protected abstract ValueTask<string?> GetAttribute(TElement element, string attributeName);
-
-    protected abstract ValueTask<RobotsRules> GetRobotsRules(TResponse response);
 
     protected virtual string? GetAbsoluteUrl(string? href)
     {

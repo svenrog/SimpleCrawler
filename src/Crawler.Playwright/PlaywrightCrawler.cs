@@ -10,7 +10,7 @@ using PlaywrightContext = Microsoft.Playwright.Playwright;
 
 namespace Crawler.Playwright;
 
-public abstract class PlaywrightCrawler<TResult> : AbstractRobotsCrawler<IPage, IElementHandle, TResult>, IAsyncDisposable
+public abstract class PlaywrightCrawler<TResult> : AbstractRobotsCrawler<IPage, TResult>, IAsyncDisposable
     where TResult : IScrapeResult
 {
     private readonly CrawlerOptions _options;
@@ -108,36 +108,6 @@ public abstract class PlaywrightCrawler<TResult> : AbstractRobotsCrawler<IPage, 
         var (canonicalHref, robotsContent, linkHrefs) = RenderedPageExtractor.Parse(json.GetValueOrDefault());
 
         return new PageExtract(GetAbsoluteUrl(canonicalHref), IndexingHelper.ParseMetaRobots(robotsContent), linkHrefs);
-    }
-
-    protected override async ValueTask<IEnumerable<IElementHandle>> CollectLinks(IPage response)
-    {
-        return await response.QuerySelectorAllAsync("a");
-    }
-
-    protected override async ValueTask<string?> GetCanonical(IPage response)
-    {
-        var linkElement = await response.QuerySelectorAsync("link[rel='canonical']");
-        if (linkElement == null)
-            return null;
-
-        var href = await linkElement.GetAttributeAsync("href");
-        return GetAbsoluteUrl(href);
-    }
-
-    protected override async ValueTask<string?> GetAttribute(IElementHandle element, string attributeName)
-    {
-        return await element.GetAttributeAsync(attributeName);
-    }
-
-    protected override async ValueTask<RobotsRules> GetRobotsRules(IPage response)
-    {
-        var metaElement = await response.QuerySelectorAsync("meta[name='robots']");
-        if (metaElement == null)
-            return IndexingHelper.ParseMetaRobots(null);
-
-        var contentRuleValue = await metaElement.GetAttributeAsync("content");
-        return IndexingHelper.ParseMetaRobots(contentRuleValue);
     }
 
     private async ValueTask<IPage> AcquirePage()

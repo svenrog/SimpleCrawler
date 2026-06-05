@@ -6,7 +6,7 @@ using System.Diagnostics.CodeAnalysis;
 
 namespace Crawler.Core;
 
-public abstract class AbstractRobotsCrawler<TResponse, TElement, TResult> : AbstractCrawler<TResponse, TElement, TResult>
+public abstract class AbstractRobotsCrawler<TResponse, TResult> : AbstractCrawler<TResponse, TResult>
     where TResult : IScrapeResult
 {
     private readonly IRobotClient _robotClient;
