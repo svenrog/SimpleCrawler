@@ -23,7 +23,7 @@ public class CoreCrawlerBenchmarks
         var options = new CrawlerOptions
         {
             CrawlDelay = 0,
-            Parallelism = Parallelism,
+            Concurrency = Parallelism,
             MaxPages = int.MaxValue,
             RespectMetaRobots = true,
         };

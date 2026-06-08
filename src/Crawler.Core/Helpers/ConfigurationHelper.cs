@@ -29,7 +29,7 @@ public static class ConfigurationHelper
     {
         return new SocketsHttpHandler
         {
-            MaxConnectionsPerServer = Math.Max(1, options.Parallelism),
+            MaxConnectionsPerServer = options.EffectiveConcurrency,
             EnableMultipleHttp2Connections = true,
             PooledConnectionLifetime = TimeSpan.FromMinutes(10),
             PooledConnectionIdleTimeout = TimeSpan.FromMinutes(1),
