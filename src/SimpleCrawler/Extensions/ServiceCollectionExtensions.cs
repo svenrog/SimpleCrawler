@@ -29,6 +29,8 @@ internal static class ServiceCollectionExtensions
         {
             MaxPages = options.MaxPages,
             Parallelism = options.Parallelism,
+            FetchConcurrency = options.FetchConcurrency,
+            ParseConcurrency = options.ParseConcurrency,
             CrawlDelay = options.CrawlDelay,
             RespectMetaRobots = options.RespectRobots,
             RespectRobotsTxt = options.RespectRobots,

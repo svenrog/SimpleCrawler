@@ -30,8 +30,15 @@ public class PipelineBenchmarks
     private string _entry;
     private string[] _pages;
 
-    [Params(8, 32, 64)]
-    public int Parallelism;
+    public enum Mode
+    {
+        Coupled8,
+        Coupled64,
+        Split64x8,
+    }
+
+    [Params(Mode.Coupled8, Mode.Coupled64, Mode.Split64x8)]
+    public Mode Configuration;
 
     // Light payload => fetch-dominated; heavy payload => parse (HtmlDocument.Load) dominated.
     [Params(16, 300)]
@@ -66,11 +73,24 @@ public class PipelineBenchmarks
         var options = new CrawlerOptions
         {
             CrawlDelay = 0,
-            Parallelism = Parallelism,
             MaxPages = int.MaxValue,
             RespectMetaRobots = false,
             RespectRobotsTxt = false,
         };
+
+        switch (Configuration)
+        {
+            case Mode.Coupled8:
+                options.Parallelism = 8;
+                break;
+            case Mode.Coupled64:
+                options.Parallelism = 64;
+                break;
+            case Mode.Split64x8:
+                options.FetchConcurrency = 64;
+                options.ParseConcurrency = 8;
+                break;
+        }
 
         services.AddHtmlAgilityPackCrawler(options);
         services.AddSingleton<ILogger>(NullLogger.Instance);

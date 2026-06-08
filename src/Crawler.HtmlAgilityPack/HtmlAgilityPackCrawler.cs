@@ -7,7 +7,7 @@ using Microsoft.Extensions.Options;
 
 namespace Crawler.HtmlAgilityPack;
 
-public abstract class HtmlAgilityPackCrawler<TResult> : AbstractStaticHtmlCrawler<HtmlDocument, TResult>
+public abstract class HtmlAgilityPackCrawler<TResult> : AbstractStaticHtmlCrawler<byte[], TResult>
     where TResult : IScrapeResult
 {
     private readonly HttpClient _client;
@@ -19,7 +19,7 @@ public abstract class HtmlAgilityPackCrawler<TResult> : AbstractStaticHtmlCrawle
         _logger = logger;
     }
 
-    protected override async Task<HtmlDocument?> LoadResponse(string url, CancellationToken cancellationToken)
+    protected override async Task<byte[]?> LoadResponse(string url, CancellationToken cancellationToken)
     {
         var response = await _client.GetAsync(url, cancellationToken);
 
@@ -27,12 +27,7 @@ public abstract class HtmlAgilityPackCrawler<TResult> : AbstractStaticHtmlCrawle
         {
             _logger.LogDebug("Response '{code}' from url '{url}'", response.StatusCode, url);
 
-            using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
-            var document = new HtmlDocument();
-
-            document.Load(stream);
-
-            return document;
+            return await response.Content.ReadAsByteArrayAsync(cancellationToken);
         }
         else
         {
@@ -42,14 +37,18 @@ public abstract class HtmlAgilityPackCrawler<TResult> : AbstractStaticHtmlCrawle
         }
     }
 
-    protected override (string? CanonicalHref, string? RobotsContent, IReadOnlyList<string?> LinkHrefs) ExtractStatic(HtmlDocument response)
+    protected override (string? CanonicalHref, string? RobotsContent, IReadOnlyList<string?> LinkHrefs) ExtractStatic(byte[] response)
     {
+        var document = new HtmlDocument();
+        using (var stream = new MemoryStream(response, writable: false))
+            document.Load(stream);
+
         var hrefs = new List<string?>();
         string? canonicalHref = null;
         string? robotsContent = null;
 
         var stack = new Stack<HtmlNode>();
-        stack.Push(response.DocumentNode);
+        stack.Push(document.DocumentNode);
 
         while (stack.Count > 0)
         {

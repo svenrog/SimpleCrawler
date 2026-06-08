@@ -19,7 +19,8 @@ public abstract class AbstractCrawler<TResponse, TResult>
     private readonly SemaphoreSlim _throttleGate;
     private readonly ILogger _logger;
 
-    private Channel<string> _channel;
+    private Channel<string> _urlChannel;
+    private Channel<(string Url, TResponse Response)> _parseChannel;
     private int _outstanding;
     private int _processedCount;
     private long _nextSlotTimestamp;
@@ -41,7 +42,8 @@ public abstract class AbstractCrawler<TResponse, TResult>
 
         Visited = [];
         _discovered = [];
-        _channel = CreateChannel();
+        _urlChannel = CreateUrlChannel();
+        _parseChannel = CreateParseChannel();
     }
 
     public virtual async Task<TResult> Start(string entry, CancellationToken cancellationToken = default)
@@ -50,7 +52,10 @@ public abstract class AbstractCrawler<TResponse, TResult>
 
         Interlocked.Increment(ref _outstanding);
 
-        var tasks = new Task[WorkerCount + 1];
+        var fetchCount = _options.EffectiveFetchConcurrency;
+        var parseCount = _options.EffectiveParseConcurrency;
+
+        var tasks = new Task[1 + fetchCount + parseCount];
         tasks[0] = Task.Run(async () =>
         {
             try
@@ -59,20 +64,20 @@ public abstract class AbstractCrawler<TResponse, TResult>
             }
             finally
             {
-                if (Interlocked.Decrement(ref _outstanding) == 0)
-                    _channel.Writer.TryComplete();
+                CompleteUrl();
             }
         }, cancellationToken);
 
-        for (var i = 1; i < tasks.Length; i++)
-            tasks[i] = RunWorker(cancellationToken);
+        var index = 1;
+        for (var i = 0; i < fetchCount; i++)
+            tasks[index++] = RunFetchWorker(cancellationToken);
+        for (var i = 0; i < parseCount; i++)
+            tasks[index++] = RunParseWorker(cancellationToken);
 
         await Task.WhenAll(tasks);
 
         return await GetResult(cancellationToken);
     }
-
-    protected virtual int WorkerCount => Math.Max(1, _options.Parallelism);
 
     protected virtual ValueTask InitializeCrawl(string entry, CancellationToken cancellationToken)
     {
@@ -84,7 +89,8 @@ public abstract class AbstractCrawler<TResponse, TResult>
         Visited.Clear();
         _discovered.Clear();
 
-        _channel = CreateChannel();
+        _urlChannel = CreateUrlChannel();
+        _parseChannel = CreateParseChannel();
         _outstanding = 0;
         _processedCount = 0;
         _nextSlotTimestamp = 0;
@@ -94,7 +100,7 @@ public abstract class AbstractCrawler<TResponse, TResult>
         return ValueTask.CompletedTask;
     }
 
-    private static Channel<string> CreateChannel()
+    private static Channel<string> CreateUrlChannel()
     {
         var options = new UnboundedChannelOptions
         {
@@ -104,27 +110,88 @@ public abstract class AbstractCrawler<TResponse, TResult>
         return Channel.CreateUnbounded<string>(options);
     }
 
-    private async Task RunWorker(CancellationToken cancellationToken)
+    private Channel<(string Url, TResponse Response)> CreateParseChannel()
     {
-        var reader = _channel.Reader;
+        var options = new BoundedChannelOptions(_options.EffectiveFetchConcurrency)
+        {
+            SingleReader = false,
+            SingleWriter = false,
+            FullMode = BoundedChannelFullMode.Wait,
+        };
+        return Channel.CreateBounded<(string, TResponse)>(options);
+    }
+
+    // A URL leaves the system when its fetch fails or its parse completes; when none remain in
+    // flight, both stages are drained and safe to complete (parse workers only block on read; only
+    // fetch workers block on the bounded parse-channel write, which a non-empty system always drains).
+    private void CompleteUrl()
+    {
+        if (Interlocked.Decrement(ref _outstanding) == 0)
+        {
+            _urlChannel.Writer.TryComplete();
+            _parseChannel.Writer.TryComplete();
+        }
+    }
+
+    private async Task RunFetchWorker(CancellationToken cancellationToken)
+    {
+        var reader = _urlChannel.Reader;
 
         while (await reader.WaitToReadAsync(cancellationToken))
         {
             while (reader.TryRead(out var url))
             {
+                if (Volatile.Read(ref _processedCount) >= _options.MaxPages)
+                {
+                    CompleteUrl();
+                    continue;
+                }
+
+                var handedOff = false;
                 try
                 {
-                    if (Volatile.Read(ref _processedCount) < _options.MaxPages)
+                    await Throttle(cancellationToken);
+
+                    var response = await LoadResponse(url, cancellationToken);
+                    if (response != null)
                     {
-                        await Throttle(cancellationToken);
-                        await ProcessPage(url, cancellationToken);
+                        await _parseChannel.Writer.WriteAsync((url, response), cancellationToken);
+                        handedOff = true;
                     }
+                }
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                {
+                    throw;
+                }
+                catch (TimeoutException ex)
+                {
+                    _logger.LogWarning("Timeout fetching '{url}': {message}", url, ex.Message);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Encountered error fetching '{url}': {message}", url, ex.Message);
                 }
                 finally
                 {
-                    if (Interlocked.Decrement(ref _outstanding) == 0)
-                        _channel.Writer.TryComplete();
+                    if (!handedOff)
+                    {
+                        Interlocked.Increment(ref _processedCount);
+                        CompleteUrl();
+                    }
                 }
+            }
+        }
+    }
+
+    private async Task RunParseWorker(CancellationToken cancellationToken)
+    {
+        var reader = _parseChannel.Reader;
+
+        while (await reader.WaitToReadAsync(cancellationToken))
+        {
+            while (reader.TryRead(out var item))
+            {
+                await ProcessPage(item.Url, item.Response);
             }
         }
     }
@@ -159,7 +226,7 @@ public abstract class AbstractCrawler<TResponse, TResult>
 
         Interlocked.Increment(ref _outstanding);
 
-        if (_channel.Writer.TryWrite(url))
+        if (_urlChannel.Writer.TryWrite(url))
             return true;
 
         Interlocked.Decrement(ref _outstanding);
@@ -216,24 +283,15 @@ public abstract class AbstractCrawler<TResponse, TResult>
         return false;
     }
 
-    private async Task ProcessPage(string url, CancellationToken cancellationToken)
+    private async Task ProcessPage(string url, TResponse response)
     {
         _logger.LogInformation("Processing url '{url}'", url);
 
-        var canonicalUrl = (string?)null;
-        TResponse? response = default;
-
         try
         {
-            response = await LoadResponse(url, cancellationToken);
-            if (response == null)
-                return;
-
             var pageData = await ExtractPageData(response);
 
-            canonicalUrl = pageData.CanonicalUrl;
-
-            var resolvedUrl = canonicalUrl ?? url;
+            var resolvedUrl = pageData.CanonicalUrl ?? url;
 
             await AnalyzeDocument(resolvedUrl, response);
 
@@ -271,6 +329,8 @@ public abstract class AbstractCrawler<TResponse, TResult>
             Interlocked.Increment(ref _processedCount);
 
             await DisposeResponse(response);
+
+            CompleteUrl();
         }
     }
 
