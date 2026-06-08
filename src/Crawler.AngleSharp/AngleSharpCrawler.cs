@@ -1,7 +1,6 @@
 ﻿using AngleSharp;
 using AngleSharp.Dom;
 using Crawler.Core;
-using Crawler.Core.Helpers;
 using Crawler.Core.Models;
 using Crawler.Core.Robots;
 using Microsoft.Extensions.Logging;
@@ -9,7 +8,7 @@ using Microsoft.Extensions.Options;
 
 namespace Crawler.AngleSharp;
 
-public abstract class AngleSharpCrawler<TResult> : AbstractStaticHtmlCrawler<IDocument, IElement, TResult>
+public abstract class AngleSharpCrawler<TResult> : AbstractStaticHtmlCrawler<IDocument, TResult>
     where TResult : IScrapeResult
 {
     private readonly IConfiguration _configuration;
@@ -25,31 +24,17 @@ public abstract class AngleSharpCrawler<TResult> : AbstractStaticHtmlCrawler<IDo
         return await context.OpenAsync(url, cancellationToken);
     }
 
-    protected override ValueTask<IEnumerable<IElement>> CollectLinks(IDocument response)
+    protected override (string? CanonicalHref, string? RobotsContent, IReadOnlyList<string?> LinkHrefs) ExtractStatic(IDocument response)
     {
-        var result = response.QuerySelectorAll("a");
-        return ValueTask.FromResult<IEnumerable<IElement>>(result);
-    }
+        var anchors = response.QuerySelectorAll("a");
 
-    protected override ValueTask<string?> GetCanonical(IDocument response)
-    {
-        var linkElement = response.QuerySelector("link[rel='canonical']");
-        var href = linkElement?.Attributes["href"]?.Value;
+        var hrefs = new List<string?>(anchors.Length);
+        foreach (var anchor in anchors)
+            hrefs.Add(anchor.GetAttribute("href"));
 
-        return ValueTask.FromResult(GetAbsoluteUrl(href));
-    }
+        var canonicalHref = response.QuerySelector("link[rel='canonical']")?.GetAttribute("href");
+        var robotsContent = response.QuerySelector("meta[name='robots']")?.GetAttribute("content");
 
-    protected override ValueTask<string?> GetAttribute(IElement element, string attributeName)
-    {
-        var attributeValue = element.Attributes[attributeName]?.Value;
-        return ValueTask.FromResult(attributeValue);
-    }
-
-    protected override ValueTask<RobotsRules> GetRobotsRules(IDocument response)
-    {
-        var metaElement = response.QuerySelector("meta[name='robots']");
-        var contentRuleValue = metaElement?.Attributes["content"]?.Value;
-
-        return ValueTask.FromResult(IndexingHelper.ParseMetaRobots(contentRuleValue));
+        return (canonicalHref, robotsContent, hrefs);
     }
 }

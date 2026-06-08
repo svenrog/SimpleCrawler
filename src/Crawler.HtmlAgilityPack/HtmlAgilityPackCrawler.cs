@@ -1,5 +1,4 @@
 ﻿using Crawler.Core;
-using Crawler.Core.Helpers;
 using Crawler.Core.Models;
 using Crawler.Core.Robots;
 using HtmlAgilityPack;
@@ -8,7 +7,7 @@ using Microsoft.Extensions.Options;
 
 namespace Crawler.HtmlAgilityPack;
 
-public abstract class HtmlAgilityPackCrawler<TResult> : AbstractStaticHtmlCrawler<HtmlDocument, HtmlNode, TResult>
+public abstract class HtmlAgilityPackCrawler<TResult> : AbstractStaticHtmlCrawler<HtmlDocument, TResult>
     where TResult : IScrapeResult
 {
     private readonly HttpClient _client;
@@ -43,33 +42,35 @@ public abstract class HtmlAgilityPackCrawler<TResult> : AbstractStaticHtmlCrawle
         }
     }
 
-    protected override ValueTask<IEnumerable<HtmlNode>> CollectLinks(HtmlDocument response)
+    protected override (string? CanonicalHref, string? RobotsContent, IReadOnlyList<string?> LinkHrefs) ExtractStatic(HtmlDocument response)
     {
-        var result = response.DocumentNode.SelectNodes("//a")
-            ?? Enumerable.Empty<HtmlNode>();
+        var hrefs = new List<string?>();
+        string? canonicalHref = null;
+        string? robotsContent = null;
 
-        return ValueTask.FromResult(result);
-    }
+        foreach (var node in response.DocumentNode.Descendants())
+        {
+            if (node.NodeType != HtmlNodeType.Element)
+                continue;
 
-    protected override ValueTask<string?> GetCanonical(HtmlDocument response)
-    {
-        var linkElement = response.DocumentNode.SelectSingleNode("//link[@rel='canonical']");
-        var href = linkElement?.Attributes["href"]?.Value;
+            var name = node.Name;
 
-        return ValueTask.FromResult(GetAbsoluteUrl(href));
-    }
+            if (name.Equals("a", StringComparison.OrdinalIgnoreCase))
+            {
+                hrefs.Add(node.GetAttributeValue("href", null));
+            }
+            else if (canonicalHref is null && name.Equals("link", StringComparison.OrdinalIgnoreCase)
+                && string.Equals(node.GetAttributeValue("rel", null), "canonical", StringComparison.OrdinalIgnoreCase))
+            {
+                canonicalHref = node.GetAttributeValue("href", null);
+            }
+            else if (robotsContent is null && name.Equals("meta", StringComparison.OrdinalIgnoreCase)
+                && string.Equals(node.GetAttributeValue("name", null), "robots", StringComparison.OrdinalIgnoreCase))
+            {
+                robotsContent = node.GetAttributeValue("content", null);
+            }
+        }
 
-    protected override ValueTask<string?> GetAttribute(HtmlNode element, string attributeName)
-    {
-        var attributeValue = element.Attributes[attributeName]?.Value;
-        return ValueTask.FromResult(attributeValue);
-    }
-
-    protected override ValueTask<RobotsRules> GetRobotsRules(HtmlDocument response)
-    {
-        var metaElement = response.DocumentNode.SelectSingleNode("//meta[@name='robots']");
-        var contentRuleValue = metaElement?.Attributes["content"]?.Value;
-
-        return ValueTask.FromResult(IndexingHelper.ParseMetaRobots(contentRuleValue));
+        return (canonicalHref, robotsContent, hrefs);
     }
 }
