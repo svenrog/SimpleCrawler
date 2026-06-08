@@ -3,7 +3,7 @@
 # CA1873: Avoid potentially expensive logging
 dotnet_diagnostic.CA1873.severity = none
 
-# IDE290
+# IDE290>
 csharp_style_prefer_primary_constructors = false
 
 # All private fields use _camelCase, including static and const
