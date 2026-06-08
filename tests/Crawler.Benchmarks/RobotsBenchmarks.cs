@@ -38,7 +38,7 @@ public class RobotsBenchmarks
         "/foo/bar/ツ"
     ];
 
-    private static readonly List<UrlPathPattern> _urlPatterns = [.. _paths.Select(x => new UrlPathPattern(x))];
+    private static readonly List<UrlPathPattern> _urlPatterns = [.. _patterns.Select(x => new UrlPathPattern(x))];
     private static readonly List<UriPath> _uriPaths = [.. _paths.Select(x => new UriPath(x))];
 
     private static readonly string[] _rulePatterns =
