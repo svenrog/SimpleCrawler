@@ -4,13 +4,16 @@ public static class UriHelper
 {
     public static string? GetAbsoluteUrl(Uri baseUri, string? href)
     {
-        if (!Uri.TryCreate(href, UriKind.RelativeOrAbsolute, out var uri))
+        if (href is null)
             return null;
 
-        if (!uri.IsAbsoluteUri)
-            uri = new Uri(baseUri, uri);
+        if (Uri.TryCreate(href, UriKind.Absolute, out var absolute))
+            return absolute.ToString();
 
-        return uri.ToString();
+        if (!Uri.TryCreate(href, UriKind.Relative, out var relative))
+            return null;
+
+        return new Uri(baseUri, relative).ToString();
     }
 
     public static List<string> GetAbsoluteUrls(Uri baseUri, IEnumerable<string> hrefs)
