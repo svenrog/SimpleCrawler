@@ -18,7 +18,7 @@ public sealed class MetaRobotsHostFixture : AbstractHostFixture
         return new CrawlerOptions
         {
             CrawlDelay = 0,
-            Parallelism = 4,
+            Concurrency = 4,
             RespectMetaRobots = true,
             RespectRobotsTxt = false,
         };

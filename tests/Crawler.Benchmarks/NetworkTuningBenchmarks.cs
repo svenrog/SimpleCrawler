@@ -79,7 +79,7 @@ public class NetworkTuningBenchmarks
 
     private static HttpClient CreateTunedClient()
     {
-        var options = new CrawlerOptions { Parallelism = _connectionBudget };
+        var options = new CrawlerOptions { Concurrency = _connectionBudget };
 
         var handler = ConfigurationHelper.CreatePrimaryHandler(options);
         handler.SslOptions.RemoteCertificateValidationCallback = (_, _, _, _) => true;

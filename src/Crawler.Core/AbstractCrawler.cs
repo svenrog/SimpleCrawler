@@ -52,7 +52,7 @@ public abstract class AbstractCrawler<TResponse, TResult>
 
         Interlocked.Increment(ref _outstanding);
 
-        var fetchCount = _options.EffectiveFetchConcurrency;
+        var fetchCount = _options.EffectiveConcurrency;
         var parseCount = _options.EffectiveParseConcurrency;
 
         var tasks = new Task[1 + fetchCount + parseCount];
@@ -112,7 +112,7 @@ public abstract class AbstractCrawler<TResponse, TResult>
 
     private Channel<(string Url, TResponse Response)> CreateParseChannel()
     {
-        var options = new BoundedChannelOptions(_options.EffectiveFetchConcurrency)
+        var options = new BoundedChannelOptions(_options.EffectiveConcurrency)
         {
             SingleReader = false,
             SingleWriter = false,

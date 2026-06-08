@@ -34,7 +34,7 @@ public class CrawlerBenchmarks
         var options = new CrawlerOptions
         {
             CrawlDelay = 0,
-            Parallelism = 8,
+            Concurrency = 8,
         };
 
         services.AddHtmlAgilityPackCrawler(options);

@@ -13,13 +13,10 @@ public sealed class Options
     [Option('o', "outputFile", Required = true, HelpText = "The file to output to.")]
     public string Output { get; set; } = string.Empty;
 
-    [Option('t', "threads", Required = false, Default = 8, HelpText = "Parallel pages to fetch (default for both fetch and parse concurrency).")]
-    public int Parallelism { get; set; } = 8;
+    [Option('t', "concurrency", Required = false, Default = 8, HelpText = "Concurrent fetches in flight.")]
+    public int Concurrency { get; set; } = 8;
 
-    [Option('f', "fetchConcurrency", Required = false, Default = 0, HelpText = "Concurrent fetches in flight. 0 = use --threads. Raise above --threads to decouple fetching from parsing.")]
-    public int FetchConcurrency { get; set; }
-
-    [Option('p', "parseConcurrency", Required = false, Default = 0, HelpText = "Concurrent page parses. 0 = use --threads.")]
+    [Option('p', "parseConcurrency", Required = false, Default = 0, HelpText = "Concurrent page parses. 0 = match --concurrency; lowering it below --concurrency can improve throughput on parse-heavy sites.")]
     public int ParseConcurrency { get; set; }
 
     [Option('m', "maxPages", Required = false, Default = 10000, HelpText = "Max pages to visit.")]

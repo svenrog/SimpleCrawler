@@ -12,9 +12,9 @@ using System.Text;
 
 namespace Crawler.Benchmarks;
 
-// Characterizes how the current single-knob model scales fetch concurrency against a server with
-// real per-request latency and a parse-heavy payload. Sweeping Parallelism shows whether fetch
-// concurrency is the throughput lever and where concurrent parsing (HtmlDocument.Load) saturates.
+// Compares coupled fetch/parse concurrency against a decoupled split, over a server with real
+// per-request latency and a parse-heavy payload. Shows that splitting (high fetch, bounded parse)
+// beats any coupled setting once concurrent parsing (HtmlDocument.Load) saturates the CPU.
 [MemoryDiagnoser]
 [ShortRunJob]
 public class PipelineBenchmarks
@@ -81,13 +81,13 @@ public class PipelineBenchmarks
         switch (Configuration)
         {
             case Mode.Coupled8:
-                options.Parallelism = 8;
+                options.Concurrency = 8;
                 break;
             case Mode.Coupled64:
-                options.Parallelism = 64;
+                options.Concurrency = 64;
                 break;
             case Mode.Split64x8:
-                options.FetchConcurrency = 64;
+                options.Concurrency = 64;
                 options.ParseConcurrency = 8;
                 break;
         }

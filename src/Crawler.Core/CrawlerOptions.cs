@@ -3,8 +3,7 @@
 public class CrawlerOptions
 {
     public string? UserAgent { get; set; }
-    public int Parallelism { get; set; } = 8;
-    public int FetchConcurrency { get; set; }
+    public int Concurrency { get; set; } = 8;
     public int ParseConcurrency { get; set; }
     public int MaxPages { get; set; } = 10000;
     public double CrawlDelay { get; set; } = 0;
@@ -12,6 +11,6 @@ public class CrawlerOptions
     public bool RespectRobotsTxt { get; set; } = true;
     public bool BlockNonEssentialResources { get; set; } = true;
 
-    public int EffectiveFetchConcurrency => FetchConcurrency > 0 ? FetchConcurrency : Math.Max(1, Parallelism);
-    public int EffectiveParseConcurrency => ParseConcurrency > 0 ? ParseConcurrency : Math.Max(1, Parallelism);
+    public int EffectiveConcurrency => Math.Max(1, Concurrency);
+    public int EffectiveParseConcurrency => ParseConcurrency > 0 ? ParseConcurrency : EffectiveConcurrency;
 }

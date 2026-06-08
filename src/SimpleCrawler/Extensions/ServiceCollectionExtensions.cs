@@ -28,8 +28,7 @@ internal static class ServiceCollectionExtensions
         return new CrawlerOptions
         {
             MaxPages = options.MaxPages,
-            Parallelism = options.Parallelism,
-            FetchConcurrency = options.FetchConcurrency,
+            Concurrency = options.Concurrency,
             ParseConcurrency = options.ParseConcurrency,
             CrawlDelay = options.CrawlDelay,
             RespectMetaRobots = options.RespectRobots,
