@@ -14,6 +14,8 @@ public abstract class AbstractRobotsCrawler<TResponse, TResult> : AbstractCrawle
     private readonly ProductToken _userAgent;
 
     private IRobotRuleChecker? _robotRules;
+    private IRobotsTxt? _robots;
+    private Uri? _entryUri;
 
     protected AbstractRobotsCrawler(IRobotClient robotClient, IOptions<CrawlerOptions> options, ILogger logger) : base(options, logger)
     {
@@ -27,18 +29,21 @@ public abstract class AbstractRobotsCrawler<TResponse, TResult> : AbstractCrawle
 
     protected override async ValueTask InitializeCrawl(string entry, CancellationToken cancellationToken)
     {
-        var entryUri = new Uri(entry);
-        var robots = await _robotClient.LoadRobotsTxtAsync(entryUri, cancellationToken);
+        _entryUri = new Uri(entry);
+        _robots = await _robotClient.LoadRobotsTxtAsync(_entryUri, cancellationToken);
 
-        if (robots.TryGetCrawlDelay(_userAgent, out var crawlDelay) && _options.RespectRobotsTxt)
+        if (_robots.TryGetCrawlDelay(_userAgent, out var crawlDelay) && _options.RespectRobotsTxt)
             _options.CrawlDelay = crawlDelay;
 
-        if (!robots.TryGetRules(_userAgent, out _robotRules))
+        if (!_robots.TryGetRules(_userAgent, out _robotRules))
             _robotRules = RobotRuleChecker.Empty;
 
         await base.InitializeCrawl(entry, cancellationToken);
+    }
 
-        var sitemap = robots.LoadSitemapAsync(entryUri, null, cancellationToken);
+    protected override async ValueTask BackgroundDiscovery(CancellationToken cancellationToken)
+    {
+        var sitemap = _robots!.LoadSitemapAsync(_entryUri!, null, cancellationToken);
         await foreach (var item in sitemap)
         {
             var url = item.Location.ToString();
