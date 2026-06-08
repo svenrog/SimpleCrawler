@@ -66,17 +66,17 @@ public abstract class HtmlAgilityPackCrawler<TResult> : AbstractStaticHtmlCrawle
 
             if (name.Equals("a", StringComparison.OrdinalIgnoreCase))
             {
-                hrefs.Add(node.GetAttributeValue("href", null));
+                hrefs.Add(node.GetAttributeValue<string?>("href", null));
             }
             else if (canonicalHref is null && name.Equals("link", StringComparison.OrdinalIgnoreCase)
-                && string.Equals(node.GetAttributeValue("rel", null), "canonical", StringComparison.OrdinalIgnoreCase))
+                && string.Equals(node.GetAttributeValue<string?>("rel", null), "canonical", StringComparison.OrdinalIgnoreCase))
             {
-                canonicalHref = node.GetAttributeValue("href", null);
+                canonicalHref = node.GetAttributeValue<string?>("href", null);
             }
             else if (robotsContent is null && name.Equals("meta", StringComparison.OrdinalIgnoreCase)
-                && string.Equals(node.GetAttributeValue("name", null), "robots", StringComparison.OrdinalIgnoreCase))
+                && string.Equals(node.GetAttributeValue<string?>("name", null), "robots", StringComparison.OrdinalIgnoreCase))
             {
-                robotsContent = node.GetAttributeValue("content", null);
+                robotsContent = node.GetAttributeValue<string?>("content", null);
             }
         }
 
