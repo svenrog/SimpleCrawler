@@ -48,11 +48,26 @@ public abstract class AbstractCrawler<TResponse, TResult>
     {
         await InitializeCrawl(entry, cancellationToken);
 
-        var workers = new Task[WorkerCount];
-        for (var i = 0; i < workers.Length; i++)
-            workers[i] = RunWorker(cancellationToken);
+        Interlocked.Increment(ref _outstanding);
 
-        await Task.WhenAll(workers);
+        var tasks = new Task[WorkerCount + 1];
+        tasks[0] = Task.Run(async () =>
+        {
+            try
+            {
+                await BackgroundDiscovery(cancellationToken);
+            }
+            finally
+            {
+                if (Interlocked.Decrement(ref _outstanding) == 0)
+                    _channel.Writer.TryComplete();
+            }
+        }, cancellationToken);
+
+        for (var i = 1; i < tasks.Length; i++)
+            tasks[i] = RunWorker(cancellationToken);
+
+        await Task.WhenAll(tasks);
 
         return await GetResult(cancellationToken);
     }
@@ -152,6 +167,11 @@ public abstract class AbstractCrawler<TResponse, TResult>
     }
 
     protected abstract ValueTask<TResult> GetResult(CancellationToken cancellationToken);
+
+    protected virtual ValueTask BackgroundDiscovery(CancellationToken cancellationToken)
+    {
+        return ValueTask.CompletedTask;
+    }
 
     protected virtual ValueTask AnalyzeDocument(string url, TResponse response)
     {
