@@ -48,8 +48,17 @@ public abstract class HtmlAgilityPackCrawler<TResult> : AbstractStaticHtmlCrawle
         string? canonicalHref = null;
         string? robotsContent = null;
 
-        foreach (var node in response.DocumentNode.Descendants())
+        var stack = new Stack<HtmlNode>();
+        stack.Push(response.DocumentNode);
+
+        while (stack.Count > 0)
         {
+            var node = stack.Pop();
+
+            var children = node.ChildNodes;
+            for (var i = children.Count - 1; i >= 0; i--)
+                stack.Push(children[i]);
+
             if (node.NodeType != HtmlNodeType.Element)
                 continue;
 
