@@ -137,15 +137,18 @@ public abstract class AbstractCrawler<TResponse, TResult>
         }
     }
 
-    private void Enqueue(string url)
+    private bool Enqueue(string url)
     {
         if (!_discovered.Add(url))
-            return;
+            return false;
 
         Interlocked.Increment(ref _outstanding);
 
-        if (!_channel.Writer.TryWrite(url))
-            Interlocked.Decrement(ref _outstanding);
+        if (_channel.Writer.TryWrite(url))
+            return true;
+
+        Interlocked.Decrement(ref _outstanding);
+        return false;
     }
 
     protected abstract ValueTask<TResult> GetResult(CancellationToken cancellationToken);
@@ -221,12 +224,19 @@ public abstract class AbstractCrawler<TResponse, TResult>
             if (!robots.Follow)
                 return;
 
-            var links = FilterHrefs(pageData.LinkHrefs);
-            if (links.Count > 0)
-                _logger.LogDebug("Found {count} outgoing links on '{url}'", links.Count, resolvedUrl);
+            var discovered = 0;
+            foreach (var href in pageData.LinkHrefs)
+            {
+                var link = ResolveCrawlableUrl(href);
+                if (link == null)
+                    continue;
 
-            foreach (var link in links)
-                Enqueue(link);
+                if (Enqueue(link))
+                    discovered++;
+            }
+
+            if (discovered > 0)
+                _logger.LogDebug("Found {count} new outgoing links on '{url}'", discovered, resolvedUrl);
         }
         catch (TimeoutException ex)
         {
@@ -244,32 +254,16 @@ public abstract class AbstractCrawler<TResponse, TResult>
         }
     }
 
-    private HashSet<string> FilterHrefs(IReadOnlyList<string?> hrefs)
-    {
-        var urls = new HashSet<string>(hrefs.Count, StringComparer.OrdinalIgnoreCase);
-
-        foreach (var href in hrefs)
-        {
-            var url = GetUndiscoveredUrl(href);
-            if (url == null)
-                continue;
-
-            urls.Add(url);
-        }
-
-        return urls;
-    }
-
     protected virtual void DiscoverLink(string href)
     {
-        var url = GetUndiscoveredUrl(href);
+        var url = ResolveCrawlableUrl(href);
         if (url == null)
             return;
 
         Enqueue(url);
     }
 
-    protected virtual string? GetUndiscoveredUrl(string? href)
+    protected virtual string? ResolveCrawlableUrl(string? href)
     {
         if (InvalidateHref(href))
             return null;
@@ -279,9 +273,6 @@ public abstract class AbstractCrawler<TResponse, TResult>
             return null;
 
         if (!url.StartsWith(_siteAuthority!, StringComparison.OrdinalIgnoreCase))
-            return null;
-
-        if (_discovered.Contains(url))
             return null;
 
         return url;
