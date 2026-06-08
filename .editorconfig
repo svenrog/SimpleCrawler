@@ -16,3 +16,9 @@ dotnet_naming_symbols.private_fields.applicable_accessibilities = private
 
 dotnet_naming_style.underscore_camel_case.required_prefix = _
 dotnet_naming_style.underscore_camel_case.capitalization = camel_case
+
+[tests/Crawler.Benchmarks/**.cs]
+
+# CA1822: Mark members as static - BenchmarkDotNet requires instance [Benchmark] methods,
+# so acting on this suggestion would break the benchmarks.
+dotnet_diagnostic.CA1822.severity = none
