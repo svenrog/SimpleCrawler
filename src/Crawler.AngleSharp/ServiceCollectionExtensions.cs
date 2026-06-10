@@ -1,5 +1,3 @@
-﻿using AngleSharp;
-using AngleSharp.Io.Network;
 using Crawler.Core;
 using Crawler.Core.Helpers;
 using Crawler.Core.Robots;
@@ -23,23 +21,18 @@ public static class ServiceCollectionExtensions
     public static IServiceCollection AddAngleSharpCrawler(this IServiceCollection services, Action<IServiceProvider, HttpClient>? config = null)
     {
         services.AddLogging();
-        services.TryAddScoped<DefaultAngleSharpCrawler>();
-        services.AddHttpClient<HttpClientRequester>((provider, client) =>
+        services.AddHttpClient<DefaultAngleSharpCrawler>((provider, client) =>
         {
-            ConfigurationHelper.ConfigureClient(client, provider.GetRequiredService<IOptions<CrawlerOptions>>());
             config?.Invoke(provider, client);
+            ConfigurationHelper.ConfigureClient(client, provider.GetRequiredService<IOptions<CrawlerOptions>>());
         }).ConfigurePrimaryHttpMessageHandler(provider =>
             ConfigurationHelper.CreatePrimaryHandler(provider.GetRequiredService<IOptions<CrawlerOptions>>()));
         services.AddHttpClient<IRobotClient, RobotWebClient>((provider, client) =>
         {
-            ConfigurationHelper.ConfigureClient(client, provider.GetRequiredService<IOptions<CrawlerOptions>>());
             config?.Invoke(provider, client);
+            ConfigurationHelper.ConfigureClient(client, provider.GetRequiredService<IOptions<CrawlerOptions>>());
         }).ConfigurePrimaryHttpMessageHandler(provider =>
             ConfigurationHelper.CreatePrimaryHandler(provider.GetRequiredService<IOptions<CrawlerOptions>>()));
-        services.TryAddSingleton((provider) =>
-            Configuration.Default
-                .WithRequester(provider.GetRequiredService<HttpClientRequester>())
-                .WithDefaultLoader());
 
         return services;
     }

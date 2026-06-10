@@ -224,6 +224,9 @@ public abstract class AbstractCrawler<TResponse, TResult>
         if (!_discovered.Add(url))
             return false;
 
+        if (!IsCrawlAllowed(url))
+            return false;
+
         Interlocked.Increment(ref _outstanding);
 
         if (_urlChannel.Writer.TryWrite(url))
@@ -257,6 +260,11 @@ public abstract class AbstractCrawler<TResponse, TResult>
     protected virtual string? GetAbsoluteUrl(string? href)
     {
         return UriHelper.GetAbsoluteUrl(_siteUri!, href);
+    }
+
+    protected virtual bool IsCrawlAllowed(string url)
+    {
+        return true;
     }
 
     protected virtual bool InvalidateHref([NotNullWhen(false)] string? href)
@@ -348,6 +356,9 @@ public abstract class AbstractCrawler<TResponse, TResult>
         if (InvalidateHref(href))
             return null;
 
+        if (IsExternalAbsoluteUrl(href))
+            return null;
+
         var url = GetAbsoluteUrl(href);
         if (url == null)
             return null;
@@ -356,5 +367,16 @@ public abstract class AbstractCrawler<TResponse, TResult>
             return null;
 
         return url;
+    }
+
+    private bool IsExternalAbsoluteUrl(string href)
+    {
+        if (!href.StartsWith("http://", StringComparison.OrdinalIgnoreCase)
+            && !href.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        return !href.StartsWith(_siteAuthority!, StringComparison.OrdinalIgnoreCase);
     }
 }

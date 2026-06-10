@@ -1,5 +1,4 @@
-﻿using AngleSharp;
-using AngleSharp.Dom;
+using AngleSharp.Html.Parser;
 using Crawler.Core;
 using Crawler.Core.Models;
 using Crawler.Core.Robots;
@@ -8,32 +7,28 @@ using Microsoft.Extensions.Options;
 
 namespace Crawler.AngleSharp;
 
-public abstract class AngleSharpCrawler<TResult> : AbstractStaticHtmlCrawler<IDocument, TResult>
+public abstract class AngleSharpCrawler<TResult> : AbstractStaticHtmlCrawler<TResult>
     where TResult : IScrapeResult
 {
-    private readonly IConfiguration _configuration;
+    private static readonly HtmlParser _parser = new();
 
-    protected AngleSharpCrawler(IConfiguration configuration, IRobotClient robotClient, IOptions<CrawlerOptions> options, ILogger logger) : base(robotClient, options, logger)
+    protected AngleSharpCrawler(HttpClient client, IRobotClient robotClient, IOptions<CrawlerOptions> options, ILogger logger) : base(client, robotClient, options, logger)
     {
-        _configuration = configuration;
     }
 
-    protected override async Task<IDocument?> LoadResponse(string url, CancellationToken cancellationToken)
+    protected override (string? CanonicalHref, string? RobotsContent, IReadOnlyList<string?> LinkHrefs) ExtractStatic(byte[] response)
     {
-        var context = BrowsingContext.New(_configuration);
-        return await context.OpenAsync(url, cancellationToken);
-    }
+        using var stream = new MemoryStream(response, writable: false);
+        using var document = _parser.ParseDocument(stream);
 
-    protected override (string? CanonicalHref, string? RobotsContent, IReadOnlyList<string?> LinkHrefs) ExtractStatic(IDocument response)
-    {
-        var anchors = response.QuerySelectorAll("a");
+        var anchors = document.QuerySelectorAll("a");
 
         var hrefs = new List<string?>(anchors.Length);
         foreach (var anchor in anchors)
             hrefs.Add(anchor.GetAttribute("href"));
 
-        var canonicalHref = response.QuerySelector("link[rel='canonical']")?.GetAttribute("href");
-        var robotsContent = response.QuerySelector("meta[name='robots']")?.GetAttribute("content");
+        var canonicalHref = document.QuerySelector("link[rel='canonical']")?.GetAttribute("href");
+        var robotsContent = document.QuerySelector("meta[name='robots']")?.GetAttribute("content");
 
         return (canonicalHref, robotsContent, hrefs);
     }
