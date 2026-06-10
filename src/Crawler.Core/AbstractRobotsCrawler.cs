@@ -2,7 +2,6 @@
 using Crawler.Core.Robots;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using System.Diagnostics.CodeAnalysis;
 
 namespace Crawler.Core;
 
@@ -16,6 +15,7 @@ public abstract class AbstractRobotsCrawler<TResponse, TResult> : AbstractCrawle
     private IRobotRuleChecker? _robotRules;
     private IRobotsTxt? _robots;
     private Uri? _entryUri;
+    private string? _siteAuthority;
 
     protected AbstractRobotsCrawler(IRobotClient robotClient, IOptions<CrawlerOptions> options, ILogger logger) : base(options, logger)
     {
@@ -30,6 +30,7 @@ public abstract class AbstractRobotsCrawler<TResponse, TResult> : AbstractCrawle
     protected override async ValueTask InitializeCrawl(string entry, CancellationToken cancellationToken)
     {
         _entryUri = new Uri(entry);
+        _siteAuthority = _entryUri.GetLeftPart(UriPartial.Authority);
         _robots = await _robotClient.LoadRobotsTxtAsync(_entryUri, cancellationToken);
 
         if (_robots.TryGetCrawlDelay(_userAgent, out var crawlDelay) && _options.RespectRobotsTxt)
@@ -52,14 +53,20 @@ public abstract class AbstractRobotsCrawler<TResponse, TResult> : AbstractCrawle
         }
     }
 
-    protected override bool InvalidateHref([NotNullWhen(false)] string? href)
+    protected override bool IsCrawlAllowed(string url)
     {
-        if (base.InvalidateHref(href))
+        if (!_options.RespectRobotsTxt)
             return true;
 
-        if (!_options.RespectRobotsTxt)
-            return false;
+        return _robotRules!.IsAllowed(GetSitePath(url));
+    }
 
-        return !_robotRules!.IsAllowed(href);
+    private string GetSitePath(string url)
+    {
+        var authority = _siteAuthority!;
+        if (url.Length > authority.Length && url.StartsWith(authority, StringComparison.OrdinalIgnoreCase))
+            return url[authority.Length..];
+
+        return "/";
     }
 }

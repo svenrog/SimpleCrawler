@@ -1,4 +1,4 @@
-﻿using Crawler.Core;
+using Crawler.Core;
 using Crawler.Core.Models;
 using Crawler.Core.Robots;
 using HtmlAgilityPack;
@@ -7,34 +7,11 @@ using Microsoft.Extensions.Options;
 
 namespace Crawler.HtmlAgilityPack;
 
-public abstract class HtmlAgilityPackCrawler<TResult> : AbstractStaticHtmlCrawler<byte[], TResult>
+public abstract class HtmlAgilityPackCrawler<TResult> : AbstractStaticHtmlCrawler<TResult>
     where TResult : IScrapeResult
 {
-    private readonly HttpClient _client;
-    private readonly ILogger _logger;
-
-    protected HtmlAgilityPackCrawler(HttpClient client, IRobotClient robotClient, IOptions<CrawlerOptions> options, ILogger logger) : base(robotClient, options, logger)
+    protected HtmlAgilityPackCrawler(HttpClient client, IRobotClient robotClient, IOptions<CrawlerOptions> options, ILogger logger) : base(client, robotClient, options, logger)
     {
-        _client = client;
-        _logger = logger;
-    }
-
-    protected override async Task<byte[]?> LoadResponse(string url, CancellationToken cancellationToken)
-    {
-        var response = await _client.GetAsync(url, cancellationToken);
-
-        if (response.IsSuccessStatusCode)
-        {
-            _logger.LogDebug("Response '{code}' from url '{url}'", response.StatusCode, url);
-
-            return await response.Content.ReadAsByteArrayAsync(cancellationToken);
-        }
-        else
-        {
-            _logger.LogWarning("Error {code} on url '{url}'", response.StatusCode, url);
-
-            return null;
-        }
     }
 
     protected override (string? CanonicalHref, string? RobotsContent, IReadOnlyList<string?> LinkHrefs) ExtractStatic(byte[] response)
@@ -65,17 +42,17 @@ public abstract class HtmlAgilityPackCrawler<TResult> : AbstractStaticHtmlCrawle
 
             if (name.Equals("a", StringComparison.OrdinalIgnoreCase))
             {
-                hrefs.Add(node.GetAttributeValue<string?>("href", null));
+                hrefs.Add(node.Attributes["href"]?.Value);
             }
             else if (canonicalHref is null && name.Equals("link", StringComparison.OrdinalIgnoreCase)
-                && string.Equals(node.GetAttributeValue<string?>("rel", null), "canonical", StringComparison.OrdinalIgnoreCase))
+                && string.Equals(node.Attributes["rel"]?.Value, "canonical", StringComparison.OrdinalIgnoreCase))
             {
-                canonicalHref = node.GetAttributeValue<string?>("href", null);
+                canonicalHref = node.Attributes["href"]?.Value;
             }
             else if (robotsContent is null && name.Equals("meta", StringComparison.OrdinalIgnoreCase)
-                && string.Equals(node.GetAttributeValue<string?>("name", null), "robots", StringComparison.OrdinalIgnoreCase))
+                && string.Equals(node.Attributes["name"]?.Value, "robots", StringComparison.OrdinalIgnoreCase))
             {
-                robotsContent = node.GetAttributeValue<string?>("content", null);
+                robotsContent = node.Attributes["content"]?.Value;
             }
         }
 
