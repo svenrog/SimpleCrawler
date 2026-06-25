@@ -1,5 +1,7 @@
 using Jint;
+using Jint.Native;
 using Jint.Runtime;
+using Jint.Runtime.Interop;
 using System.Globalization;
 
 namespace Crawler.AngleSharp.Js.Jint;
@@ -16,6 +18,19 @@ internal sealed class JintSpaEngine : ISpaEngine
     public void EmbedHostObject(string name, object value)
     {
         _engine.SetValue(name, value);
+    }
+
+    public void EmbedHostType(string name, Type type)
+    {
+        _engine.SetValue(name, TypeReference.CreateTypeReference(_engine, type));
+    }
+
+    public void EmbedFunction(string name, VFunc function)
+    {
+        // Jint binds JS calls to a fixed-arity delegate leniently (missing args become null, extra
+        // args are ignored), so a four-parameter adapter covers every global the bundle calls.
+        Func<object?, object?, object?, object?, object?> adapter = (a, b, c, d) => function(a, b, c, d);
+        _engine.SetValue(name, adapter);
     }
 
     public void Execute(string script)
@@ -50,6 +65,24 @@ internal sealed class JintSpaEngine : ISpaEngine
             return typed;
 
         return (T)Convert.ChangeType(value!, typeof(T), CultureInfo.InvariantCulture);
+    }
+
+    public object CreateArray(IReadOnlyList<object?> items)
+    {
+        return JsValue.FromObject(_engine, items.ToArray());
+    }
+
+    public void InvokeCallback(object callback)
+    {
+        if (callback is Func<JsValue, JsValue[], JsValue> function)
+            function(JsValue.Undefined, Array.Empty<JsValue>());
+        else if (callback is JsValue value)
+            _engine.Invoke(value);
+    }
+
+    public void RunMicrotasks()
+    {
+        _engine.Evaluate("0");
     }
 
     public void Dispose()

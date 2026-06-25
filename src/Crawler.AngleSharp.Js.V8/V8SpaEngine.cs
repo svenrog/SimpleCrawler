@@ -12,6 +12,7 @@ internal sealed class V8SpaEngine : ISpaEngine
 
     private readonly V8ScriptEngine _engine;
     private readonly V8ModuleLoader _loader;
+    private ScriptObject? _arrayFactory;
 
     public V8SpaEngine(IModuleFetcher fetcher, Uri baseUri)
     {
@@ -26,6 +27,18 @@ internal sealed class V8SpaEngine : ISpaEngine
     public void EmbedHostObject(string name, object value)
     {
         _engine.AddHostObject(name, value);
+    }
+
+    public void EmbedHostType(string name, Type type)
+    {
+        _engine.AddHostType(name, type);
+    }
+
+    public void EmbedFunction(string name, VFunc function)
+    {
+        // V8 maps a JS call's arguments straight onto a params-array delegate, so one variadic
+        // delegate handles every arity the bundle calls these globals with.
+        _engine.AddHostObject(name, function);
     }
 
     public void Execute(string script)
@@ -71,6 +84,24 @@ internal sealed class V8SpaEngine : ISpaEngine
             return typed;
 
         return (T)Convert.ChangeType(value!, typeof(T), CultureInfo.InvariantCulture);
+    }
+
+    public object CreateArray(IReadOnlyList<object?> items)
+    {
+        // A plain .NET array reaches JS as a host object without a JS `length`, which breaks
+        // Array.prototype.slice.call on it; spreading through a cached JS function yields a real array.
+        _arrayFactory ??= (ScriptObject)_engine.Evaluate("(function(){return Array.prototype.slice.call(arguments);})");
+        return _arrayFactory.InvokeAsFunction([.. items]);
+    }
+
+    public void InvokeCallback(object callback)
+    {
+        ((ScriptObject)callback).InvokeAsFunction();
+    }
+
+    public void RunMicrotasks()
+    {
+        _engine.Evaluate("0");
     }
 
     public void Dispose()
