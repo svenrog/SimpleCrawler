@@ -1,7 +1,6 @@
 using Crawler.Core;
 using Crawler.Core.Models;
 using Crawler.Core.Robots;
-using JavaScriptEngineSwitcher.Core;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -13,11 +12,11 @@ public abstract class AngleSharpJsCrawler<TResult> : AngleSharpCrawler<TResult>
     private readonly HttpClient _client;
     private readonly SpaRenderer _renderer;
 
-    protected AngleSharpJsCrawler(HttpClient client, IJsEngineSwitcher switcher, IRobotClient robotClient, IOptions<CrawlerOptions> options, IOptions<JsRenderOptions> renderOptions, ILogger logger)
+    protected AngleSharpJsCrawler(HttpClient client, ISpaEngineFactory engineFactory, IRobotClient robotClient, IOptions<CrawlerOptions> options, IOptions<JsRenderOptions> renderOptions, ILogger logger)
         : base(client, robotClient, options, logger)
     {
         _client = client;
-        _renderer = new SpaRenderer(switcher, renderOptions.Value, logger);
+        _renderer = new SpaRenderer(engineFactory, renderOptions.Value, logger);
     }
 
     protected override async Task<byte[]?> LoadResponse(string url, CancellationToken cancellationToken)

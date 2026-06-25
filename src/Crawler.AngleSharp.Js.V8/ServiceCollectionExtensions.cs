@@ -1,7 +1,5 @@
 using Crawler.Core;
 using Crawler.Core.Helpers;
-using JavaScriptEngineSwitcher.Core;
-using JavaScriptEngineSwitcher.V8;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 
@@ -13,13 +11,7 @@ public static class ServiceCollectionExtensions
     {
         services.AddAngleSharpJsCore(options, renderOptions, config);
 
-        services.AddKeyedSingleton<IJsEngineSwitcher>(DefaultAngleSharpV8Crawler.SwitcherKey, (_, _) =>
-        {
-            var switcher = new JsEngineSwitcher();
-            switcher.EngineFactories.AddV8();
-            switcher.DefaultEngineName = V8JsEngine.EngineName;
-            return switcher;
-        });
+        services.AddKeyedSingleton<ISpaEngineFactory, V8SpaEngineFactory>(DefaultAngleSharpV8Crawler.EngineKey);
 
         services.AddHttpClient<DefaultAngleSharpV8Crawler>((provider, client) =>
         {

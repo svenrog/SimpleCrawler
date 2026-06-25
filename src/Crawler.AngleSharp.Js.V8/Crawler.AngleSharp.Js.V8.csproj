@@ -16,7 +16,6 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="JavaScriptEngineSwitcher.V8" Version="[3.34.1,4)" />
     <PackageReference Include="Microsoft.ClearScript.V8" Version="$(ClearScriptV8Version)" />
   </ItemGroup>
 

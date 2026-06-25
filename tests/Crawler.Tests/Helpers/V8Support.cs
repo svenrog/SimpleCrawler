@@ -1,5 +1,4 @@
-using JavaScriptEngineSwitcher.Core;
-using JavaScriptEngineSwitcher.V8;
+using Microsoft.ClearScript.V8;
 
 namespace Crawler.Tests.Helpers;
 
@@ -13,14 +12,10 @@ internal static class V8Support
     {
         try
         {
-            var switcher = new JsEngineSwitcher();
-            switcher.EngineFactories.AddV8();
-            switcher.DefaultEngineName = V8JsEngine.EngineName;
-
-            using var engine = switcher.CreateDefaultEngine();
-            return engine.Evaluate<int>("1 + 1") == 2;
+            using var engine = new V8ScriptEngine();
+            return engine.Evaluate("1 + 1") is int result && result == 2;
         }
-        catch (JsEngineLoadException)
+        catch (Exception)
         {
             return false;
         }

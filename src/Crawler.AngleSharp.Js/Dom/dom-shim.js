@@ -257,25 +257,6 @@
     global.getComputedStyle = function () { return { getPropertyValue: function () { return ''; } }; };
     global.MutationObserver = function () { this.observe = function () { }; this.disconnect = function () { }; this.takeRecords = function () { return []; }; };
 
-    // Minimal ES-module registry so bundler output (static import/export rewritten to
-    // __require/__exp by the host, dynamic import() to __import) can link and lazy-load.
-    // __import defers evaluation to a microtask so the importing module finishes — and its
-    // exports become visible — before a dynamically imported chunk reads them.
-    var _modules = {}, _moduleCache = {};
-    function evaluateModule(key) {
-        if (Object.prototype.hasOwnProperty.call(_moduleCache, key)) return _moduleCache[key];
-        var factory = _modules[key];
-        if (!factory) throw new Error('Module not registered: ' + key);
-        var exports = {};
-        _moduleCache[key] = exports;
-        factory(exports, evaluateModule, function (k) { return Promise.resolve().then(function () { return evaluateModule(k); }); });
-        return exports;
-    }
-    global.__modules = {
-        register: function (key, factory) { _modules[key] = factory; },
-        evaluate: evaluateModule
-    };
-
     function resolveUrl(u, base) {
         u = String(u == null ? '' : u);
         if (/^[a-zA-Z][\w+.-]*:\/\//.test(u)) return u;

@@ -4,23 +4,24 @@ using System.Text.Json;
 using AngleSharp.Dom;
 using AngleSharp.Html.Dom;
 using AngleSharp.Html.Parser;
-using JavaScriptEngineSwitcher.Core;
 using Microsoft.Extensions.Logging;
 
 namespace Crawler.AngleSharp.Js;
 
 public sealed class SpaRenderer
 {
+    private const int IdleTurnsBeforeSettled = 3;
+
     private static readonly HtmlParser _parser = new();
     private static readonly string _shim = LoadShim();
 
-    private readonly IJsEngineSwitcher _switcher;
+    private readonly ISpaEngineFactory _engineFactory;
     private readonly JsRenderOptions _options;
     private readonly ILogger _logger;
 
-    public SpaRenderer(IJsEngineSwitcher switcher, JsRenderOptions options, ILogger logger)
+    public SpaRenderer(ISpaEngineFactory engineFactory, JsRenderOptions options, ILogger logger)
     {
-        _switcher = switcher;
+        _engineFactory = engineFactory;
         _options = options;
         _logger = logger;
     }
@@ -32,54 +33,69 @@ public sealed class SpaRenderer
 
         var hydrateJson = BuildHydrateJson(document.DocumentElement);
         var (classicScripts, moduleEntries) = await CollectScriptsAsync(document, pageUrl, client, cancellationToken);
-        var moduleScript = await EsModuleLoader.BuildAsync(moduleEntries, client, cancellationToken);
 
-        var rendered = RunEngine(pageUrl, hydrateJson, classicScripts, moduleScript);
+        var fetcher = new HttpModuleFetcher(client, cancellationToken);
+        var rendered = RunEngine(fetcher, new Uri(pageUrl), hydrateJson, classicScripts, moduleEntries);
         return Encoding.UTF8.GetBytes(rendered);
     }
 
-    private string RunEngine(string pageUrl, string hydrateJson, IReadOnlyList<string> classicScripts, string? moduleScript)
+    private string RunEngine(IModuleFetcher fetcher, Uri pageUri, string hydrateJson, IReadOnlyList<string> classicScripts, IReadOnlyList<ModuleScript> moduleEntries)
     {
-        using var engine = _switcher.CreateDefaultEngine();
+        var pageUrl = pageUri.ToString();
+        using var engine = _engineFactory.Create(fetcher, pageUri);
 
         engine.Execute(_shim);
         engine.Execute($"__crawler.setLocation({JsonSerializer.Serialize(pageUrl)});");
         engine.Execute($"__crawler.hydrate({hydrateJson});");
 
         foreach (var script in classicScripts)
-            Run(engine, script, pageUrl);
+            RunClassic(engine, script, pageUrl);
 
-        if (moduleScript != null)
-            Run(engine, moduleScript, pageUrl);
+        foreach (var module in moduleEntries)
+            RunModule(engine, module, pageUrl);
 
-        // pump() runs one batch of our timer queue per call; the boundary between Evaluate
-        // calls lets the engine flush native promise jobs (Preact's lazy resolution and
-        // rerenders) so the DOM is fully settled before we serialize it.
+        // pump() runs one batch of our timer queue per call and returns the number still queued;
+        // each call is also an Evaluate boundary that lets the engine flush native promise jobs.
+        // V8 resolves dynamic import() (lazy routes) on those boundaries rather than synchronously
+        // like Jint, so we keep pumping through empty turns until the queue has stayed idle for a
+        // few consecutive turns — otherwise we serialize before the import -> render chain settles.
         var iterations = 0;
-        while (engine.Evaluate<int>("__crawler.pump()") > 0 && iterations++ < _options.MaxTaskDrainIterations)
-        {
-        }
+        var idle = 0;
+        while (iterations++ < _options.MaxTaskDrainIterations && idle < IdleTurnsBeforeSettled)
+            idle = engine.Evaluate<int>("__crawler.pump()") > 0 ? 0 : idle + 1;
 
         return engine.Evaluate<string>("__crawler.serialize()");
     }
 
-    private void Run(IJsEngine engine, string script, string pageUrl)
+    private void RunClassic(ISpaEngine engine, string script, string pageUrl)
     {
         try
         {
             engine.Execute(script);
         }
-        catch (JsException ex)
+        catch (SpaScriptException ex)
         {
             _logger.LogWarning("Bundle execution error on '{url}': {message}", pageUrl, ex.Message);
         }
     }
 
-    private static async Task<(IReadOnlyList<string> Classic, IReadOnlyList<ModuleSource> Modules)> CollectScriptsAsync(IDocument document, string pageUrl, HttpClient client, CancellationToken cancellationToken)
+    private void RunModule(ISpaEngine engine, ModuleScript module, string pageUrl)
+    {
+        try
+        {
+            engine.EvaluateModule(module.Specifier, module.Source);
+        }
+        catch (SpaScriptException ex)
+        {
+            _logger.LogWarning("Module execution error on '{url}': {message}", pageUrl, ex.Message);
+        }
+    }
+
+    private static async Task<(IReadOnlyList<string> Classic, IReadOnlyList<ModuleScript> Modules)> CollectScriptsAsync(IDocument document, string pageUrl, HttpClient client, CancellationToken cancellationToken)
     {
         var baseUri = new Uri(pageUrl);
         var classic = new List<string>();
-        var modules = new List<ModuleSource>();
+        var modules = new List<ModuleScript>();
 
         foreach (var element in document.QuerySelectorAll("script"))
         {
@@ -97,7 +113,7 @@ public sealed class SpaRenderer
                     continue;
 
                 if (isModule)
-                    modules.Add(new ModuleSource(pageUrl, script.TextContent, baseUri));
+                    modules.Add(new ModuleScript(pageUrl, script.TextContent));
                 else
                     classic.Add(script.TextContent);
 
@@ -112,7 +128,7 @@ public sealed class SpaRenderer
             var source = await response.Content.ReadAsStringAsync(cancellationToken);
 
             if (isModule)
-                modules.Add(new ModuleSource(absolute.ToString(), source, absolute));
+                modules.Add(new ModuleScript(absolute.ToString(), source));
             else
                 classic.Add(source);
         }
