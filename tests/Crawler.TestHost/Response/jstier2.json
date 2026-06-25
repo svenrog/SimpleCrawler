@@ -1,0 +1,26 @@
+[
+  {
+    "href": "/",
+    "name": "Home"
+  },
+  {
+    "href": "/docs",
+    "name": "Docs"
+  },
+  {
+    "href": "/docs/getting-started",
+    "name": "Getting started"
+  },
+  {
+    "href": "/docs/api",
+    "name": "API"
+  },
+  {
+    "href": "/blog",
+    "name": "Blog"
+  },
+  {
+    "href": "/about",
+    "name": "About"
+  }
+]

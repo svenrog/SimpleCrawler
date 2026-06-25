@@ -1,4 +1,6 @@
 ﻿using Crawler.AngleSharp;
+using Crawler.AngleSharp.Js.Jint;
+using Crawler.AngleSharp.Js.V8;
 using Crawler.Core;
 using Crawler.HtmlAgilityPack;
 using Crawler.Playwright;
@@ -24,6 +26,8 @@ public abstract class AbstractHostFixture : IAsyncDisposable
         var options = CreateOptions();
 
         services.AddAngleSharpCrawler(options);
+        services.AddAngleSharpJsJintCrawler(options);
+        services.AddAngleSharpJsV8Crawler(options);
         services.AddHtmlAgilityPackCrawler(options);
         services.AddPlaywrightCrawler(options);
         services.AddPuppeteerCrawler(options);

@@ -1,0 +1,30 @@
+[
+  {
+    "href": "/",
+    "name": "Home"
+  },
+  {
+    "href": "/features",
+    "name": "Features"
+  },
+  {
+    "href": "/features/search",
+    "name": "Search"
+  },
+  {
+    "href": "/features/sitemap",
+    "name": "Sitemap"
+  },
+  {
+    "href": "/pricing",
+    "name": "Pricing"
+  },
+  {
+    "href": "/docs",
+    "name": "Docs"
+  },
+  {
+    "href": "/contact",
+    "name": "Contact"
+  }
+]
