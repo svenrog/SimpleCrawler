@@ -1,7 +1,7 @@
 using JavaScriptEngineSwitcher.Core;
 using JavaScriptEngineSwitcher.V8;
 
-namespace Crawler.Tests;
+namespace Crawler.Tests.Helpers;
 
 internal static class V8Support
 {

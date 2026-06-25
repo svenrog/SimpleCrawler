@@ -31,13 +31,14 @@ public sealed class SpaRenderer
         using var document = await _parser.ParseDocumentAsync(stream, cancellationToken);
 
         var hydrateJson = BuildHydrateJson(document.DocumentElement);
-        var scripts = await CollectScriptsAsync(document, pageUrl, client, cancellationToken);
+        var (classicScripts, moduleEntries) = await CollectScriptsAsync(document, pageUrl, client, cancellationToken);
+        var moduleScript = await EsModuleLoader.BuildAsync(moduleEntries, client, cancellationToken);
 
-        var rendered = RunEngine(pageUrl, hydrateJson, scripts);
+        var rendered = RunEngine(pageUrl, hydrateJson, classicScripts, moduleScript);
         return Encoding.UTF8.GetBytes(rendered);
     }
 
-    private string RunEngine(string pageUrl, string hydrateJson, IReadOnlyList<string> scripts)
+    private string RunEngine(string pageUrl, string hydrateJson, IReadOnlyList<string> classicScripts, string? moduleScript)
     {
         using var engine = _switcher.CreateDefaultEngine();
 
@@ -45,25 +46,40 @@ public sealed class SpaRenderer
         engine.Execute($"__crawler.setLocation({JsonSerializer.Serialize(pageUrl)});");
         engine.Execute($"__crawler.hydrate({hydrateJson});");
 
-        foreach (var script in scripts)
+        foreach (var script in classicScripts)
+            Run(engine, script, pageUrl);
+
+        if (moduleScript != null)
+            Run(engine, moduleScript, pageUrl);
+
+        // pump() runs one batch of our timer queue per call; the boundary between Evaluate
+        // calls lets the engine flush native promise jobs (Preact's lazy resolution and
+        // rerenders) so the DOM is fully settled before we serialize it.
+        var iterations = 0;
+        while (engine.Evaluate<int>("__crawler.pump()") > 0 && iterations++ < _options.MaxTaskDrainIterations)
         {
-            try
-            {
-                engine.Execute(script);
-            }
-            catch (JsException ex)
-            {
-                _logger.LogWarning("Bundle execution error on '{url}': {message}", pageUrl, ex.Message);
-            }
         }
 
-        return engine.Evaluate<string>($"__crawler.finalize({_options.MaxTaskDrainIterations})");
+        return engine.Evaluate<string>("__crawler.serialize()");
     }
 
-    private static async Task<IReadOnlyList<string>> CollectScriptsAsync(IDocument document, string pageUrl, HttpClient client, CancellationToken cancellationToken)
+    private void Run(IJsEngine engine, string script, string pageUrl)
+    {
+        try
+        {
+            engine.Execute(script);
+        }
+        catch (JsException ex)
+        {
+            _logger.LogWarning("Bundle execution error on '{url}': {message}", pageUrl, ex.Message);
+        }
+    }
+
+    private static async Task<(IReadOnlyList<string> Classic, IReadOnlyList<ModuleSource> Modules)> CollectScriptsAsync(IDocument document, string pageUrl, HttpClient client, CancellationToken cancellationToken)
     {
         var baseUri = new Uri(pageUrl);
-        var scripts = new List<string>();
+        var classic = new List<string>();
+        var modules = new List<ModuleSource>();
 
         foreach (var element in document.QuerySelectorAll("script"))
         {
@@ -72,11 +88,18 @@ public sealed class SpaRenderer
             if (!string.IsNullOrEmpty(type) && type is not "text/javascript" and not "module" and not "application/javascript")
                 continue;
 
+            var isModule = string.Equals(type, "module", StringComparison.Ordinal);
             var src = script.GetAttribute("src");
+
             if (string.IsNullOrEmpty(src))
             {
-                if (!string.IsNullOrEmpty(script.TextContent))
-                    scripts.Add(script.TextContent);
+                if (string.IsNullOrEmpty(script.TextContent))
+                    continue;
+
+                if (isModule)
+                    modules.Add(new ModuleSource(pageUrl, script.TextContent, baseUri));
+                else
+                    classic.Add(script.TextContent);
 
                 continue;
             }
@@ -86,10 +109,15 @@ public sealed class SpaRenderer
             if (!response.IsSuccessStatusCode)
                 continue;
 
-            scripts.Add(await response.Content.ReadAsStringAsync(cancellationToken));
+            var source = await response.Content.ReadAsStringAsync(cancellationToken);
+
+            if (isModule)
+                modules.Add(new ModuleSource(absolute.ToString(), source, absolute));
+            else
+                classic.Add(source);
         }
 
-        return scripts;
+        return (classic, modules);
     }
 
     private static string BuildHydrateJson(IElement? root)

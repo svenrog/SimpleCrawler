@@ -1,7 +1,10 @@
-﻿using Crawler.Core.Models;
+﻿using Crawler.AngleSharp.Js.Jint;
+using Crawler.AngleSharp.Js.V8;
+using Crawler.Core.Models;
 using Crawler.Playwright;
 using Crawler.Puppeteer;
 using Crawler.Tests.Fixtures;
+using Crawler.Tests.Helpers;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Crawler.Tests;
@@ -33,6 +36,27 @@ public class SpaCrawlerTests : IClassFixture<SpaHostFixture>
 
         AssertResult(result);
     }
+
+    [Fact]
+    public async Task AngleSharpJintCrawler_can_Crawl()
+    {
+        var subject = _context.ServiceProvider.GetRequiredService<DefaultAngleSharpJintCrawler>();
+        var result = await subject.Start(SpaHostFixture.HostName, _context.CancellationSource.Token);
+
+        AssertResult(result);
+    }
+
+    [Fact]
+    public async Task AngleSharpV8Crawler_can_Crawl()
+    {
+        Assert.SkipUnless(V8Support.IsAvailable, V8Support.UnavailableReason);
+
+        var subject = _context.ServiceProvider.GetRequiredService<DefaultAngleSharpV8Crawler>();
+        var result = await subject.Start(SpaHostFixture.HostName, _context.CancellationSource.Token);
+
+        AssertResult(result);
+    }
+
 
     protected void AssertResult(IScrapeResult result)
     {

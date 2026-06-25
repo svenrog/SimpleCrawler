@@ -13,7 +13,7 @@ public static class ServiceCollectionExtensions
     {
         services.AddAngleSharpJsCore(options, renderOptions, config);
 
-        services.AddKeyedSingleton<IJsEngineSwitcher>(JintAngleSharpJsCrawler.SwitcherKey, (_, _) =>
+        services.AddKeyedSingleton<IJsEngineSwitcher>(DefaultAngleSharpJintCrawler.SwitcherKey, (_, _) =>
         {
             var switcher = new JsEngineSwitcher();
             switcher.EngineFactories.AddJint();
@@ -21,7 +21,7 @@ public static class ServiceCollectionExtensions
             return switcher;
         });
 
-        services.AddHttpClient<JintAngleSharpJsCrawler>((provider, client) =>
+        services.AddHttpClient<DefaultAngleSharpJintCrawler>((provider, client) =>
         {
             config?.Invoke(provider, client);
             ConfigurationHelper.ConfigureClient(client, provider.GetRequiredService<IOptions<CrawlerOptions>>());

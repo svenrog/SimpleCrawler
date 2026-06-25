@@ -108,7 +108,14 @@
     Element.prototype.dispatchEvent = function () { return true; };
     Element.prototype.setAttributeNode = function () { };
     Element.prototype.getElementsByTagName = function (tag) { var out = []; collectByTag(this, String(tag).toLowerCase(), out); return out; };
+    Element.prototype.querySelector = function (sel) { return querySelectorAll(this, sel)[0] || null; };
+    Element.prototype.querySelectorAll = function (sel) { return querySelectorAll(this, sel); };
+    Element.prototype.closest = function () { return null; };
+    Element.prototype.getBoundingClientRect = function () { return { top: 0, left: 0, right: 0, bottom: 0, width: 0, height: 0, x: 0, y: 0 }; };
     Element.prototype.contains = function (n) { while (n) { if (n === this) return true; n = n.parentNode; } return false; };
+    Object.defineProperty(Element.prototype, 'relList', {
+        get: function () { return { supports: function () { return true; }, add: function () { }, remove: function () { }, toggle: function () { return false; }, contains: function () { return false; } }; }
+    });
     Element.prototype.appendChild = function (child) { this._innerHTML = null; return Node.prototype.appendChild.call(this, child); };
     Element.prototype.insertBefore = function (child, ref) { this._innerHTML = null; return Node.prototype.insertBefore.call(this, child, ref); };
     Object.defineProperty(Element.prototype, 'id', { get: function () { return this._attrs.id || ''; }, set: function (v) { this._attrs.id = String(v); } });
@@ -125,6 +132,20 @@
         set: function (v) { this.childNodes = []; this._innerHTML = null; if (v != null && v !== '') this.appendChild(new Text(v)); }
     });
     Object.defineProperty(Element.prototype, 'outerHTML', { get: function () { return serializeNode(this); } });
+    Object.defineProperty(Element.prototype, 'sheet', {
+        get: function () {
+            if (this.localName !== 'style') return null;
+            if (!this._sheet) {
+                var rules = [];
+                this._sheet = {
+                    cssRules: rules, rules: rules, ownerNode: this,
+                    insertRule: function (rule, index) { var i = index == null ? rules.length : index; rules.splice(i, 0, { cssText: rule }); return i; },
+                    deleteRule: function (index) { rules.splice(index, 1); }
+                };
+            }
+            return this._sheet;
+        }
+    });
 
     function collectByTag(node, tag, out) {
         for (var i = 0; i < node.childNodes.length; i++) {
@@ -145,6 +166,7 @@
         this.head = null;
         this.body = null;
         this.defaultView = global;
+        this.styleSheets = [];
     }
     HTMLDocument.prototype = Object.create(Node.prototype);
     HTMLDocument.prototype.createElement = function (tag) { return new Element(tag); };
@@ -233,6 +255,83 @@
     global.dispatchEvent = function () { return true; };
     global.matchMedia = function () { return { matches: false, addListener: function () { }, removeListener: function () { }, addEventListener: function () { }, removeEventListener: function () { } }; };
     global.getComputedStyle = function () { return { getPropertyValue: function () { return ''; } }; };
+    global.MutationObserver = function () { this.observe = function () { }; this.disconnect = function () { }; this.takeRecords = function () { return []; }; };
+
+    // Minimal ES-module registry so bundler output (static import/export rewritten to
+    // __require/__exp by the host, dynamic import() to __import) can link and lazy-load.
+    // __import defers evaluation to a microtask so the importing module finishes — and its
+    // exports become visible — before a dynamically imported chunk reads them.
+    var _modules = {}, _moduleCache = {};
+    function evaluateModule(key) {
+        if (Object.prototype.hasOwnProperty.call(_moduleCache, key)) return _moduleCache[key];
+        var factory = _modules[key];
+        if (!factory) throw new Error('Module not registered: ' + key);
+        var exports = {};
+        _moduleCache[key] = exports;
+        factory(exports, evaluateModule, function (k) { return Promise.resolve().then(function () { return evaluateModule(k); }); });
+        return exports;
+    }
+    global.__modules = {
+        register: function (key, factory) { _modules[key] = factory; },
+        evaluate: evaluateModule
+    };
+
+    function resolveUrl(u, base) {
+        u = String(u == null ? '' : u);
+        if (/^[a-zA-Z][\w+.-]*:\/\//.test(u)) return u;
+        var b = String(base || global.location.href || 'http://localhost/');
+        var bm = b.match(/^([a-zA-Z][\w+.-]*:\/\/[^\/?#]*)([^?#]*)/) || [];
+        var origin = bm[1] || 'http://localhost';
+        if (u.charAt(0) === '/') return origin + u;
+        if (u.charAt(0) === '#' || u.charAt(0) === '?') return origin + (bm[2] || '/') + u;
+        var dir = (bm[2] || '/').replace(/[^\/]*$/, '');
+        return origin + dir + u;
+    }
+
+    function URLSearchParams(init) {
+        var pairs = [];
+        if (init && init.charAt(0) === '?') init = init.slice(1);
+        if (init) init.split('&').forEach(function (p) {
+            if (!p) return;
+            var i = p.indexOf('=');
+            pairs.push(i < 0 ? [decodeURIComponent(p), ''] : [decodeURIComponent(p.slice(0, i)), decodeURIComponent(p.slice(i + 1))]);
+        });
+        this.get = function (k) { for (var i = 0; i < pairs.length; i++) if (pairs[i][0] === k) return pairs[i][1]; return null; };
+        this.getAll = function (k) { return pairs.filter(function (p) { return p[0] === k; }).map(function (p) { return p[1]; }); };
+        this.has = function (k) { return this.get(k) !== null; };
+        this.set = function (k, v) { this.delete(k); pairs.push([k, String(v)]); };
+        this.append = function (k, v) { pairs.push([k, String(v)]); };
+        this.delete = function (k) { pairs = pairs.filter(function (p) { return p[0] !== k; }); };
+        this.forEach = function (cb) { pairs.forEach(function (p) { cb(p[1], p[0]); }); };
+        this.entries = function () {
+            var i = 0;
+            var it = { next: function () { return i < pairs.length ? { value: pairs[i++], done: false } : { value: undefined, done: true }; } };
+            it[Symbol.iterator] = function () { return it; };
+            return it;
+        };
+        this.keys = function () { return pairs.map(function (p) { return p[0]; })[Symbol.iterator](); };
+        this.values = function () { return pairs.map(function (p) { return p[1]; })[Symbol.iterator](); };
+        this[Symbol.iterator] = this.entries;
+        this.toString = function () { return pairs.map(function (p) { return encodeURIComponent(p[0]) + '=' + encodeURIComponent(p[1]); }).join('&'); };
+    }
+    global.URLSearchParams = URLSearchParams;
+
+    function URL(url, base) {
+        var abs = resolveUrl(url, base);
+        var m = abs.match(/^([a-zA-Z][\w+.-]*:)\/\/([^\/?#]*)([^?#]*)(\?[^#]*)?(#.*)?$/) || [];
+        this.href = abs;
+        this.protocol = m[1] || '';
+        this.host = m[2] || '';
+        this.hostname = (m[2] || '').split(':')[0];
+        this.port = (m[2] || '').split(':')[1] || '';
+        this.pathname = m[3] || '/';
+        this.search = m[4] || '';
+        this.hash = m[5] || '';
+        this.origin = this.protocol + '//' + this.host;
+        this.searchParams = new URLSearchParams(this.search);
+    }
+    URL.prototype.toString = function () { return this.href; };
+    global.URL = URL;
 
     function applyUrl(u) {
         try {
@@ -270,13 +369,17 @@
     global.__crawler = {
         setLocation: function (url) { applyUrl(url); },
         hydrate: function (json) { hydrate(typeof json === 'string' ? JSON.parse(json) : json, null); },
+        pump: function () {
+            if (!tasks.length) return 0;
+            var batch = tasks; tasks = [];
+            for (var i = 0; i < batch.length; i++) { try { batch[i](); } catch (e) { } }
+            return tasks.length;
+        },
+        serialize: function () { return serializeNode(doc.documentElement); },
         finalize: function (maxIters) {
             var iters = 0;
-            while (tasks.length && iters++ < maxIters) {
-                var batch = tasks; tasks = [];
-                for (var i = 0; i < batch.length; i++) { try { batch[i](); } catch (e) { } }
-            }
-            return serializeNode(doc.documentElement);
+            while (tasks.length && iters++ < maxIters) { this.pump(); }
+            return this.serialize();
         }
     };
 })(typeof globalThis !== 'undefined' ? globalThis : this);

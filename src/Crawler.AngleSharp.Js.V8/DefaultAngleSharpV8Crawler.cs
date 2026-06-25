@@ -8,11 +8,11 @@ using Microsoft.Extensions.Options;
 
 namespace Crawler.AngleSharp.Js.V8;
 
-public sealed class V8AngleSharpJsCrawler : AngleSharpJsCrawler<ScrapeResult>
+public sealed class DefaultAngleSharpV8Crawler : AngleSharpJsCrawler<ScrapeResult>
 {
     internal const string SwitcherKey = "anglesharp-js-v8";
 
-    public V8AngleSharpJsCrawler(HttpClient client, [FromKeyedServices(SwitcherKey)] IJsEngineSwitcher switcher, IRobotClient robotClient, IOptions<CrawlerOptions> options, IOptions<JsRenderOptions> renderOptions, ILogger<V8AngleSharpJsCrawler> logger)
+    public DefaultAngleSharpV8Crawler(HttpClient client, [FromKeyedServices(SwitcherKey)] IJsEngineSwitcher switcher, IRobotClient robotClient, IOptions<CrawlerOptions> options, IOptions<JsRenderOptions> renderOptions, ILogger<DefaultAngleSharpV8Crawler> logger)
         : base(client, switcher, robotClient, options, renderOptions, logger)
     {
     }
