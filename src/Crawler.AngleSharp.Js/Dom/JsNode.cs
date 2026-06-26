@@ -1,11 +1,11 @@
-using System.Dynamic;
 using AngleSharp.Dom;
+using System.Dynamic;
 
 namespace Crawler.AngleSharp.Js.Dom;
 
 public class JsNode : DynamicObject
 {
-    private readonly Dictionary<string, object?> _expando = new(StringComparer.Ordinal);
+    private Dictionary<string, object?>? _expando;
 
     internal JsNode(INode node, DomContext context)
     {
@@ -74,18 +74,28 @@ public class JsNode : DynamicObject
     public bool dispatchEvent(object? @event = null) => true;
 
     public override bool TryGetMember(GetMemberBinder binder, out object? result)
-        => _expando.TryGetValue(binder.Name, out result);
+    {
+        if (_expando is null)
+        {
+            result = null;
+            return false;
+        }
+
+        return _expando.TryGetValue(binder.Name, out result);
+    }
 
     public override bool TrySetMember(SetMemberBinder binder, object? value)
     {
         if (TrySetDomProperty(binder.Name, value))
             return true;
 
+        _expando ??= new Dictionary<string, object?>(StringComparer.Ordinal);
         _expando[binder.Name] = value;
+
         return true;
     }
 
-    public override IEnumerable<string> GetDynamicMemberNames() => _expando.Keys;
+    public override IEnumerable<string> GetDynamicMemberNames() => _expando?.Keys ?? Enumerable.Empty<string>();
 
     protected virtual bool TrySetDomProperty(string name, object? value)
     {
