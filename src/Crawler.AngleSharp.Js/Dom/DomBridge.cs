@@ -13,6 +13,12 @@ public sealed class DomBridge
     public object? SetTimeout(params object?[] args) => Schedule(args);
     public object? RequestAnimationFrame(params object?[] args) => Schedule(args);
 
+    public object MatchMedia(params object?[] args)
+    {
+        var query = args.Length > 0 ? args[0]?.ToString() ?? string.Empty : string.Empty;
+        return new JsMediaQueryList(query);
+    }
+
     public object? QueueMicrotask(params object?[] args)
     {
         if (args.Length > 0 && args[0] is { } callback)

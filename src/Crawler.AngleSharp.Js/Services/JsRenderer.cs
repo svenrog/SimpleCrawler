@@ -86,10 +86,16 @@ public sealed class JsRenderer
         engine.EmbedHostObject("history", context.History);
         engine.EmbedHostObject("navigator", context.Navigator);
         engine.EmbedHostObject("localStorage", context.LocalStorage);
+        engine.EmbedHostObject("sessionStorage", context.SessionStorage);
+        engine.EmbedHostObject("crypto", context.Crypto);
+        engine.EmbedHostObject("customElements", context.CustomElements);
         engine.EmbedHostType("URL", typeof(JsUrl));
         engine.EmbedHostType("IntersectionObserver", typeof(JsIntersectionObserver));
+        engine.EmbedHostType("ResizeObserver", typeof(JsResizeObserver));
+        engine.EmbedHostType("MutationObserver", typeof(JsMutationObserver));
 
         var bridge = context.Bridge;
+        engine.EmbedFunction("matchMedia", bridge.MatchMedia);
         engine.EmbedFunction("setTimeout", bridge.SetTimeout);
         engine.EmbedFunction("clearTimeout", bridge.Noop);
         engine.EmbedFunction("setInterval", bridge.SetInterval);
@@ -102,7 +108,11 @@ public sealed class JsRenderer
         engine.EmbedFunction("dispatchEvent", bridge.ReturnTrue);
 
         // The bundle reaches the DOM through window/self; both are just the global object here.
-        engine.Execute("var window=globalThis;var self=globalThis;");
+        // structuredClone has no host equivalent, but the bundle only clones plain data, so a JSON
+        // round-trip stands in (guarded so a native implementation, if present, wins).
+        engine.Execute(
+            "var window=globalThis;var self=globalThis;" +
+            "globalThis.structuredClone=globalThis.structuredClone||function(v){return v===undefined?undefined:JSON.parse(JSON.stringify(v));};");
     }
 
     private void Drain(IJsEngine engine, DomContext context, string pageUrl)

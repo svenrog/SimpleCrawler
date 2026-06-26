@@ -18,5 +18,40 @@
     "key": "cookies",
     "href": "/features/cookies",
     "name": "Cookies"
+  },
+  {
+    "key": "session-storage",
+    "href": "/features/session-storage",
+    "name": "Session storage"
+  },
+  {
+    "key": "match-media",
+    "href": "/features/match-media",
+    "name": "Match media"
+  },
+  {
+    "key": "resize-observer",
+    "href": "/features/resize-observer",
+    "name": "Resize observer"
+  },
+  {
+    "key": "mutation-observer",
+    "href": "/features/mutation-observer",
+    "name": "Mutation observer"
+  },
+  {
+    "key": "structured-clone",
+    "href": "/features/structured-clone",
+    "name": "Structured clone"
+  },
+  {
+    "key": "crypto-random-uuid",
+    "href": "/features/crypto-random-uuid",
+    "name": "Crypto random UUID"
+  },
+  {
+    "key": "custom-elements",
+    "href": "/features/custom-elements",
+    "name": "Custom elements"
   }
 ]

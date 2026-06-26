@@ -17,6 +17,9 @@ public sealed class DomContext
         History = new JsHistory(Location);
         Navigator = new JsNavigator();
         LocalStorage = new JsLocalStorage();
+        SessionStorage = new JsLocalStorage();
+        Crypto = new JsCrypto();
+        CustomElements = new JsCustomElements();
         Bridge = new DomBridge(this);
     }
 
@@ -25,6 +28,9 @@ public sealed class DomContext
     public JsHistory History { get; }
     public JsNavigator Navigator { get; }
     public JsLocalStorage LocalStorage { get; }
+    public JsLocalStorage SessionStorage { get; }
+    public JsCrypto Crypto { get; }
+    public JsCustomElements CustomElements { get; }
     public DomBridge Bridge { get; }
 
     public JsDocument DocumentWrapper => (JsDocument)Wrap(Document)!;
