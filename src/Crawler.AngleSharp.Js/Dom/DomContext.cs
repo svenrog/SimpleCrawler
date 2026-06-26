@@ -20,6 +20,8 @@ public sealed class DomContext
         SessionStorage = new JsLocalStorage();
         Crypto = new JsCrypto();
         CustomElements = new JsCustomElements();
+        Console = new JsConsole();
+        Performance = new JsPerformance(this);
         Bridge = new DomBridge(this);
     }
 
@@ -31,7 +33,11 @@ public sealed class DomContext
     public JsLocalStorage SessionStorage { get; }
     public JsCrypto Crypto { get; }
     public JsCustomElements CustomElements { get; }
+    public JsConsole Console { get; }
+    public JsPerformance Performance { get; }
     public DomBridge Bridge { get; }
+
+    public object? CurrentScript { get; set; }
 
     public JsDocument DocumentWrapper => (JsDocument)Wrap(Document)!;
 

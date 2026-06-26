@@ -18,6 +18,10 @@ public sealed class JsDocument : JsNode
     public object? defaultView => null;
     public object styleSheets => Context.CreateArray([]);
 
+    // Next.js's inline bootstrap asserts document.currentScript is a <script>; the renderer points this
+    // at the executing classic script and clears it afterward (null during modules/deferred work, per spec).
+    public object? currentScript => Context.CurrentScript;
+
     public string cookie
     {
         get => string.Join("; ", _cookies.Select(pair => $"{pair.Key}={pair.Value}"));

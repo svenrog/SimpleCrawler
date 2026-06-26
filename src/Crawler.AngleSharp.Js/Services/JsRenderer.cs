@@ -41,11 +41,11 @@ public sealed class JsRenderer
         using var stream = new MemoryStream(shell, writable: false);
         using var document = await _parser.ParseDocumentAsync(stream, cancellationToken);
 
-        var (classicScripts, moduleEntries) = await CollectScriptsAsync(document, pageUrl, client, _sources, cancellationToken);
+        var (regularScripts, moduleEntries) = await CollectScriptsAsync(document, pageUrl, client, _sources, cancellationToken);
 
         // The markup had a <script>, but none were executable (e.g. JSON, importmap), so the DOM still
         // equals the shell: skip spinning up a JS engine (a fresh V8 isolate / Jint engine) and reserializing.
-        if (classicScripts.Count == 0 && moduleEntries.Count == 0)
+        if (regularScripts.Count == 0 && moduleEntries.Count == 0)
             return shell;
 
         var fetcher = new HttpModuleFetcher(client, _sources, cancellationToken);
@@ -54,8 +54,8 @@ public sealed class JsRenderer
 
         SetupGlobals(engine, context);
 
-        foreach (var script in classicScripts)
-            RunClassic(engine, script, pageUrl);
+        foreach (var script in regularScripts)
+            RunRegular(engine, context, script, pageUrl);
 
         foreach (var module in moduleEntries)
             RunModule(engine, module, pageUrl);
@@ -89,10 +89,16 @@ public sealed class JsRenderer
         engine.EmbedHostObject("sessionStorage", context.SessionStorage);
         engine.EmbedHostObject("crypto", context.Crypto);
         engine.EmbedHostObject("customElements", context.CustomElements);
+        engine.EmbedHostObject("console", context.Console);
+        engine.EmbedHostObject("performance", context.Performance);
         engine.EmbedHostType("URL", typeof(JsUrl));
         engine.EmbedHostType("IntersectionObserver", typeof(JsIntersectionObserver));
         engine.EmbedHostType("ResizeObserver", typeof(JsResizeObserver));
         engine.EmbedHostType("MutationObserver", typeof(JsMutationObserver));
+        engine.EmbedHostType("Event", typeof(JsEvent));
+        engine.EmbedHostType("CustomEvent", typeof(JsCustomEvent));
+        engine.EmbedHostType("TextEncoder", typeof(JsTextEncoder));
+        engine.EmbedHostType("TextDecoder", typeof(JsTextDecoder));
 
         var bridge = context.Bridge;
         engine.EmbedFunction("matchMedia", bridge.MatchMedia);
@@ -113,6 +119,15 @@ public sealed class JsRenderer
         engine.Execute(
             "var window=globalThis;var self=globalThis;" +
             "globalThis.structuredClone=globalThis.structuredClone||function(v){return v===undefined?undefined:JSON.parse(JSON.stringify(v));};");
+
+        // HTMLElement is the one DOM global that bundles *extend* (`class X extends HTMLElement`) rather
+        // than construct, and V8/ClearScript can't `class extends` a CLR host type (its host objects have
+        // no JS prototype) — so unlike Event/CustomEvent above it has to be a real JS class. It is never
+        // instantiated (customElements.define is a no-op), so the body is just no-op stubs.
+        engine.Execute(
+            "globalThis.HTMLElement=globalThis.HTMLElement||class HTMLElement{" +
+            "addEventListener(){}removeEventListener(){}dispatchEvent(){return true;}attachShadow(){return this;}};" +
+            "globalThis.HTMLScriptElement=globalThis.HTMLScriptElement||class HTMLScriptElement extends HTMLElement{};");
     }
 
     private void Drain(IJsEngine engine, DomContext context, string pageUrl)
@@ -143,15 +158,20 @@ public sealed class JsRenderer
         }
     }
 
-    private void RunClassic(IJsEngine engine, string script, string pageUrl)
+    private void RunRegular(IJsEngine engine, DomContext context, RegularScript script, string pageUrl)
     {
+        context.CurrentScript = engine.CreateScriptElement(script.Src);
         try
         {
-            engine.Execute(script);
+            engine.Execute(script.Source);
         }
         catch (JsException ex)
         {
             _logger.LogWarning("Bundle execution error on '{url}': {message}", pageUrl, ex.Message);
+        }
+        finally
+        {
+            context.CurrentScript = null;
         }
     }
 
@@ -200,10 +220,10 @@ public sealed class JsRenderer
         return true;
     }
 
-    private static async Task<(IReadOnlyList<string> Classic, IReadOnlyList<ModuleScript> Modules)> CollectScriptsAsync(IDocument document, string pageUrl, HttpClient client, SourceCache sources, CancellationToken cancellationToken)
+    private static async Task<(IReadOnlyList<RegularScript> Regular, IReadOnlyList<ModuleScript> Modules)> CollectScriptsAsync(IDocument document, string pageUrl, HttpClient client, SourceCache sources, CancellationToken cancellationToken)
     {
         var baseUri = new Uri(pageUrl);
-        var classic = new List<string>();
+        var regular = new List<RegularScript>();
         var modules = new List<ModuleScript>();
 
         foreach (var element in document.QuerySelectorAll("script"))
@@ -224,7 +244,7 @@ public sealed class JsRenderer
                 if (isModule)
                     modules.Add(new ModuleScript(pageUrl, script.TextContent));
                 else
-                    classic.Add(script.TextContent);
+                    regular.Add(new RegularScript(script.TextContent, pageUrl));
 
                 continue;
             }
@@ -237,10 +257,10 @@ public sealed class JsRenderer
             if (isModule)
                 modules.Add(new ModuleScript(absolute.ToString(), source));
             else
-                classic.Add(source);
+                regular.Add(new RegularScript(source, absolute.ToString()));
         }
 
-        return (classic, modules);
+        return (regular, modules);
     }
 
     private static async Task<string?> FetchSourceAsync(HttpClient client, SourceCache sources, Uri absolute, CancellationToken cancellationToken)
