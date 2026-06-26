@@ -93,6 +93,8 @@ public sealed class JsRenderer
         engine.EmbedHostType("IntersectionObserver", typeof(JsIntersectionObserver));
         engine.EmbedHostType("ResizeObserver", typeof(JsResizeObserver));
         engine.EmbedHostType("MutationObserver", typeof(JsMutationObserver));
+        engine.EmbedHostType("Event", typeof(JsEvent));
+        engine.EmbedHostType("CustomEvent", typeof(JsCustomEvent));
 
         var bridge = context.Bridge;
         engine.EmbedFunction("matchMedia", bridge.MatchMedia);
@@ -113,6 +115,14 @@ public sealed class JsRenderer
         engine.Execute(
             "var window=globalThis;var self=globalThis;" +
             "globalThis.structuredClone=globalThis.structuredClone||function(v){return v===undefined?undefined:JSON.parse(JSON.stringify(v));};");
+
+        // HTMLElement is the one DOM global that bundles *extend* (`class X extends HTMLElement`) rather
+        // than construct, and V8/ClearScript can't `class extends` a CLR host type (its host objects have
+        // no JS prototype) — so unlike Event/CustomEvent above it has to be a real JS class. It is never
+        // instantiated (customElements.define is a no-op), so the body is just no-op stubs.
+        engine.Execute(
+            "globalThis.HTMLElement=globalThis.HTMLElement||class HTMLElement{" +
+            "addEventListener(){}removeEventListener(){}dispatchEvent(){return true;}attachShadow(){return this;}};");
     }
 
     private void Drain(IJsEngine engine, DomContext context, string pageUrl)
