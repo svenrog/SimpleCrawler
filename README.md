@@ -15,7 +15,7 @@ This project stemmed from the need to crawl a single domain in preparation of lo
 | Integration  | Static responses | Client (js) rendering |
 | ---------- | ------- | ------- |
 | [HtmlAgilityPack](https://html-agility-pack.net/) | :heavy_check_mark: | :x: |
-| [AngleSharp](https://anglesharp.github.io/) | :heavy_check_mark: | :x: |
+| [AngleSharp](https://anglesharp.github.io/) | :heavy_check_mark: | :heavy_plus_sign: |
 | [Playwright](https://playwright.dev/) | :heavy_check_mark: | :heavy_check_mark: |
 | [Puppeteer Sharp](https://www.puppeteersharp.com/) | :heavy_check_mark: | :heavy_check_mark: |
 | [Selenium WebDriver](https://www.selenium.dev/) | :skull: | :skull: |
@@ -39,11 +39,14 @@ Adjusting which implementation is used can be done by referencing another implem
 
 The Anglesharp maintainers claims the library handles JavaScript with AngleSharp.Js. In reality it only does so on an experimental level, complex libraries like React do not work.
 
+So we added the `Crawler.AngleSharp.Js` project that provides a core Js-based rendering engine for simpler sites. There are 2 script engine implementations, `ClearScript.V8` and `Jint`.
+
+Both are tested with major Js frameworks like `React`, `Vue`, `Preact`, `Svelte` and `Solid`.
+
 ### Selenium WebDriver
 
 This package isn't a good fit for this codebase and is dated. 
 There hasn't been any discussions in the Google Groups for years and the maintainers [seem hesitant to implement async](https://groups.google.com/g/selenium-developers/c/nk8IywKyJ08).
-
 
 ## Other things of note
 
