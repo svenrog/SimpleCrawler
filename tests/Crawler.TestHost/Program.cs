@@ -6,7 +6,11 @@ public partial class Program
 {
     public static void Main(string[] args)
     {
-        var app = StaticWebApplicationFactory.Create();
+        var framework = args.FirstOrDefault();
+        var app = framework is null
+            ? StaticWebApplicationFactory.Create()
+            : SpaWebApplicationFactory.Create(framework: framework);
+
         app.Run();
     }
 }

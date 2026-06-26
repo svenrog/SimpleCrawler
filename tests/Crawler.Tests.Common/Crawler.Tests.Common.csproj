@@ -13,10 +13,16 @@
 
 	<ItemGroup>
 		<ProjectReference Include="..\..\src\Crawler.AngleSharp\Crawler.AngleSharp.csproj" />
+		<ProjectReference Include="..\..\src\Crawler.AngleSharp.Js.Jint\Crawler.AngleSharp.Js.Jint.csproj" />
+		<ProjectReference Include="..\..\src\Crawler.AngleSharp.Js.V8\Crawler.AngleSharp.Js.V8.csproj" />
 		<ProjectReference Include="..\..\src\Crawler.Core\Crawler.Core.csproj" />
 		<ProjectReference Include="..\..\src\Crawler.HtmlAgilityPack\Crawler.HtmlAgilityPack.csproj" />
 		<ProjectReference Include="..\..\src\Crawler.Playwright\Crawler.Playwright.csproj" />
 		<ProjectReference Include="..\..\src\Crawler.Puppeteer\Crawler.Puppeteer.csproj" />
+	</ItemGroup>
+
+	<ItemGroup>
+		
 	</ItemGroup>
 
 </Project>

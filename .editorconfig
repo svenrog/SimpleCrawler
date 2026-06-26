@@ -17,6 +17,13 @@ dotnet_naming_symbols.private_fields.applicable_accessibilities = private
 dotnet_naming_style.underscore_camel_case.required_prefix = _
 dotnet_naming_style.underscore_camel_case.capitalization = camel_case
 
+[src/Crawler.AngleSharp.Js/**.cs]
+
+# CA1822: Mark members as static - AngleSharp.Js has a DomBridge
+# it requires stubbing browser features.
+dotnet_diagnostic.CA1822.severity = none
+dotnet_diagnostic.IDE0060.severity = none
+
 [tests/Crawler.Benchmarks/**.cs]
 
 # CA1822: Mark members as static - BenchmarkDotNet requires instance [Benchmark] methods,

@@ -10,9 +10,9 @@ public sealed class StaticHostFixture : AbstractHostFixture
     public const string HostName = "http://localhost:5260/";
     public static readonly Uri HostUri = new(HostName);
 
-    protected override WebApplication CreateHost()
+    protected override IEnumerable<WebApplication> CreateHosts()
     {
-        return StaticWebApplicationFactory.Create(HostName);
+        return [StaticWebApplicationFactory.Create(HostName)];
     }
 
     protected override List<string> GetLinks()

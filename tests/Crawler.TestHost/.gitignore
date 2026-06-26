@@ -1,0 +1,5 @@
+# Astro
+.astro/
+
+# dependencies
+node_modules/
