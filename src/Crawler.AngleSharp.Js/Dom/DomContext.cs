@@ -51,6 +51,18 @@ public sealed class DomContext
 
     public object WrapAll(IEnumerable<INode> nodes)
     {
+        // The DOM collections (querySelectorAll, childNodes) expose a count, so wrap straight into a
+        // right-sized array and hand it to the engine without the intermediate growing List + copy.
+        if (nodes is IReadOnlyCollection<INode> collection)
+        {
+            var array = new object?[collection.Count];
+            var index = 0;
+            foreach (var node in nodes)
+                array[index++] = Wrap(node);
+
+            return _engine.CreateArray(array);
+        }
+
         var items = new List<object?>();
         foreach (var node in nodes)
             items.Add(Wrap(node));

@@ -8,11 +8,13 @@ internal sealed class JintModuleLoader : IModuleLoader
 {
     private readonly IModuleFetcher _fetcher;
     private readonly Uri _baseUri;
+    private readonly JintModuleCache _cache;
 
-    public JintModuleLoader(IModuleFetcher fetcher, Uri baseUri)
+    public JintModuleLoader(IModuleFetcher fetcher, Uri baseUri, JintModuleCache cache)
     {
         _fetcher = fetcher;
         _baseUri = baseUri;
+        _cache = cache;
     }
 
     public ResolvedSpecifier Resolve(string? referencingModuleLocation, ModuleRequest moduleRequest)
@@ -41,7 +43,7 @@ internal sealed class JintModuleLoader : IModuleLoader
     public Module LoadModule(global::Jint.Engine engine, ResolvedSpecifier resolved)
     {
         var uri = resolved.Uri ?? new Uri(resolved.Key);
-        var source = _fetcher.Fetch(uri) ?? "export {};";
-        return ModuleFactory.BuildSourceTextModule(engine, resolved, source);
+        var prepared = _cache.GetOrPrepare(uri, _fetcher);
+        return ModuleFactory.BuildSourceTextModule(engine, in prepared);
     }
 }

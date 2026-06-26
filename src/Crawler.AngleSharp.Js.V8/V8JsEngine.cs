@@ -94,7 +94,8 @@ internal sealed class V8JsEngine : IJsEngine
         // A plain .NET array reaches JS as a host object without a JS `length`, which breaks
         // Array.prototype.slice.call on it; spreading through a cached JS function yields a real array.
         _arrayFactory ??= (ScriptObject)_engine.Evaluate("(function(){return Array.prototype.slice.call(arguments);})");
-        return _arrayFactory.InvokeAsFunction([.. items]);
+        var args = items as object?[] ?? [.. items];
+        return _arrayFactory.InvokeAsFunction(args);
     }
 
     public void InvokeCallback(object callback)
