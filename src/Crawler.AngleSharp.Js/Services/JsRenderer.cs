@@ -68,7 +68,10 @@ public sealed class JsRenderer
         engine.EmbedHostObject("document", context.DocumentWrapper);
         engine.EmbedHostObject("location", context.Location);
         engine.EmbedHostObject("history", context.History);
+        engine.EmbedHostObject("navigator", context.Navigator);
+        engine.EmbedHostObject("localStorage", context.LocalStorage);
         engine.EmbedHostType("URL", typeof(JsUrl));
+        engine.EmbedHostType("IntersectionObserver", typeof(JsIntersectionObserver));
 
         var bridge = context.Bridge;
         engine.EmbedFunction("setTimeout", bridge.SetTimeout);

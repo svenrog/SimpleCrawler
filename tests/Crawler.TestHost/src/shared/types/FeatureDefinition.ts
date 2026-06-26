@@ -1,0 +1,1 @@
+export type FeatureDefinition = { key: string; href: string; name: string };
