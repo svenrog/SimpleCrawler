@@ -18,6 +18,8 @@ public interface IJsEngine : IDisposable
 
     object CreateArray(IReadOnlyList<object?> items);
 
+    object CreateScriptElement(string src);
+
     void InvokeCallback(object callback);
 
     void RunMicrotasks();
