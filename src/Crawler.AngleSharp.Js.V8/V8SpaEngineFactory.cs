@@ -1,3 +1,5 @@
+using Crawler.AngleSharp.Js.Abstractions;
+
 namespace Crawler.AngleSharp.Js.V8;
 
 internal sealed class V8SpaEngineFactory : ISpaEngineFactory

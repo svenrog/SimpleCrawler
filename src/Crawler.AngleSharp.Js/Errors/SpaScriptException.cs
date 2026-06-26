@@ -1,4 +1,4 @@
-namespace Crawler.AngleSharp.Js;
+namespace Crawler.AngleSharp.Js.Errors;
 
 public sealed class SpaScriptException : Exception
 {

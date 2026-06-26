@@ -1,15 +1,18 @@
-using System.Text;
 using AngleSharp.Dom;
 using AngleSharp.Html.Dom;
 using AngleSharp.Html.Parser;
+using Crawler.AngleSharp.Js.Abstractions;
 using Crawler.AngleSharp.Js.Dom;
+using Crawler.AngleSharp.Js.Errors;
+using Crawler.AngleSharp.Js.Models;
 using Microsoft.Extensions.Logging;
+using System.Text;
 
-namespace Crawler.AngleSharp.Js;
+namespace Crawler.AngleSharp.Js.Services;
 
 public sealed class SpaRenderer
 {
-    private const int IdleTurnsBeforeSettled = 3;
+    private const int _idleTurnsBeforeSettled = 3;
 
     private static readonly HtmlParser _parser = new();
 
@@ -81,7 +84,7 @@ public sealed class SpaRenderer
         // keep pumping through empty turns until the queue has stayed idle for a few consecutive turns.
         var iterations = 0;
         var idle = 0;
-        while (iterations++ < _options.MaxTaskDrainIterations && idle < IdleTurnsBeforeSettled)
+        while (iterations++ < _options.MaxTaskDrainIterations && idle < _idleTurnsBeforeSettled)
         {
             var batch = context.TakeTasks();
             foreach (var callback in batch)

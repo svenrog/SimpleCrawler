@@ -1,3 +1,5 @@
+using Crawler.AngleSharp.Js.Abstractions;
+using Crawler.AngleSharp.Js.Models;
 using Crawler.Core;
 using Crawler.Core.Models;
 using Crawler.Core.Robots;

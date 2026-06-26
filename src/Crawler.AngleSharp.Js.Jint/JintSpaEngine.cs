@@ -1,3 +1,6 @@
+using Crawler.AngleSharp.Js.Abstractions;
+using Crawler.AngleSharp.Js.Errors;
+using Crawler.AngleSharp.Js.Models;
 using Jint;
 using Jint.Native;
 using Jint.Runtime;
@@ -29,8 +32,7 @@ internal sealed class JintSpaEngine : ISpaEngine
     {
         // Jint binds JS calls to a fixed-arity delegate leniently (missing args become null, extra
         // args are ignored), so a four-parameter adapter covers every global the bundle calls.
-        Func<object?, object?, object?, object?, object?> adapter = (a, b, c, d) => function(a, b, c, d);
-        _engine.SetValue(name, adapter);
+        _engine.SetValue(name, (Func<object?, object?, object?, object?, object?>)((a, b, c, d) => function(a, b, c, d)));
     }
 
     public void Execute(string script)
@@ -75,7 +77,7 @@ internal sealed class JintSpaEngine : ISpaEngine
     public void InvokeCallback(object callback)
     {
         if (callback is Func<JsValue, JsValue[], JsValue> function)
-            function(JsValue.Undefined, Array.Empty<JsValue>());
+            function(JsValue.Undefined, []);
         else if (callback is JsValue value)
             _engine.Invoke(value);
     }

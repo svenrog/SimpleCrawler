@@ -1,4 +1,6 @@
-namespace Crawler.AngleSharp.Js;
+using Crawler.AngleSharp.Js.Abstractions;
+
+namespace Crawler.AngleSharp.Js.Services;
 
 internal sealed class HttpModuleFetcher : IModuleFetcher
 {

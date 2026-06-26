@@ -1,4 +1,5 @@
 using AngleSharp.Dom;
+using Crawler.AngleSharp.Js.Abstractions;
 
 namespace Crawler.AngleSharp.Js.Dom;
 

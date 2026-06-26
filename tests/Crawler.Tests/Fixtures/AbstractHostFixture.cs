@@ -26,8 +26,8 @@ public abstract class AbstractHostFixture : IAsyncDisposable
         var options = CreateOptions();
 
         services.AddAngleSharpCrawler(options);
-        services.AddAngleSharpJsJintCrawler(options);
-        services.AddAngleSharpJsV8Crawler(options);
+        services.AddAngleSharpJintCrawler(options);
+        services.AddAngleSharpV8Crawler(options);
         services.AddHtmlAgilityPackCrawler(options);
         services.AddPlaywrightCrawler(options);
         services.AddPuppeteerCrawler(options);

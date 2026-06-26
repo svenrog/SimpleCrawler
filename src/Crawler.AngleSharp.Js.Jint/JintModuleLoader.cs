@@ -1,4 +1,4 @@
-using Crawler.AngleSharp.Js;
+using Crawler.AngleSharp.Js.Abstractions;
 using Jint.Runtime.Modules;
 using Module = Jint.Runtime.Modules.Module;
 

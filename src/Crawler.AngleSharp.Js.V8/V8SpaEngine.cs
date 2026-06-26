@@ -1,3 +1,6 @@
+using Crawler.AngleSharp.Js.Abstractions;
+using Crawler.AngleSharp.Js.Errors;
+using Crawler.AngleSharp.Js.Models;
 using Microsoft.ClearScript;
 using Microsoft.ClearScript.JavaScript;
 using Microsoft.ClearScript.V8;
@@ -8,7 +11,7 @@ namespace Crawler.AngleSharp.Js.V8;
 
 internal sealed class V8SpaEngine : ISpaEngine
 {
-    private const int ModuleEvaluationTimeoutMs = 30000;
+    private const int _moduleEvaluationTimeoutMs = 30000;
 
     private readonly V8ScriptEngine _engine;
     private readonly V8ModuleLoader _loader;
@@ -65,7 +68,7 @@ internal sealed class V8SpaEngine : ISpaEngine
 
             var promise = _engine.Evaluate($"import({JsonSerializer.Serialize(specifier)})");
             var task = (Task<object>)JavaScriptExtensions.ToTask(promise);
-            task.Wait(ModuleEvaluationTimeoutMs);
+            task.Wait(_moduleEvaluationTimeoutMs);
         }
         catch (ScriptEngineException ex)
         {

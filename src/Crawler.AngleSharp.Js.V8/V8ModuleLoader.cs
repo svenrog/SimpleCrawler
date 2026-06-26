@@ -1,4 +1,4 @@
-using Crawler.AngleSharp.Js;
+using Crawler.AngleSharp.Js.Abstractions;
 using Microsoft.ClearScript;
 using Microsoft.ClearScript.JavaScript;
 

@@ -1,3 +1,4 @@
+using Crawler.AngleSharp.Js.Models;
 using Crawler.Core;
 using Crawler.Core.Helpers;
 using Crawler.Core.Robots;

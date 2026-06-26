@@ -1,3 +1,5 @@
+using Crawler.AngleSharp.Js.Abstractions;
+
 namespace Crawler.AngleSharp.Js.Jint;
 
 internal sealed class JintSpaEngineFactory : ISpaEngineFactory

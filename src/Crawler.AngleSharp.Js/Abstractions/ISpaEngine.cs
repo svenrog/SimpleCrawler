@@ -1,4 +1,6 @@
-namespace Crawler.AngleSharp.Js;
+using Crawler.AngleSharp.Js.Models;
+
+namespace Crawler.AngleSharp.Js.Abstractions;
 
 public interface ISpaEngine : IDisposable
 {

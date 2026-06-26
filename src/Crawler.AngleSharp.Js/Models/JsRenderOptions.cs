@@ -1,4 +1,4 @@
-namespace Crawler.AngleSharp.Js;
+namespace Crawler.AngleSharp.Js.Models;
 
 public class JsRenderOptions
 {
