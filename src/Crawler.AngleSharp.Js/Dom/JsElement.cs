@@ -21,19 +21,19 @@ public class JsElement : JsNode
     public string className
     {
         get => Element.ClassName ?? string.Empty;
-        set => TrySetDomProperty("className", value);
+        set => Element.ClassName = value ?? string.Empty;
     }
 
     public string id
     {
         get => Element.Id ?? string.Empty;
-        set => TrySetDomProperty("id", value);
+        set => Element.Id = value ?? string.Empty;
     }
 
     public string innerHTML
     {
         get => Element.InnerHtml;
-        set => TrySetDomProperty("innerHTML", value);
+        set => Element.InnerHtml = value ?? string.Empty;
     }
 
     public string outerHTML => Element.OuterHtml;
@@ -52,22 +52,4 @@ public class JsElement : JsNode
     public object querySelectorAll(string selector) => Context.WrapAll(Element.QuerySelectorAll(selector));
     public object getElementsByTagName(string name) => Context.WrapAll(Element.GetElementsByTagName(name));
     public object? closest(string selector) => Context.Wrap(Element.Closest(selector));
-
-    protected override bool TrySetDomProperty(string name, object? value)
-    {
-        switch (name)
-        {
-            case "className":
-                Element.ClassName = value?.ToString() ?? string.Empty;
-                return true;
-            case "id":
-                Element.Id = value?.ToString() ?? string.Empty;
-                return true;
-            case "innerHTML":
-                Element.InnerHtml = value?.ToString() ?? string.Empty;
-                return true;
-            default:
-                return base.TrySetDomProperty(name, value);
-        }
-    }
 }
