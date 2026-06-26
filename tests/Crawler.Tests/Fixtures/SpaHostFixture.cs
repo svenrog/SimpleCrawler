@@ -16,10 +16,17 @@ public sealed class SpaHostFixture : AbstractHostFixture
         return $"http://localhost:{_basePort + Array.IndexOf(Frameworks, framework)}/";
     }
 
+    // Page links and the browser-API feature links (emitted by feature-nav.ts only when the JS engine
+    // implements each API) come from the same JSON the frontend itself consumes.
     public IReadOnlyList<string> LinksFor(string framework)
     {
-        var json = ResourceHelper.GetJsonResponse("default");
-        return LinkAssertions.GetJsonLinks(new Uri(HostName(framework)), json);
+        var baseUri = new Uri(HostName(framework));
+
+        return
+        [
+            .. LinkAssertions.GetJsonLinks(baseUri, ResourceHelper.GetJsonResponse("default")),
+            .. LinkAssertions.GetJsonLinks(baseUri, ResourceHelper.GetJsonResponse("features")),
+        ];
     }
 
     protected override IEnumerable<WebApplication> CreateHosts()

@@ -15,12 +15,16 @@ public sealed class DomContext
         Document = document;
         Location = new JsLocation(pageUri);
         History = new JsHistory(Location);
+        Navigator = new JsNavigator();
+        LocalStorage = new JsLocalStorage();
         Bridge = new DomBridge(this);
     }
 
     public IDocument Document { get; }
     public JsLocation Location { get; }
     public JsHistory History { get; }
+    public JsNavigator Navigator { get; }
+    public JsLocalStorage LocalStorage { get; }
     public DomBridge Bridge { get; }
 
     public JsDocument DocumentWrapper => (JsDocument)Wrap(Document)!;

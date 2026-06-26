@@ -1,0 +1,22 @@
+[
+  {
+    "key": "geolocation",
+    "href": "/features/geolocation",
+    "name": "Geolocation"
+  },
+  {
+    "key": "local-storage",
+    "href": "/features/local-storage",
+    "name": "Local storage"
+  },
+  {
+    "key": "intersection-observer",
+    "href": "/features/intersection-observer",
+    "name": "Intersection observer"
+  },
+  {
+    "key": "cookies",
+    "href": "/features/cookies",
+    "name": "Cookies"
+  }
+]
