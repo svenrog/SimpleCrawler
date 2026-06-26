@@ -1,4 +1,6 @@
+using AngleSharp;
 using AngleSharp.Dom;
+using AngleSharp.Html;
 using AngleSharp.Html.Dom;
 using AngleSharp.Html.Parser;
 using Crawler.AngleSharp.Js.Abstractions;
@@ -15,10 +17,12 @@ public sealed class JsRenderer
     private const int _idleTurnsBeforeSettled = 3;
 
     private static readonly HtmlParser _parser = new();
+    private static readonly UTF8Encoding _utf8NoBom = new(encoderShouldEmitUTF8Identifier: false);
 
     private readonly IJsEngineFactory _engineFactory;
     private readonly JsRenderOptions _options;
     private readonly ILogger _logger;
+    private readonly SourceCache _sources = new();
 
     public JsRenderer(IJsEngineFactory engineFactory, JsRenderOptions options, ILogger logger)
     {
@@ -38,14 +42,14 @@ public sealed class JsRenderer
         using var stream = new MemoryStream(shell, writable: false);
         using var document = await _parser.ParseDocumentAsync(stream, cancellationToken);
 
-        var (classicScripts, moduleEntries) = await CollectScriptsAsync(document, pageUrl, client, cancellationToken);
+        var (classicScripts, moduleEntries) = await CollectScriptsAsync(document, pageUrl, client, _sources, cancellationToken);
 
         // The markup had a <script>, but none were executable (e.g. JSON, importmap), so the DOM still
         // equals the shell: skip spinning up a JS engine (a fresh V8 isolate / Jint engine) and reserializing.
         if (classicScripts.Count == 0 && moduleEntries.Count == 0)
             return shell;
 
-        var fetcher = new HttpModuleFetcher(client, cancellationToken);
+        var fetcher = new HttpModuleFetcher(client, _sources, cancellationToken);
         using var engine = _engineFactory.Create(fetcher, pageUri);
         var context = new DomContext(document, engine, pageUri);
 
@@ -59,8 +63,21 @@ public sealed class JsRenderer
 
         Drain(engine, context, pageUrl);
 
-        var rendered = document.DocumentElement?.OuterHtml ?? string.Empty;
-        return Encoding.UTF8.GetBytes(rendered);
+        return Serialize(document.DocumentElement);
+    }
+
+    // Stream the rendered tree straight to UTF-8 bytes rather than materializing OuterHtml first: a
+    // rendered SPA page is large enough that the intermediate string would be a per-page LOH allocation.
+    private static byte[] Serialize(IElement? root)
+    {
+        if (root is null)
+            return [];
+
+        using var buffer = new MemoryStream();
+        using (var writer = new StreamWriter(buffer, _utf8NoBom, leaveOpen: true))
+            root.ToHtml(writer, HtmlMarkupFormatter.Instance);
+
+        return buffer.ToArray();
     }
 
     private static void SetupGlobals(IJsEngine engine, DomContext context)
@@ -174,7 +191,7 @@ public sealed class JsRenderer
         return true;
     }
 
-    private static async Task<(IReadOnlyList<string> Classic, IReadOnlyList<ModuleScript> Modules)> CollectScriptsAsync(IDocument document, string pageUrl, HttpClient client, CancellationToken cancellationToken)
+    private static async Task<(IReadOnlyList<string> Classic, IReadOnlyList<ModuleScript> Modules)> CollectScriptsAsync(IDocument document, string pageUrl, HttpClient client, SourceCache sources, CancellationToken cancellationToken)
     {
         var baseUri = new Uri(pageUrl);
         var classic = new List<string>();
@@ -204,11 +221,9 @@ public sealed class JsRenderer
             }
 
             var absolute = new Uri(baseUri, src);
-            using var response = await client.GetAsync(absolute, cancellationToken);
-            if (!response.IsSuccessStatusCode)
+            var source = await FetchSourceAsync(client, sources, absolute, cancellationToken);
+            if (source is null)
                 continue;
-
-            var source = await response.Content.ReadAsStringAsync(cancellationToken);
 
             if (isModule)
                 modules.Add(new ModuleScript(absolute.ToString(), source));
@@ -217,5 +232,15 @@ public sealed class JsRenderer
         }
 
         return (classic, modules);
+    }
+
+    private static async Task<string?> FetchSourceAsync(HttpClient client, SourceCache sources, Uri absolute, CancellationToken cancellationToken)
+    {
+        if (sources.TryGet(absolute, out var cached))
+            return cached;
+
+        using var response = await client.GetAsync(absolute, cancellationToken);
+        var source = response.IsSuccessStatusCode ? await response.Content.ReadAsStringAsync(cancellationToken) : null;
+        return sources.Store(absolute, source);
     }
 }

@@ -12,10 +12,12 @@ namespace Crawler.AngleSharp.Js.Jint;
 internal sealed class JintJsEngine : IJsEngine
 {
     private readonly Engine _engine;
+    private readonly JintModuleCache _moduleCache;
 
-    public JintJsEngine(IModuleFetcher fetcher, Uri baseUri)
+    public JintJsEngine(IModuleFetcher fetcher, Uri baseUri, JintModuleCache moduleCache)
     {
-        _engine = new Engine(options => options.EnableModules(new JintModuleLoader(fetcher, baseUri)));
+        _moduleCache = moduleCache;
+        _engine = new Engine(options => options.EnableModules(new JintModuleLoader(fetcher, baseUri, moduleCache)));
     }
 
     public void EmbedHostObject(string name, object value)
@@ -51,7 +53,8 @@ internal sealed class JintJsEngine : IJsEngine
     {
         try
         {
-            _engine.Modules.Add(specifier, source);
+            var prepared = _moduleCache.GetOrPrepare(specifier, source);
+            _engine.Modules.Add(specifier, builder => builder.AddModule(in prepared));
             _engine.Modules.Import(specifier);
         }
         catch (JavaScriptException ex)
@@ -71,7 +74,8 @@ internal sealed class JintJsEngine : IJsEngine
 
     public object CreateArray(IReadOnlyList<object?> items)
     {
-        return JsValue.FromObject(_engine, items.ToArray());
+        var array = items as object?[] ?? [.. items];
+        return JsValue.FromObject(_engine, array);
     }
 
     public void InvokeCallback(object callback)
