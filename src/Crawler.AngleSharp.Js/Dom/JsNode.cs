@@ -1,12 +1,9 @@
 using AngleSharp.Dom;
-using System.Dynamic;
 
 namespace Crawler.AngleSharp.Js.Dom;
 
-public class JsNode : DynamicObject
+public class JsNode
 {
-    private Dictionary<string, object?>? _expando;
-
     internal JsNode(INode node, DomContext context)
     {
         Node = node;
@@ -29,7 +26,13 @@ public class JsNode : DynamicObject
     public string textContent
     {
         get => Node.TextContent;
-        set => TrySetDomProperty("textContent", value);
+        set => Node.TextContent = value ?? string.Empty;
+    }
+
+    public string nodeValue
+    {
+        get => Node.TextContent;
+        set => Node.TextContent = value ?? string.Empty;
     }
 
     public object? appendChild(JsNode child)
@@ -72,41 +75,4 @@ public class JsNode : DynamicObject
     public void addEventListener(object? type, object? listener = null, object? options = null) { }
     public void removeEventListener(object? type, object? listener = null, object? options = null) { }
     public bool dispatchEvent(object? @event = null) => true;
-
-    public override bool TryGetMember(GetMemberBinder binder, out object? result)
-    {
-        if (_expando is null)
-        {
-            result = null;
-            return false;
-        }
-
-        return _expando.TryGetValue(binder.Name, out result);
-    }
-
-    public override bool TrySetMember(SetMemberBinder binder, object? value)
-    {
-        if (TrySetDomProperty(binder.Name, value))
-            return true;
-
-        _expando ??= new Dictionary<string, object?>(StringComparer.Ordinal);
-        _expando[binder.Name] = value;
-
-        return true;
-    }
-
-    public override IEnumerable<string> GetDynamicMemberNames() => _expando?.Keys ?? Enumerable.Empty<string>();
-
-    protected virtual bool TrySetDomProperty(string name, object? value)
-    {
-        switch (name)
-        {
-            case "textContent":
-            case "nodeValue":
-                Node.TextContent = value?.ToString() ?? string.Empty;
-                return true;
-            default:
-                return false;
-        }
-    }
 }
