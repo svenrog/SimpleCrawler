@@ -13,15 +13,21 @@ internal sealed class V8JsEngine : IJsEngine
 {
     private const int _moduleEvaluationTimeoutMs = 30000;
 
+    private readonly V8RuntimePool _pool;
+    private readonly V8Runtime _runtime;
     private readonly V8ScriptEngine _engine;
     private readonly V8ModuleLoader _loader;
     private ScriptObject? _arrayFactory;
 
-    public V8JsEngine(IModuleFetcher fetcher, Uri baseUri)
+    public V8JsEngine(IModuleFetcher fetcher, Uri baseUri, V8RuntimePool pool)
     {
+        // A fresh context on a pooled isolate, not a fresh isolate: the context's globals are isolated
+        // (so per-page state is clean) while the isolate's heap and compilation cache carry over.
         // EnableDynamicModuleImports: V8 rejects import() as "Not supported" otherwise (SPAs use it
         // for lazy routes). EnableTaskPromiseConversion: lets us await the entry's import() as a Task.
-        _engine = new V8ScriptEngine(V8ScriptEngineFlags.EnableDynamicModuleImports | V8ScriptEngineFlags.EnableTaskPromiseConversion);
+        _pool = pool;
+        _runtime = pool.Rent();
+        _engine = _runtime.CreateScriptEngine(V8ScriptEngineFlags.EnableDynamicModuleImports | V8ScriptEngineFlags.EnableTaskPromiseConversion);
         _loader = new V8ModuleLoader(fetcher, baseUri);
         _engine.DocumentSettings.AccessFlags = DocumentAccessFlags.EnableAllLoading;
         _engine.DocumentSettings.Loader = _loader;
@@ -111,5 +117,6 @@ internal sealed class V8JsEngine : IJsEngine
     public void Dispose()
     {
         _engine.Dispose();
+        _pool.Return(_runtime);
     }
 }
