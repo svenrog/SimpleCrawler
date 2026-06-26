@@ -14,7 +14,7 @@ public sealed class JsDocument : JsNode
     public object? head => Context.Wrap(Document.Head);
     public object? body => Context.Wrap(Document.Body);
     public object? defaultView => null;
-    public object styleSheets => Context.CreateArray(Array.Empty<object?>());
+    public object styleSheets => Context.CreateArray([]);
 
     public object createElement(string name) => Context.Wrap(Document.CreateElement(name))!;
 

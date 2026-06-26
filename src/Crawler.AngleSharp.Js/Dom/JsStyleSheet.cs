@@ -9,7 +9,7 @@ public sealed class JsStyleSheet
         _context = context;
     }
 
-    public object cssRules => _context.CreateArray(Array.Empty<object?>());
+    public object cssRules => _context.CreateArray([]);
 
     public double insertRule(object? rule, object? index = null) => 0;
 

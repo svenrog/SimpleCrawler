@@ -1,13 +1,13 @@
+using AngleSharp.Dom;
 using System.Dynamic;
 using System.Text;
-using AngleSharp.Dom;
 
 namespace Crawler.AngleSharp.Js.Dom;
 
 public sealed class JsStyle : DynamicObject
 {
     private readonly IElement _element;
-    private readonly List<KeyValuePair<string, string>> _declarations = new();
+    private readonly List<KeyValuePair<string, string>> _declarations = [];
 
     internal JsStyle(IElement element)
     {
