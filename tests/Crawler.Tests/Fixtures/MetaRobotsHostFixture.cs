@@ -24,7 +24,7 @@ public sealed class MetaRobotsHostFixture : AbstractHostFixture
         };
     }
 
-    protected override WebApplication CreateHost()
+    protected override IEnumerable<WebApplication> CreateHosts()
     {
         Environment.SetEnvironmentVariable("ASPNETCORE_URLS", HostName);
 
@@ -44,7 +44,7 @@ public sealed class MetaRobotsHostFixture : AbstractHostFixture
             };
         });
 
-        return app;
+        return [app];
     }
 
     private static string Page(string robots, params string[] hrefs)

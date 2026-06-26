@@ -12,9 +12,9 @@ public sealed class RobotsHostFixture : AbstractHostFixture
     public const string HostName = "http://localhost:5264/";
     public static readonly Uri HostUri = new(HostName);
 
-    protected override WebApplication CreateHost()
+    protected override IEnumerable<WebApplication> CreateHosts()
     {
-        return StaticWebApplicationFactory.CreateWithoutLinks(HostName);
+        return [StaticWebApplicationFactory.CreateWithoutLinks(HostName)];
     }
 
     protected override List<string> GetLinks()

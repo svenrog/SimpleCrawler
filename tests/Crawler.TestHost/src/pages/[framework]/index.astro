@@ -1,0 +1,28 @@
+---
+import Layout from '../../layouts/Layout.astro';
+import ReactApp from '../../components/react/App';
+import PreactApp from '../../components/preact/App';
+import VueApp from '../../components/vue/App.vue';
+import SvelteApp from '../../components/svelte/App.svelte';
+import SolidApp from '../../components/solid/App';
+
+export function getStaticPaths() {
+    return [
+        { params: { framework: 'react' } },
+        { params: { framework: 'preact' } },
+        { params: { framework: 'vue' } },
+        { params: { framework: 'svelte' } },
+        { params: { framework: 'solid' } },
+    ];
+}
+
+const { framework } = Astro.params;
+---
+
+<Layout>
+    {framework === 'react' && <ReactApp client:only="react" />}
+    {framework === 'preact' && <PreactApp client:only="preact" />}
+    {framework === 'vue' && <VueApp client:only="vue" />}
+    {framework === 'svelte' && <SvelteApp client:only="svelte" />}
+    {framework === 'solid' && <SolidApp client:only="solid-js" />}
+</Layout>

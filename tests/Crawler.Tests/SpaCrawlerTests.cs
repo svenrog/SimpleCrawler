@@ -1,4 +1,4 @@
-﻿using Crawler.AngleSharp.Js.Jint;
+using Crawler.AngleSharp.Js.Jint;
 using Crawler.AngleSharp.Js.V8;
 using Crawler.Core.Models;
 using Crawler.Playwright;
@@ -19,53 +19,67 @@ public class SpaCrawlerTests : IClassFixture<SpaHostFixture>
         _context = hostFixture;
     }
 
-    [Fact]
-    public async Task PlaywrightCrawler_Can_Crawl()
+    public static TheoryData<string> Frameworks()
+    {
+        var data = new TheoryData<string>();
+        foreach (var framework in SpaHostFixture.Frameworks)
+            data.Add(framework);
+
+        return data;
+    }
+
+    [Theory]
+    [MemberData(nameof(Frameworks))]
+    public async Task PlaywrightCrawler_Can_Crawl(string framework)
     {
         var subject = _context.ServiceProvider.GetRequiredService<DefaultPlaywrightCrawler>();
-        var result = await subject.Start(SpaHostFixture.HostName, _context.CancellationSource.Token);
+        var result = await subject.Start(SpaHostFixture.HostName(framework), _context.CancellationSource.Token);
 
-        AssertResult(result);
+        AssertResult(framework, result);
     }
 
-    [Fact]
-    public async Task PuppeteerCrawler_Can_Crawl()
+    [Theory]
+    [MemberData(nameof(Frameworks))]
+    public async Task PuppeteerCrawler_Can_Crawl(string framework)
     {
         var subject = _context.ServiceProvider.GetRequiredService<DefaultPuppeteerCrawler>();
-        var result = await subject.Start(SpaHostFixture.HostName, _context.CancellationSource.Token);
+        var result = await subject.Start(SpaHostFixture.HostName(framework), _context.CancellationSource.Token);
 
-        AssertResult(result);
+        AssertResult(framework, result);
     }
 
-    [Fact]
-    public async Task AngleSharpJintCrawler_can_Crawl()
+    [Theory]
+    [MemberData(nameof(Frameworks))]
+    public async Task AngleSharpJintCrawler_can_Crawl(string framework)
     {
         var subject = _context.ServiceProvider.GetRequiredService<DefaultAngleSharpJintCrawler>();
-        var result = await subject.Start(SpaHostFixture.HostName, _context.CancellationSource.Token);
+        var result = await subject.Start(SpaHostFixture.HostName(framework), _context.CancellationSource.Token);
 
-        AssertResult(result);
+        AssertResult(framework, result);
     }
 
-    [Fact]
-    public async Task AngleSharpV8Crawler_can_Crawl()
+    [Theory]
+    [MemberData(nameof(Frameworks))]
+    public async Task AngleSharpV8Crawler_can_Crawl(string framework)
     {
         Assert.SkipUnless(V8Support.IsAvailable, V8Support.UnavailableReason);
 
         var subject = _context.ServiceProvider.GetRequiredService<DefaultAngleSharpV8Crawler>();
-        var result = await subject.Start(SpaHostFixture.HostName, _context.CancellationSource.Token);
+        var result = await subject.Start(SpaHostFixture.HostName(framework), _context.CancellationSource.Token);
 
-        AssertResult(result);
+        AssertResult(framework, result);
     }
 
-
-    protected void AssertResult(IScrapeResult result)
+    protected void AssertResult(string framework, IScrapeResult result)
     {
-        Assert.Equal(_context.Links.Count, result.Urls.Count);
+        var links = _context.LinksFor(framework);
 
-        var firstNotSecond = _context.Links.Except(result.Urls).ToList();
+        Assert.Equal(links.Count, result.Urls.Count);
+
+        var firstNotSecond = links.Except(result.Urls).ToList();
         Assert.Empty(firstNotSecond);
 
-        var secondNotFirst = result.Urls.Except(_context.Links).ToList();
+        var secondNotFirst = result.Urls.Except(links).ToList();
         Assert.Empty(secondNotFirst);
     }
 }

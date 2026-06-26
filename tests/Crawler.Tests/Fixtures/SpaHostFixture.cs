@@ -1,4 +1,4 @@
-﻿using Crawler.TestHost.Infrastructure.Factories;
+using Crawler.TestHost.Infrastructure.Factories;
 using Crawler.TestHost.Infrastructure.Results;
 using Crawler.Tests.Assertions;
 using Microsoft.AspNetCore.Builder;
@@ -7,17 +7,23 @@ namespace Crawler.Tests.Fixtures;
 
 public sealed class SpaHostFixture : AbstractHostFixture
 {
-    public const string HostName = "http://localhost:5262/";
-    public static readonly Uri HostUri = new(HostName);
+    public static readonly string[] Frameworks = ["react", "preact", "vue", "svelte", "solid"];
 
-    protected override WebApplication CreateHost()
+    private const int _basePort = 5270;
+
+    public static string HostName(string framework)
     {
-        return SpaWebApplicationFactory.Create(HostName);
+        return $"http://localhost:{_basePort + Array.IndexOf(Frameworks, framework)}/";
     }
 
-    protected override List<string> GetLinks()
+    public IReadOnlyList<string> LinksFor(string framework)
     {
         var json = ResourceHelper.GetJsonResponse("default");
-        return LinkAssertions.GetJsonLinks(HostUri, json);
+        return LinkAssertions.GetJsonLinks(new Uri(HostName(framework)), json);
+    }
+
+    protected override IEnumerable<WebApplication> CreateHosts()
+    {
+        return Frameworks.Select(framework => SpaWebApplicationFactory.Create(HostName(framework), framework));
     }
 }

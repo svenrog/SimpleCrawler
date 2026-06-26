@@ -16,9 +16,10 @@ namespace Crawler.Tests.Fixtures;
 public abstract class AbstractHostFixture : IAsyncDisposable
 {
     public readonly ServiceProvider ServiceProvider;
-    public readonly WebApplication Host;
     public readonly CancellationTokenSource CancellationSource;
     public readonly List<string> Links;
+
+    private readonly IReadOnlyList<WebApplication> _hosts;
 
     public AbstractHostFixture()
     {
@@ -40,8 +41,9 @@ public abstract class AbstractHostFixture : IAsyncDisposable
         ServiceProvider = services.BuildServiceProvider();
         CancellationSource = ServiceProvider.GetRequiredService<CancellationTokenSource>();
 
-        Host = CreateHost();
-        Host.StartAsync(CancellationSource.Token).AwaitSync();
+        _hosts = [.. CreateHosts()];
+        foreach (var host in _hosts)
+            host.StartAsync(CancellationSource.Token).AwaitSync();
 
         Links = GetLinks();
     }
@@ -57,14 +59,18 @@ public abstract class AbstractHostFixture : IAsyncDisposable
         };
     }
 
-    protected abstract WebApplication CreateHost();
+    protected abstract IEnumerable<WebApplication> CreateHosts();
 
-    protected abstract List<string> GetLinks();
+    protected virtual List<string> GetLinks() => [];
 
     public async ValueTask DisposeAsync()
     {
-        await Host.StopAsync(CancellationSource.Token);
-        await Host.DisposeAsync();
+        foreach (var host in _hosts)
+        {
+            await host.StopAsync(CancellationSource.Token);
+            await host.DisposeAsync();
+        }
+
         await ServiceProvider.DisposeAsync();
 
         GC.SuppressFinalize(this);

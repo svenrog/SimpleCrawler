@@ -7,14 +7,9 @@ public static class ResourceHelper
     private static readonly Assembly _assembly = typeof(ResourceHelper).Assembly;
     private static readonly AssemblyName _assemblyName = _assembly.GetName();
 
-    public static byte[] GetWebRootResourceBytes(ReadOnlySpan<char> resourceFile)
-    {
-        return GetResponseBytes($"{_assemblyName.Name}.wwwroot.{resourceFile}");
-    }
-
     public static string GetWebRootResource(ReadOnlySpan<char> resourceFile)
     {
-        return GetResponseString($"{_assemblyName.Name}.wwwroot.{resourceFile}");
+        return GetResponseString($"wwwroot/{resourceFile}");
     }
 
     public static string GetHtmlResponse(ReadOnlySpan<char> responseName)
@@ -34,7 +29,7 @@ public static class ResourceHelper
         return reader.ReadToEnd();
     }
 
-    private static byte[] GetResponseBytes(string resourceName)
+    public static byte[] GetResourceBytes(string resourceName)
     {
         using var stream = GetResponseStream(resourceName);
         if (stream.Length > int.MaxValue)

@@ -7,7 +7,6 @@ namespace Crawler.TestHost.Infrastructure.Routing;
 public class EmbeddedResourceRouteResolver
 {
     private static readonly Assembly _assembly = typeof(EmbeddedResourceRouteResolver).Assembly;
-    private static readonly AssemblyName _assemblyName = _assembly.GetName();
 
     private readonly Lazy<Dictionary<string, byte[]>> _resources;
     private readonly FileExtensionContentTypeProvider _extensionProvider;
@@ -32,7 +31,7 @@ public class EmbeddedResourceRouteResolver
     private Dictionary<string, byte[]> CompileResources()
     {
         var names = _assembly.GetManifestResourceNames();
-        var resourceFilter = _assemblyName.Name + ".wwwroot.";
+        const string resourceFilter = "wwwroot/";
         var resources = new Dictionary<string, byte[]>();
 
         foreach (var name in names)
@@ -40,12 +39,8 @@ public class EmbeddedResourceRouteResolver
             if (!name.StartsWith(resourceFilter))
                 continue;
 
-            var resourceFile = name[resourceFilter.Length..];
-            var resourceName = Path.GetFileNameWithoutExtension(resourceFile);
-            var resourceExtension = Path.GetExtension(resourceFile);
-            var resourceKey = '/' + resourceName.Replace('.', '/') + resourceExtension;
-
-            var content = ResourceHelper.GetWebRootResourceBytes(resourceFile);
+            var resourceKey = '/' + name[resourceFilter.Length..];
+            var content = ResourceHelper.GetResourceBytes(name);
 
             resources.Add(resourceKey, content);
         }

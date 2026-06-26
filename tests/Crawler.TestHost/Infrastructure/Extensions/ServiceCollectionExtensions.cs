@@ -10,9 +10,11 @@ public static class ServiceCollectionExtensions
         { ".html", "text/html" },
         { ".css", "text/css" },
         { ".txt", "text/plain" },
+        { ".xml", "text/xml" },
         { ".woff2", "font/woff2" },
         { ".js", "text/javascript" },
         { ".png", "image/png" },
+        { ".svg", "image/svg+xml" },
     };
 
     private static readonly Dictionary<string, string> _staticMimeTypes = new()
