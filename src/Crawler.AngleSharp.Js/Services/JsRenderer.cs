@@ -29,11 +29,21 @@ public sealed class JsRenderer
 
     public async Task<byte[]> RenderAsync(byte[] shell, string pageUrl, HttpClient client, CancellationToken cancellationToken)
     {
+        // A shell with no <script> at all cannot render anything, and the caller re-parses these same
+        // bytes to extract links — so skip the parse, the engine, and the reserialize entirely.
+        if (!ContainsScriptTag(shell))
+            return shell;
+
         var pageUri = new Uri(pageUrl);
         using var stream = new MemoryStream(shell, writable: false);
         using var document = await _parser.ParseDocumentAsync(stream, cancellationToken);
 
         var (classicScripts, moduleEntries) = await CollectScriptsAsync(document, pageUrl, client, cancellationToken);
+
+        // The markup had a <script>, but none were executable (e.g. JSON, importmap), so the DOM still
+        // equals the shell: skip spinning up a JS engine (a fresh V8 isolate / Jint engine) and reserializing.
+        if (classicScripts.Count == 0 && moduleEntries.Count == 0)
+            return shell;
 
         var fetcher = new HttpModuleFetcher(client, cancellationToken);
         using var engine = _engineFactory.Create(fetcher, pageUri);
@@ -126,6 +136,39 @@ public sealed class JsRenderer
         {
             _logger.LogWarning("Module execution error on '{url}': {message}", pageUrl, ex.Message);
         }
+    }
+
+    private static bool ContainsScriptTag(ReadOnlySpan<byte> html)
+    {
+        ReadOnlySpan<byte> marker = "<script"u8;
+        var start = 0;
+        while (true)
+        {
+            var index = html[start..].IndexOf((byte)'<');
+            if (index < 0 || html.Length - (start + index) < marker.Length)
+                return false;
+
+            start += index;
+            if (AsciiEqualsIgnoreCase(html.Slice(start, marker.Length), marker))
+                return true;
+
+            start++;
+        }
+    }
+
+    private static bool AsciiEqualsIgnoreCase(ReadOnlySpan<byte> value, ReadOnlySpan<byte> lowercase)
+    {
+        for (var i = 0; i < lowercase.Length; i++)
+        {
+            var c = value[i];
+            if (c >= 'A' && c <= 'Z')
+                c = (byte)(c + 32);
+
+            if (c != lowercase[i])
+                return false;
+        }
+
+        return true;
     }
 
     private static async Task<(IReadOnlyList<string> Classic, IReadOnlyList<ModuleScript> Modules)> CollectScriptsAsync(IDocument document, string pageUrl, HttpClient client, CancellationToken cancellationToken)
