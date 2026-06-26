@@ -10,7 +10,7 @@ namespace Crawler.AngleSharp.Js.V8;
 // bag self-sizes to the crawl's peak concurrency.
 internal sealed class V8RuntimePool : IDisposable
 {
-    private readonly ConcurrentBag<V8Runtime> _runtimes = new();
+    private readonly ConcurrentBag<V8Runtime> _runtimes = [];
 
     public V8Runtime Rent()
     {

@@ -45,7 +45,7 @@ internal sealed class JintJsEngine : IJsEngine
         }
         catch (JavaScriptException ex)
         {
-            throw new JsScriptException(ex.Message, ex);
+            throw new JsException(ex.Message, ex);
         }
     }
 
@@ -59,7 +59,7 @@ internal sealed class JintJsEngine : IJsEngine
         }
         catch (JavaScriptException ex)
         {
-            throw new JsScriptException(ex.Message, ex);
+            throw new JsException(ex.Message, ex);
         }
     }
 

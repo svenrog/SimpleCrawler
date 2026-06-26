@@ -39,7 +39,7 @@ internal sealed class V8ModuleLoader : DocumentLoader
         return document;
     }
 
-    private static Document Build(Uri uri, string source)
+    private static StringDocument Build(Uri uri, string source)
     {
         return new StringDocument(new DocumentInfo(uri) { Category = ModuleCategory.Standard }, source);
     }

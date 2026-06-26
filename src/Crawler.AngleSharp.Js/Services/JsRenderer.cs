@@ -1,4 +1,3 @@
-using AngleSharp;
 using AngleSharp.Dom;
 using AngleSharp.Html;
 using AngleSharp.Html.Dom;
@@ -140,7 +139,7 @@ public sealed class JsRenderer
         {
             engine.Execute(script);
         }
-        catch (JsScriptException ex)
+        catch (JsException ex)
         {
             _logger.LogWarning("Bundle execution error on '{url}': {message}", pageUrl, ex.Message);
         }
@@ -152,7 +151,7 @@ public sealed class JsRenderer
         {
             engine.EvaluateModule(module.Specifier, module.Source);
         }
-        catch (JsScriptException ex)
+        catch (JsException ex)
         {
             _logger.LogWarning("Module execution error on '{url}': {message}", pageUrl, ex.Message);
         }
