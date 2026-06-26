@@ -2,7 +2,7 @@ using Crawler.AngleSharp.Js.Models;
 
 namespace Crawler.AngleSharp.Js.Abstractions;
 
-public interface ISpaEngine : IDisposable
+public interface IJsEngine : IDisposable
 {
     void EmbedHostObject(string name, object value);
 

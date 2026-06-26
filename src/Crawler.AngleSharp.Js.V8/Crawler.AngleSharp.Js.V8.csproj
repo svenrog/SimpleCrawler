@@ -7,10 +7,6 @@
   </PropertyGroup>
 
   <PropertyGroup>
-    <!-- ClearScript's managed assembly and its native V8 runtime must be the exact same version,
-         or the native library fails to load. JavaScriptEngineSwitcher.V8 pulls in the managed
-         Microsoft.ClearScript.V8 but no native runtime, so we pin both to this single version and
-         add the matching native package for the building platform below. -->
     <ClearScriptV8Version>7.5.1</ClearScriptV8Version>
     <ClearScriptOsArchitecture>$([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture)</ClearScriptOsArchitecture>
   </PropertyGroup>

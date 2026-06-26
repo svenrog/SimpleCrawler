@@ -13,7 +13,7 @@ public static class ServiceCollectionExtensions
     {
         services.AddAngleSharpJsCore(options, renderOptions, config);
 
-        services.AddKeyedSingleton<ISpaEngineFactory, V8SpaEngineFactory>(DefaultAngleSharpV8Crawler.EngineKey);
+        services.AddKeyedSingleton<IJsEngineFactory, V8JsEngineFactory>(DefaultAngleSharpV8Crawler.EngineKey);
 
         services.AddHttpClient<DefaultAngleSharpV8Crawler>((provider, client) =>
         {

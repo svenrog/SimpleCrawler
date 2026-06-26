@@ -9,11 +9,11 @@ using System.Globalization;
 
 namespace Crawler.AngleSharp.Js.Jint;
 
-internal sealed class JintSpaEngine : ISpaEngine
+internal sealed class JintJsEngine : IJsEngine
 {
     private readonly Engine _engine;
 
-    public JintSpaEngine(IModuleFetcher fetcher, Uri baseUri)
+    public JintJsEngine(IModuleFetcher fetcher, Uri baseUri)
     {
         _engine = new Engine(options => options.EnableModules(new JintModuleLoader(fetcher, baseUri)));
     }
@@ -43,7 +43,7 @@ internal sealed class JintSpaEngine : ISpaEngine
         }
         catch (JavaScriptException ex)
         {
-            throw new SpaScriptException(ex.Message, ex);
+            throw new JsScriptException(ex.Message, ex);
         }
     }
 
@@ -56,7 +56,7 @@ internal sealed class JintSpaEngine : ISpaEngine
         }
         catch (JavaScriptException ex)
         {
-            throw new SpaScriptException(ex.Message, ex);
+            throw new JsScriptException(ex.Message, ex);
         }
     }
 

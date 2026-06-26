@@ -13,7 +13,7 @@ public sealed class DefaultAngleSharpJintCrawler : AngleSharpJsCrawler<ScrapeRes
 {
     internal const string EngineKey = "anglesharp-js-jint";
 
-    public DefaultAngleSharpJintCrawler(HttpClient client, [FromKeyedServices(EngineKey)] ISpaEngineFactory engineFactory, IRobotClient robotClient, IOptions<CrawlerOptions> options, IOptions<JsRenderOptions> renderOptions, ILogger<DefaultAngleSharpJintCrawler> logger)
+    public DefaultAngleSharpJintCrawler(HttpClient client, [FromKeyedServices(EngineKey)] IJsEngineFactory engineFactory, IRobotClient robotClient, IOptions<CrawlerOptions> options, IOptions<JsRenderOptions> renderOptions, ILogger<DefaultAngleSharpJintCrawler> logger)
         : base(client, engineFactory, robotClient, options, renderOptions, logger)
     {
     }

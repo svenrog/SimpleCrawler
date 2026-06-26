@@ -13,7 +13,7 @@ public sealed class DefaultAngleSharpV8Crawler : AngleSharpJsCrawler<ScrapeResul
 {
     internal const string EngineKey = "anglesharp-js-v8";
 
-    public DefaultAngleSharpV8Crawler(HttpClient client, [FromKeyedServices(EngineKey)] ISpaEngineFactory engineFactory, IRobotClient robotClient, IOptions<CrawlerOptions> options, IOptions<JsRenderOptions> renderOptions, ILogger<DefaultAngleSharpV8Crawler> logger)
+    public DefaultAngleSharpV8Crawler(HttpClient client, [FromKeyedServices(EngineKey)] IJsEngineFactory engineFactory, IRobotClient robotClient, IOptions<CrawlerOptions> options, IOptions<JsRenderOptions> renderOptions, ILogger<DefaultAngleSharpV8Crawler> logger)
         : base(client, engineFactory, robotClient, options, renderOptions, logger)
     {
     }

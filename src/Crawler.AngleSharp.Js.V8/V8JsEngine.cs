@@ -9,7 +9,7 @@ using System.Text.Json;
 
 namespace Crawler.AngleSharp.Js.V8;
 
-internal sealed class V8SpaEngine : ISpaEngine
+internal sealed class V8JsEngine : IJsEngine
 {
     private const int _moduleEvaluationTimeoutMs = 30000;
 
@@ -17,7 +17,7 @@ internal sealed class V8SpaEngine : ISpaEngine
     private readonly V8ModuleLoader _loader;
     private ScriptObject? _arrayFactory;
 
-    public V8SpaEngine(IModuleFetcher fetcher, Uri baseUri)
+    public V8JsEngine(IModuleFetcher fetcher, Uri baseUri)
     {
         // EnableDynamicModuleImports: V8 rejects import() as "Not supported" otherwise (SPAs use it
         // for lazy routes). EnableTaskPromiseConversion: lets us await the entry's import() as a Task.
@@ -52,7 +52,7 @@ internal sealed class V8SpaEngine : ISpaEngine
         }
         catch (ScriptEngineException ex)
         {
-            throw new SpaScriptException(ex.Message, ex);
+            throw new JsScriptException(ex.Message, ex);
         }
     }
 
@@ -72,11 +72,11 @@ internal sealed class V8SpaEngine : ISpaEngine
         }
         catch (ScriptEngineException ex)
         {
-            throw new SpaScriptException(ex.Message, ex);
+            throw new JsScriptException(ex.Message, ex);
         }
         catch (AggregateException ex) when (ex.InnerException is ScriptEngineException inner)
         {
-            throw new SpaScriptException(inner.Message, inner);
+            throw new JsScriptException(inner.Message, inner);
         }
     }
 

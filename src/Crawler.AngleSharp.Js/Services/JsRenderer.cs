@@ -10,17 +10,17 @@ using System.Text;
 
 namespace Crawler.AngleSharp.Js.Services;
 
-public sealed class SpaRenderer
+public sealed class JsRenderer
 {
     private const int _idleTurnsBeforeSettled = 3;
 
     private static readonly HtmlParser _parser = new();
 
-    private readonly ISpaEngineFactory _engineFactory;
+    private readonly IJsEngineFactory _engineFactory;
     private readonly JsRenderOptions _options;
     private readonly ILogger _logger;
 
-    public SpaRenderer(ISpaEngineFactory engineFactory, JsRenderOptions options, ILogger logger)
+    public JsRenderer(IJsEngineFactory engineFactory, JsRenderOptions options, ILogger logger)
     {
         _engineFactory = engineFactory;
         _options = options;
@@ -53,7 +53,7 @@ public sealed class SpaRenderer
         return Encoding.UTF8.GetBytes(rendered);
     }
 
-    private static void SetupGlobals(ISpaEngine engine, DomContext context)
+    private static void SetupGlobals(IJsEngine engine, DomContext context)
     {
         engine.EmbedHostObject("document", context.DocumentWrapper);
         engine.EmbedHostObject("location", context.Location);
@@ -76,7 +76,7 @@ public sealed class SpaRenderer
         engine.Execute("var window=globalThis;var self=globalThis;");
     }
 
-    private void Drain(ISpaEngine engine, DomContext context, string pageUrl)
+    private void Drain(IJsEngine engine, DomContext context, string pageUrl)
     {
         // The bundle defers work onto setTimeout/requestAnimationFrame (drained from our queue) and
         // native promise jobs (dynamic import for lazy routes, drained at each RunMicrotasks boundary).
@@ -104,25 +104,25 @@ public sealed class SpaRenderer
         }
     }
 
-    private void RunClassic(ISpaEngine engine, string script, string pageUrl)
+    private void RunClassic(IJsEngine engine, string script, string pageUrl)
     {
         try
         {
             engine.Execute(script);
         }
-        catch (SpaScriptException ex)
+        catch (JsScriptException ex)
         {
             _logger.LogWarning("Bundle execution error on '{url}': {message}", pageUrl, ex.Message);
         }
     }
 
-    private void RunModule(ISpaEngine engine, ModuleScript module, string pageUrl)
+    private void RunModule(IJsEngine engine, ModuleScript module, string pageUrl)
     {
         try
         {
             engine.EvaluateModule(module.Specifier, module.Source);
         }
-        catch (SpaScriptException ex)
+        catch (JsScriptException ex)
         {
             _logger.LogWarning("Module execution error on '{url}': {message}", pageUrl, ex.Message);
         }

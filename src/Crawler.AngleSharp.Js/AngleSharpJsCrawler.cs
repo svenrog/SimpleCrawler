@@ -13,13 +13,13 @@ public abstract class AngleSharpJsCrawler<TResult> : AngleSharpCrawler<TResult>
     where TResult : IScrapeResult
 {
     private readonly HttpClient _client;
-    private readonly SpaRenderer _renderer;
+    private readonly JsRenderer _renderer;
 
-    protected AngleSharpJsCrawler(HttpClient client, ISpaEngineFactory engineFactory, IRobotClient robotClient, IOptions<CrawlerOptions> options, IOptions<JsRenderOptions> renderOptions, ILogger logger)
+    protected AngleSharpJsCrawler(HttpClient client, IJsEngineFactory engineFactory, IRobotClient robotClient, IOptions<CrawlerOptions> options, IOptions<JsRenderOptions> renderOptions, ILogger logger)
         : base(client, robotClient, options, logger)
     {
         _client = client;
-        _renderer = new SpaRenderer(engineFactory, renderOptions.Value, logger);
+        _renderer = new JsRenderer(engineFactory, renderOptions.Value, logger);
     }
 
     protected override async Task<byte[]?> LoadResponse(string url, CancellationToken cancellationToken)

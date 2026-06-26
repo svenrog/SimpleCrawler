@@ -5,11 +5,11 @@ namespace Crawler.AngleSharp.Js.Dom;
 
 public sealed class DomContext
 {
-    private readonly ISpaEngine _engine;
+    private readonly IJsEngine _engine;
     private readonly Dictionary<INode, JsNode> _wrappers = new(ReferenceEqualityComparer.Instance);
-    private readonly List<object> _tasks = new();
+    private readonly List<object> _tasks = [];
 
-    public DomContext(IDocument document, ISpaEngine engine, Uri pageUri)
+    public DomContext(IDocument document, IJsEngine engine, Uri pageUri)
     {
         _engine = engine;
         Document = document;
@@ -63,7 +63,7 @@ public sealed class DomContext
     public IReadOnlyList<object> TakeTasks()
     {
         if (_tasks.Count == 0)
-            return Array.Empty<object>();
+            return [];
 
         var batch = _tasks.ToArray();
         _tasks.Clear();
