@@ -1,17 +1,22 @@
 using AngleSharp.Dom;
 using Crawler.AngleSharp.Js.Abstractions;
+using Crawler.AngleSharp.Js.Dom.Expando;
+using Crawler.AngleSharp.Js.Dom.Window;
 
 namespace Crawler.AngleSharp.Js.Dom;
 
 public sealed class DomContext
 {
     private readonly IJsEngine _engine;
+    private readonly bool _enableExpandos;
     private readonly Dictionary<INode, JsNode> _wrappers = new(ReferenceEqualityComparer.Instance);
+    private readonly Dictionary<INode, Dictionary<string, object?>> _expandos = new(ReferenceEqualityComparer.Instance);
     private readonly List<object> _tasks = [];
 
-    public DomContext(IDocument document, IJsEngine engine, Uri pageUri)
+    public DomContext(IDocument document, IJsEngine engine, Uri pageUri, bool enableExpandos = false)
     {
         _engine = engine;
+        _enableExpandos = enableExpandos;
         Document = document;
         Location = new JsLocation(pageUri);
         History = new JsHistory(Location);
@@ -51,10 +56,10 @@ public sealed class DomContext
 
         JsNode wrapper = node switch
         {
-            IDocument document => new JsDocument(document, this),
-            IElement element => new JsElement(element, this),
-            IText text => new JsText(text, this),
-            _ => new JsNode(node, this)
+            IDocument document => _enableExpandos ? new JsExpandoDocument(document, this) : new JsDocument(document, this),
+            IElement element => _enableExpandos ? new JsExpandoElement(element, this) : new JsElement(element, this),
+            IText text => _enableExpandos ? new JsExpandoText(text, this) : new JsText(text, this),
+            _ => _enableExpandos ? new JsExpandoNode(node, this) : new JsNode(node, this)
         };
 
         _wrappers[node] = wrapper;
@@ -79,6 +84,26 @@ public sealed class DomContext
 
         return _engine.CreateArray(items);
     }
+
+    public void SetExpando(INode node, string name, object? value)
+    {
+        if (!_expandos.TryGetValue(node, out var bag))
+            _expandos[node] = bag = [];
+
+        bag[name] = value;
+    }
+
+    public bool TryGetExpando(INode node, string name, out object? value)
+    {
+        if (_expandos.TryGetValue(node, out var bag) && bag.TryGetValue(name, out value))
+            return true;
+
+        value = null;
+        return false;
+    }
+
+    public IEnumerable<string> ExpandoNames(INode node) =>
+        _expandos.TryGetValue(node, out var bag) ? bag.Keys : [];
 
     public object CreateArray(IReadOnlyList<object?> items) => _engine.CreateArray(items);
 

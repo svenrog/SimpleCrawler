@@ -1,4 +1,4 @@
-namespace Crawler.AngleSharp.Js.Dom;
+﻿namespace Crawler.AngleSharp.Js.Dom.Window;
 
 // A no-op MediaQueryList: every query reports unmatched (a crawl has no viewport), but the object is
 // shaped like the real one so SPAs that read .matches or attach change listeners render.

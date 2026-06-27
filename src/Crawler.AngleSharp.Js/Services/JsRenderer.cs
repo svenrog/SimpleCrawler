@@ -4,6 +4,9 @@ using AngleSharp.Html.Dom;
 using AngleSharp.Html.Parser;
 using Crawler.AngleSharp.Js.Abstractions;
 using Crawler.AngleSharp.Js.Dom;
+using Crawler.AngleSharp.Js.Dom.Network;
+using Crawler.AngleSharp.Js.Dom.Observers;
+using Crawler.AngleSharp.Js.Dom.Window;
 using Crawler.AngleSharp.Js.Errors;
 using Crawler.AngleSharp.Js.Models;
 using Microsoft.Extensions.Logging;
@@ -50,9 +53,12 @@ public sealed class JsRenderer
 
         var fetcher = new HttpModuleFetcher(client, _sources, cancellationToken);
         using var engine = _engineFactory.Create(fetcher, pageUri);
-        var context = new DomContext(document, engine, pageUri);
+        var context = new DomContext(document, engine, pageUri, _options.EnableDomExpandos);
 
-        SetupGlobals(engine, context);
+        if (_options.EnableFetch)
+            engine.EmbedHostObject("__http", new JsHttp(client, pageUri, _logger, cancellationToken));
+
+        SetupGlobals(engine, context, _options.EnableFetch);
 
         foreach (var script in regularScripts)
             RunRegular(engine, context, script, pageUrl);
@@ -79,11 +85,11 @@ public sealed class JsRenderer
         return buffer.ToArray();
     }
 
-    private static void SetupGlobals(IJsEngine engine, DomContext context)
+    private static void SetupGlobals(IJsEngine engine, DomContext context, bool enableFetch)
     {
         engine.EmbedHostObject("document", context.DocumentWrapper);
         engine.EmbedHostObject("location", context.Location);
-        engine.EmbedHostObject("history", context.History);
+        engine.EmbedHostObject("__history", context.History);
         engine.EmbedHostObject("navigator", context.Navigator);
         engine.EmbedHostObject("localStorage", context.LocalStorage);
         engine.EmbedHostObject("sessionStorage", context.SessionStorage);
@@ -100,18 +106,25 @@ public sealed class JsRenderer
         engine.EmbedHostType("TextEncoder", typeof(JsTextEncoder));
         engine.EmbedHostType("TextDecoder", typeof(JsTextDecoder));
 
+        // The DOM wrappers themselves as constructors so `node instanceof Element/Node/Text/Document`
+        // is true for them (bundles guard with these); without a defined right-hand side instanceof throws.
+        engine.EmbedHostType("Node", typeof(JsNode));
+        engine.EmbedHostType("Element", typeof(JsElement));
+        engine.EmbedHostType("Text", typeof(JsText));
+        engine.EmbedHostType("Document", typeof(JsDocument));
+
         var bridge = context.Bridge;
-        engine.EmbedFunction("matchMedia", bridge.MatchMedia);
-        engine.EmbedFunction("setTimeout", bridge.SetTimeout);
-        engine.EmbedFunction("clearTimeout", bridge.Noop);
-        engine.EmbedFunction("setInterval", bridge.SetInterval);
-        engine.EmbedFunction("clearInterval", bridge.Noop);
-        engine.EmbedFunction("requestAnimationFrame", bridge.RequestAnimationFrame);
-        engine.EmbedFunction("cancelAnimationFrame", bridge.Noop);
-        engine.EmbedFunction("queueMicrotask", bridge.QueueMicrotask);
-        engine.EmbedFunction("addEventListener", bridge.Noop);
-        engine.EmbedFunction("removeEventListener", bridge.Noop);
-        engine.EmbedFunction("dispatchEvent", bridge.ReturnTrue);
+        EmbedGlobalFunction(engine, "matchMedia", bridge.MatchMedia);
+        EmbedGlobalFunction(engine, "setTimeout", bridge.SetTimeout);
+        EmbedGlobalFunction(engine, "clearTimeout", bridge.Noop);
+        EmbedGlobalFunction(engine, "setInterval", bridge.SetInterval);
+        EmbedGlobalFunction(engine, "clearInterval", bridge.Noop);
+        EmbedGlobalFunction(engine, "requestAnimationFrame", bridge.RequestAnimationFrame);
+        EmbedGlobalFunction(engine, "cancelAnimationFrame", bridge.Noop);
+        EmbedGlobalFunction(engine, "queueMicrotask", bridge.QueueMicrotask);
+        EmbedGlobalFunction(engine, "addEventListener", bridge.Noop);
+        EmbedGlobalFunction(engine, "removeEventListener", bridge.Noop);
+        EmbedGlobalFunction(engine, "dispatchEvent", bridge.ReturnTrue);
 
         // The bundle reaches the DOM through window/self; both are just the global object here.
         // structuredClone has no host equivalent, but the bundle only clones plain data, so a JSON
@@ -119,6 +132,16 @@ public sealed class JsRenderer
         engine.Execute(
             "var window=globalThis;var self=globalThis;" +
             "globalThis.structuredClone=globalThis.structuredClone||function(v){return v===undefined?undefined:JSON.parse(JSON.stringify(v));};");
+
+        // history is a plain JS object delegating to the host wrapper rather than the host object itself,
+        // because routers (React Router's history lib) reassign history.pushState/replaceState and set
+        // history.scrollRestoration — assignments a CLR host object rejects as read-only members.
+        engine.Execute(
+            "(function(){var h=__history;globalThis.history={" +
+            "get length(){return h.length;},get state(){return h.state;},scrollRestoration:'auto'," +
+            "pushState:function(s,t,u){return h.pushState(s,t,u);}," +
+            "replaceState:function(s,t,u){return h.replaceState(s,t,u);}," +
+            "go:function(d){return h.go(d);},back:function(){return h.back();},forward:function(){return h.forward();}};})();");
 
         // HTMLElement is the one DOM global that bundles *extend* (`class X extends HTMLElement`) rather
         // than construct, and V8/ClearScript can't `class extends` a CLR host type (its host objects have
@@ -128,7 +151,137 @@ public sealed class JsRenderer
             "globalThis.HTMLElement=globalThis.HTMLElement||class HTMLElement{" +
             "addEventListener(){}removeEventListener(){}dispatchEvent(){return true;}attachShadow(){return this;}};" +
             "globalThis.HTMLScriptElement=globalThis.HTMLScriptElement||class HTMLScriptElement extends HTMLElement{};");
+
+        // Remaining DOM/Web globals the bundle uses only as instanceof right-hand sides (no host wrapper
+        // models them, so the check is always false — which is the correct answer for a crawl). They have
+        // to exist as objects or instanceof throws. URLSearchParams is given a working body because the
+        // router actually parses query strings with it. Per project convention instanceof types stay JS.
+        engine.Execute(_domGlobalsPrelude);
+
+        if (enableFetch)
+        {
+            // AbortController/AbortSignal are plain no-op host objects (a synchronous render never aborts);
+            // the rest of the surface stays in JS because it must return native Promises, read arbitrary
+            // JS init objects, or invoke JS callbacks — none of which a host object does identically across
+            // Jint and ClearScript.
+            engine.EmbedHostType("AbortController", typeof(JsAbortController));
+            engine.EmbedHostType("AbortSignal", typeof(JsAbortSignal));
+            engine.Execute(_fetchPrelude);
+        }
     }
+
+    // ClearScript/V8 exposes an embedded host delegate as a non-writable global that is NOT a real JS
+    // Function — it has no .bind/.call (React's scheduler does `requestAnimationFrame.bind(...)`), and a
+    // bundle's `globalThis.x = wrapper` reassignment silently fails. So embed the delegate under a private
+    // name and expose the public global as a writable, real JS function that spreads into it. (Jint's
+    // delegate wrapper already is a JS function, but the indirection is harmless there.)
+    private static void EmbedGlobalFunction(IJsEngine engine, string name, VFunc function)
+    {
+        engine.EmbedFunction("__fn_" + name, function);
+        engine.Execute($"globalThis.{name}=function(){{return __fn_{name}(...arguments);}};");
+    }
+
+    private const string _domGlobalsPrelude = """
+        (function(){
+          function def(name, ctor){ if(!globalThis[name]) globalThis[name]=ctor; }
+          def('ShadowRoot', class ShadowRoot{});
+          def('SVGElement', class SVGElement extends HTMLElement{});
+          def('HTMLHtmlElement', class HTMLHtmlElement extends HTMLElement{});
+          def('HTMLBodyElement', class HTMLBodyElement extends HTMLElement{});
+          def('HTMLTextAreaElement', class HTMLTextAreaElement extends HTMLElement{});
+          def('HTMLIFrameElement', class HTMLIFrameElement extends HTMLElement{});
+          def('DOMException', class DOMException extends Error{});
+          def('Blob', class Blob{});
+          def('File', class File extends globalThis.Blob{});
+          def('FileList', class FileList{});
+          def('FormData', class FormData{ append(){} delete(){} get(){return null;} getAll(){return [];} has(){return false;} set(){} forEach(){} });
+          def('URLSearchParams', class URLSearchParams{
+            constructor(init){ this._p=[];
+              if(typeof init==='string'){ var s=init.charAt(0)==='?'?init.slice(1):init; var self=this;
+                if(s) s.split('&').forEach(function(kv){ if(!kv) return; var i=kv.indexOf('='); var k=i<0?kv:kv.slice(0,i); var v=i<0?'':kv.slice(i+1); self._p.push([decodeURIComponent(k),decodeURIComponent(v.replace(/\+/g,' '))]); }); }
+              else if(init && typeof init.forEach==='function'){ var s2=this; init.forEach(function(v,k){ s2._p.push([k,String(v)]); }); }
+              else if(init){ for(var k in init) this._p.push([k,String(init[k])]); } }
+            get(n){ for(var i=0;i<this._p.length;i++) if(this._p[i][0]===n) return this._p[i][1]; return null; }
+            getAll(n){ return this._p.filter(function(p){return p[0]===n;}).map(function(p){return p[1];}); }
+            has(n){ return this.get(n)!==null; }
+            set(n,v){ this.delete(n); this._p.push([n,String(v)]); }
+            append(n,v){ this._p.push([n,String(v)]); }
+            delete(n){ this._p=this._p.filter(function(p){return p[0]!==n;}); }
+            forEach(cb){ var s=this; this._p.forEach(function(p){ cb(p[1],p[0],s); }); }
+            keys(){ return this._p.map(function(p){return p[0];}); }
+            toString(){ return this._p.map(function(p){return encodeURIComponent(p[0])+'='+encodeURIComponent(p[1]);}).join('&'); }
+          });
+        })();
+        """;
+
+    // The irreducible JS networking bridge over the synchronous host call __http.request: fetch hands
+    // back an already-resolved Promise so .then()/await chains settle on the existing microtask drain
+    // (no Task<->Promise bridging), Response.json() yields a native object via JSON.parse, and Headers/
+    // Request read JS init objects. Opt-in via JsRenderOptions.EnableFetch since it issues live HTTP.
+    private const string _fetchPrelude = """
+        (function(){
+          function toHeaderObject(h){
+            var out={};
+            if(!h) return out;
+            if(typeof h.forEach==='function' && !Array.isArray(h)){ h.forEach(function(v,k){ out[k]=v; }); return out; }
+            if(Array.isArray(h)){ for(var i=0;i<h.length;i++){ out[h[i][0]]=h[i][1]; } return out; }
+            for(var k in h){ if(Object.prototype.hasOwnProperty.call(h,k)) out[k]=h[k]; }
+            return out;
+          }
+          class Headers{
+            constructor(init){ this._m={}; var o=toHeaderObject(init); for(var k in o){ this._m[String(k).toLowerCase()]=String(o[k]); } }
+            get(n){ var v=this._m[String(n).toLowerCase()]; return v===undefined?null:v; }
+            has(n){ return this._m[String(n).toLowerCase()]!==undefined; }
+            set(n,v){ this._m[String(n).toLowerCase()]=String(v); }
+            append(n,v){ var k=String(n).toLowerCase(); this._m[k]=this._m[k]!==undefined?this._m[k]+", "+v:String(v); }
+            delete(n){ delete this._m[String(n).toLowerCase()]; }
+            forEach(cb){ for(var k in this._m){ cb(this._m[k],k,this); } }
+            keys(){ return Object.keys(this._m); }
+          }
+          class Response{
+            constructor(r){ this._r=r; this.ok=!!r.ok; this.status=r.status; this.statusText=r.statusText||""; this.url=r.url||""; this.redirected=false; this.type="basic";
+              var parsed={}; try{ parsed=JSON.parse(r.headersJson||"{}"); }catch(e){} this.headers=new Headers(parsed); this.bodyUsed=false; }
+            text(){ return Promise.resolve(this._r.body||""); }
+            json(){ try{ return Promise.resolve(JSON.parse(this._r.body||"null")); }catch(e){ return Promise.reject(e); } }
+            clone(){ return new Response(this._r); }
+          }
+          class Request{
+            constructor(input,init){ init=init||{}; if(input && typeof input==='object' && 'url' in input){ this.url=input.url; this.method=init.method||input.method||'GET'; this.headers=new Headers(init.headers||input.headers); this.body=init.body!==undefined?init.body:input.body; }
+              else { this.url=String(input); this.method=init.method||'GET'; this.headers=new Headers(init.headers); this.body=init.body; } }
+          }
+          function fetch(input,init){
+            init=init||{};
+            var url,method,headers,body;
+            if(input && typeof input==='object' && 'url' in input){ url=input.url; method=init.method||input.method||'GET'; headers=init.headers||input.headers; body=init.body!==undefined?init.body:input.body; }
+            else { url=String(input); method=init.method||'GET'; headers=init.headers; body=init.body; }
+            var r=__http.request(url,method,JSON.stringify(toHeaderObject(headers)),body==null?null:String(body));
+            if(r.error) return Promise.reject(new TypeError(r.error));
+            return Promise.resolve(new Response(r));
+          }
+          class XMLHttpRequest{
+            constructor(){ this.readyState=0; this.status=0; this.statusText=""; this.responseText=""; this.response=""; this._h={}; this._rh="{}"; this._method="GET"; this._url=""; this.onreadystatechange=null; this.onload=null; this.onerror=null; this.onloadend=null; }
+            open(m,u){ this._method=m; this._url=u; this.readyState=1; if(this.onreadystatechange)this.onreadystatechange(); }
+            setRequestHeader(k,v){ this._h[k]=v; }
+            send(body){
+              var r=__http.request(this._url,this._method,JSON.stringify(this._h),body==null?null:String(body));
+              if(r.error){ this.status=0; this.readyState=4; if(this.onerror)this.onerror(new Error(r.error)); if(this.onloadend)this.onloadend(); return; }
+              this.status=r.status; this.statusText=r.statusText||""; this.responseText=r.body; this.response=r.body; this._rh=r.headersJson||"{}";
+              this.readyState=4; if(this.onreadystatechange)this.onreadystatechange(); if(this.onload)this.onload(); if(this.onloadend)this.onloadend();
+            }
+            abort(){}
+            getResponseHeader(n){ try{ var o=JSON.parse(this._rh); var v=o[n]; return v===undefined?null:v; }catch(e){ return null; } }
+            getAllResponseHeaders(){ try{ var o=JSON.parse(this._rh); var s=""; for(var k in o){ s+=k+": "+o[k]+"\r\n"; } return s; }catch(e){ return ""; } }
+            addEventListener(t,cb){ if(t==='load')this.onload=cb; else if(t==='error')this.onerror=cb; else if(t==='loadend')this.onloadend=cb; else if(t==='readystatechange')this.onreadystatechange=cb; }
+            removeEventListener(){}
+          }
+          XMLHttpRequest.UNSENT=0; XMLHttpRequest.OPENED=1; XMLHttpRequest.HEADERS_RECEIVED=2; XMLHttpRequest.LOADING=3; XMLHttpRequest.DONE=4;
+          globalThis.Headers=globalThis.Headers||Headers;
+          globalThis.Response=globalThis.Response||Response;
+          globalThis.Request=globalThis.Request||Request;
+          globalThis.fetch=globalThis.fetch||fetch;
+          globalThis.XMLHttpRequest=globalThis.XMLHttpRequest||XMLHttpRequest;
+        })();
+        """;
 
     private void Drain(IJsEngine engine, DomContext context, string pageUrl)
     {
@@ -167,7 +320,7 @@ public sealed class JsRenderer
         }
         catch (JsException ex)
         {
-            _logger.LogWarning("Bundle execution error on '{url}': {message}", pageUrl, ex.Message);
+            _logger.LogWarning("Bundle execution error on '{url}': {message}\n{details}", pageUrl, ex.Message, ex.ErrorDetails);
         }
         finally
         {

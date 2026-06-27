@@ -1,5 +1,6 @@
 ﻿using Crawler.AngleSharp;
 using Crawler.AngleSharp.Js.Jint;
+using Crawler.AngleSharp.Js.Models;
 using Crawler.AngleSharp.Js.V8;
 using Crawler.Core;
 using Crawler.HtmlAgilityPack;
@@ -26,9 +27,11 @@ public abstract class AbstractHostFixture : IAsyncDisposable
         var services = new ServiceCollection();
         var options = CreateOptions();
 
+        var renderOptions = CreateRenderOptions();
+
         services.AddAngleSharpCrawler(options);
-        services.AddAngleSharpJintCrawler(options);
-        services.AddAngleSharpV8Crawler(options);
+        services.AddAngleSharpJintCrawler(options, renderOptions);
+        services.AddAngleSharpV8Crawler(options, renderOptions);
         services.AddHtmlAgilityPackCrawler(options);
         services.AddPlaywrightCrawler(options);
         services.AddPuppeteerCrawler(options);
@@ -60,6 +63,8 @@ public abstract class AbstractHostFixture : IAsyncDisposable
     }
 
     protected abstract IEnumerable<WebApplication> CreateHosts();
+
+    protected virtual JsRenderOptions? CreateRenderOptions() => null;
 
     protected virtual List<string> GetLinks() => [];
 

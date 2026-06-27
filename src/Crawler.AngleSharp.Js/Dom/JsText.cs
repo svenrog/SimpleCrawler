@@ -2,7 +2,7 @@ using AngleSharp.Dom;
 
 namespace Crawler.AngleSharp.Js.Dom;
 
-public sealed class JsText : JsNode
+public class JsText : JsNode
 {
     internal JsText(IText text, DomContext context) : base(text, context)
     {

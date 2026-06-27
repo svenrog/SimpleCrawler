@@ -1,3 +1,5 @@
+using Crawler.AngleSharp.Js.Dom.Window;
+
 namespace Crawler.AngleSharp.Js.Dom;
 
 public sealed class DomBridge

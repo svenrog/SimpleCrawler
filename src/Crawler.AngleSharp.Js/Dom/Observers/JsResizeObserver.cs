@@ -1,4 +1,4 @@
-namespace Crawler.AngleSharp.Js.Dom;
+﻿namespace Crawler.AngleSharp.Js.Dom.Observers;
 
 // A no-op ResizeObserver: constructible and callable so SPAs that observe elements render, but it never
 // reports resizes (there is no layout during a crawl). Mirrors JsIntersectionObserver.

@@ -1,4 +1,4 @@
-namespace Crawler.AngleSharp.Js.Dom;
+﻿namespace Crawler.AngleSharp.Js.Dom.Window;
 
 // Exposed so SPAs that probe navigator.geolocation render, but the success/error callbacks are never
 // delivered: a crawl must not depend on asynchronous, permission-gated position fixes (real headless

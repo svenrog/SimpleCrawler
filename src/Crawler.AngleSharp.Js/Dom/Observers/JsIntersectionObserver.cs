@@ -1,4 +1,4 @@
-namespace Crawler.AngleSharp.Js.Dom;
+﻿namespace Crawler.AngleSharp.Js.Dom.Observers;
 
 // A no-op IntersectionObserver: constructible and callable so SPAs that observe elements render, but
 // it never reports intersections (there is no viewport to intersect with during a crawl). Two explicit

@@ -2,7 +2,7 @@ using AngleSharp.Dom;
 
 namespace Crawler.AngleSharp.Js.Dom;
 
-public sealed class JsDocument : JsNode
+public class JsDocument : JsNode
 {
     private readonly Dictionary<string, string> _cookies = new(StringComparer.Ordinal);
 
@@ -17,6 +17,7 @@ public sealed class JsDocument : JsNode
     public object? body => Context.Wrap(Document.Body);
     public object? defaultView => null;
     public object styleSheets => Context.CreateArray([]);
+    public object scripts => Context.WrapAll(Document.GetElementsByTagName("script"));
 
     // Next.js's inline bootstrap asserts document.currentScript is a <script>; the renderer points this
     // at the executing classic script and clears it afterward (null during modules/deferred work, per spec).
