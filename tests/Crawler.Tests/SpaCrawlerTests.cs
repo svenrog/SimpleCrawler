@@ -70,9 +70,9 @@ public class SpaCrawlerTests : IClassFixture<SpaHostFixture>
         AssertResult(framework, result);
     }
 
-    protected void AssertResult(string framework, IScrapeResult result)
+    protected static void AssertResult(string framework, IScrapeResult result)
     {
-        var links = _context.LinksFor(framework);
+        var links = SpaHostFixture.LinksFor(framework);
 
         Assert.Equal(links.Count, result.Urls.Count);
 

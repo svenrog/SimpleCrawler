@@ -18,7 +18,7 @@ public sealed class SpaHostFixture : AbstractHostFixture
 
     // Page links and the browser-API feature links (emitted by feature-nav.ts only when the JS engine
     // implements each API) come from the same JSON the frontend itself consumes.
-    public IReadOnlyList<string> LinksFor(string framework)
+    public static IReadOnlyList<string> LinksFor(string framework)
     {
         var baseUri = new Uri(HostName(framework));
 

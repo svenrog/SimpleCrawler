@@ -14,16 +14,12 @@ public sealed class JsTextDecoder
 
     private static byte[]? ToBytes(object? input)
     {
-        switch (input)
+        return input switch
         {
-            case null:
-                return null;
-            case byte[] bytes:
-                return bytes;
-            case IEnumerable<object?> items:
-                return items.Select(Convert.ToByte).ToArray();
-            default:
-                return null;
-        }
+            null => null,
+            byte[] bytes => bytes,
+            IEnumerable<object?> items => [.. items.Select(Convert.ToByte)],
+            _ => null,
+        };
     }
 }
