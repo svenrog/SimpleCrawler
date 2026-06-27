@@ -96,6 +96,10 @@ internal sealed class V8JsEngine : IJsEngine
         return (T)Convert.ChangeType(value!, typeof(T), CultureInfo.InvariantCulture);
     }
 
+    // The native global object reference (not ToObject()'d), so a host getter like document.defaultView
+    // can hand the bundle back the same `window` it already reads through globalThis.
+    public object GetGlobalObject() => _engine.Evaluate("globalThis");
+
     public object CreateArray(IReadOnlyList<object?> items)
     {
         // A plain .NET array reaches JS as a host object without a JS `length`, which breaks
@@ -118,6 +122,11 @@ internal sealed class V8JsEngine : IJsEngine
     public void InvokeCallback(object callback)
     {
         ((ScriptObject)callback).InvokeAsFunction();
+    }
+
+    public void CallGlobal(string name, params object?[] args)
+    {
+        _engine.Invoke(name, args!);
     }
 
     public void RunMicrotasks()

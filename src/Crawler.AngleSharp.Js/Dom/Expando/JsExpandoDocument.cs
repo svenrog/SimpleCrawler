@@ -15,5 +15,6 @@ internal sealed class JsExpandoDocument : JsDocument, IDynamicMetaObjectProvider
     bool IExpandoNode.HasExpando(string name) => Context.TryGetExpando(Node, name, out _);
     object? IExpandoNode.ExpandoGet(string name) => Context.TryGetExpando(Node, name, out var value) ? value : null;
     void IExpandoNode.ExpandoSet(string name, object? value) => Context.SetExpando(Node, name, value);
+    void IExpandoNode.ExpandoDelete(string name) => Context.RemoveExpando(Node, name);
     IEnumerable<string> IExpandoNode.ExpandoNames() => Context.ExpandoNames(Node);
 }

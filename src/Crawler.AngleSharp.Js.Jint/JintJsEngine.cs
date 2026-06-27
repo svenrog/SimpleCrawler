@@ -73,6 +73,10 @@ internal sealed class JintJsEngine : IJsEngine
         return (T)Convert.ChangeType(value!, typeof(T), CultureInfo.InvariantCulture);
     }
 
+    // The native global object reference (not ToObject()'d), so a host getter like document.defaultView
+    // can hand the bundle back the same `window` it already reads through globalThis.
+    public object GetGlobalObject() => _engine.Evaluate("globalThis");
+
     public object CreateArray(IReadOnlyList<object?> items)
     {
         var array = items as object?[] ?? [.. items];
@@ -95,6 +99,11 @@ internal sealed class JintJsEngine : IJsEngine
             function(JsValue.Undefined, []);
         else if (callback is JsValue value)
             _engine.Invoke(value);
+    }
+
+    public void CallGlobal(string name, params object?[] args)
+    {
+        _engine.Invoke(name, args!);
     }
 
     public void RunMicrotasks()
