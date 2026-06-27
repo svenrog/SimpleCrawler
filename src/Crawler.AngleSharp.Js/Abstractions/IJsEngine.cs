@@ -12,6 +12,8 @@ public interface IJsEngine : IDisposable
 
     void Execute(string script);
 
+    void ExecuteCached(string cacheKey, string script);
+
     void EvaluateModule(string specifier, string source);
 
     T Evaluate<T>(string expression);

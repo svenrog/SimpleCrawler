@@ -1,6 +1,6 @@
 ﻿namespace Crawler.AngleSharp.Js.Models;
 
-public readonly struct Viewport
+public readonly record struct Viewport
 {
     public required uint Width { get; init; }
     public required uint Height { get; init; }

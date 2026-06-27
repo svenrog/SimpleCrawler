@@ -115,7 +115,7 @@ public sealed class JsRenderer
 
         var bridge = context.Bridge;
         EmbedGlobalFunction(engine, "__isInstance", bridge.IsInstance);
-        engine.Execute(JsPreludes.InstanceShims);
+        RunPrelude(engine, JsPreludes.InstanceShims);
 
         EmbedGlobalFunction(engine, "matchMedia", bridge.MatchMedia);
         EmbedGlobalFunction(engine, "getComputedStyle", bridge.GetComputedStyle);
@@ -130,19 +130,19 @@ public sealed class JsRenderer
         EmbedGlobalFunction(engine, "removeEventListener", bridge.Noop);
         EmbedGlobalFunction(engine, "dispatchEvent", bridge.ReturnTrue);
 
-        engine.Execute(JsPreludes.Global);
+        RunPrelude(engine, JsPreludes.Global);
 
         // document.defaultView must return the same `window` the bundle reads through globalThis: history
         // libraries default `let {window = document.defaultView} = opts` then read window.history, so a null
         // defaultView crashes them with "Cannot read properties of null (reading 'history')".
         context.Window = engine.GetGlobalObject();
 
-        engine.Execute(JsPreludes.Crypto);
-        engine.Execute(JsPreludes.ResourceEvent);
-        engine.Execute(JsPreludes.MessageChannel);
-        engine.Execute(JsPreludes.History);
-        engine.Execute(JsPreludes.HtmlElement);
-        engine.Execute(JsPreludes.DomGlobals);
+        RunPrelude(engine, JsPreludes.Crypto);
+        RunPrelude(engine, JsPreludes.ResourceEvent);
+        RunPrelude(engine, JsPreludes.MessageChannel);
+        RunPrelude(engine, JsPreludes.History);
+        RunPrelude(engine, JsPreludes.HtmlElement);
+        RunPrelude(engine, JsPreludes.DomGlobals);
 
         if (enableFetch)
         {
@@ -152,9 +152,11 @@ public sealed class JsRenderer
             // Jint and ClearScript.
             engine.EmbedHostType("AbortController", typeof(JsAbortController));
             engine.EmbedHostType("AbortSignal", typeof(JsAbortSignal));
-            engine.Execute(JsPreludes.Fetch);
+            RunPrelude(engine, JsPreludes.Fetch);
         }
     }
+
+    private static void RunPrelude(IJsEngine engine, in PreludeEntry prelude) => engine.ExecuteCached(prelude.Key, prelude.Source);
 
     // ClearScript/V8 exposes an embedded host delegate as a non-writable global that is NOT a real JS
     // Function — it has no .bind/.call (React's scheduler does `requestAnimationFrame.bind(...)`), and a
@@ -232,7 +234,7 @@ public sealed class JsRenderer
 
         try
         {
-            engine.Execute(source);
+            engine.ExecuteCached(absolute.AbsoluteUri, source);
         }
         catch (JsException ex)
         {
@@ -269,7 +271,10 @@ public sealed class JsRenderer
         context.CurrentScript = engine.CreateScriptElement(script.Src);
         try
         {
-            engine.Execute(script.Source);
+            if (script.External)
+                engine.ExecuteCached(script.Src, script.Source);
+            else
+                engine.Execute(script.Source);
         }
         catch (JsException ex)
         {
@@ -350,7 +355,7 @@ public sealed class JsRenderer
                 if (isModule)
                     modules.Add(new ModuleScript(pageUrl, script.TextContent));
                 else
-                    regular.Add(new RegularScript(script.TextContent, pageUrl));
+                    regular.Add(new RegularScript(script.TextContent, pageUrl, External: false));
 
                 continue;
             }
@@ -363,7 +368,7 @@ public sealed class JsRenderer
             if (isModule)
                 modules.Add(new ModuleScript(absolute.ToString(), source));
             else
-                regular.Add(new RegularScript(source, absolute.ToString()));
+                regular.Add(new RegularScript(source, absolute.ToString(), External: true));
         }
 
         return (regular, modules);

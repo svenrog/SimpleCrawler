@@ -63,6 +63,11 @@ internal sealed class V8JsEngine : IJsEngine
         }
     }
 
+    // V8 runs each page on a pooled isolate whose compilation cache already survives across the per-page
+    // contexts, so re-running the same source is cheap to reparse; the cache key (meaningful only to
+    // Jint's cross-engine Prepared<Script>) is ignored and the source executes directly.
+    public void ExecuteCached(string cacheKey, string script) => Execute(script);
+
     // Loading the entry via Execute creates a separate instance from the one the loader serves
     // when chunks circularly import it, duplicating module singletons. Seeding the cached loader
     // and importing keeps a single canonical instance; await drives V8's module evaluation.

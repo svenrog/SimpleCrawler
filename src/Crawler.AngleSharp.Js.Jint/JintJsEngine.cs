@@ -13,11 +13,13 @@ internal sealed class JintJsEngine : IJsEngine
 {
     private readonly Engine _engine;
     private readonly JintModuleCache _moduleCache;
+    private readonly JintScriptCache _scriptCache;
     private JsValue? _scriptElementFactory;
 
-    public JintJsEngine(IModuleFetcher fetcher, Uri baseUri, JintModuleCache moduleCache)
+    public JintJsEngine(IModuleFetcher fetcher, Uri baseUri, JintModuleCache moduleCache, JintScriptCache scriptCache)
     {
         _moduleCache = moduleCache;
+        _scriptCache = scriptCache;
 
         // Convert exceptions thrown by host objects (e.g. `new URL('not-a-url')`, which a bundle wraps in a
         // try/catch to probe validity) into catchable JS errors. Jint otherwise bubbles them straight to the
@@ -50,6 +52,19 @@ internal sealed class JintJsEngine : IJsEngine
         try
         {
             _engine.Execute(script);
+        }
+        catch (JavaScriptException ex)
+        {
+            throw new JsException(ex.Message, ex.JavaScriptStackTrace, ex);
+        }
+    }
+
+    public void ExecuteCached(string cacheKey, string script)
+    {
+        try
+        {
+            var prepared = _scriptCache.GetOrPrepare(cacheKey, script);
+            _engine.Execute(in prepared);
         }
         catch (JavaScriptException ex)
         {
