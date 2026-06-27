@@ -18,7 +18,14 @@ internal sealed class JintJsEngine : IJsEngine
     public JintJsEngine(IModuleFetcher fetcher, Uri baseUri, JintModuleCache moduleCache)
     {
         _moduleCache = moduleCache;
-        _engine = new Engine(options => options.EnableModules(new JintModuleLoader(fetcher, baseUri, moduleCache)));
+
+        // Convert exceptions thrown by host objects (e.g. `new URL('not-a-url')`, which a bundle wraps in a
+        // try/catch to probe validity) into catchable JS errors. Jint otherwise bubbles them straight to the
+        // CLR host, escaping the bundle's try/catch and aborting the whole render — ClearScript/V8 already
+        // surface host exceptions as JS errors, so this matches that behaviour.
+        _engine = new Engine(options => options
+            .EnableModules(new JintModuleLoader(fetcher, baseUri, moduleCache))
+            .CatchClrExceptions());
     }
 
     public void EmbedHostObject(string name, object value)

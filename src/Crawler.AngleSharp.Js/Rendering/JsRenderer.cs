@@ -245,8 +245,9 @@ public sealed class JsRenderer
     }
 
     // webpack/React resolve a chunk's CSS (and script) promise from the resource's load event, checking
-    // event.type === 'load'; the handler lives in the node's expando table (it is assigned, not a real
-    // member). __invokeResourceEvent builds that event and calls it. The chunk's own push() settles the
+    // event.type === 'load'; the handler is assigned to the node (onload/onerror) and kept in the per-node
+    // expando table (JsElement exposes those two as real properties so the assignment lands in the table on
+    // both engines). __invokeResourceEvent builds the event and calls it. The chunk's own push() settles the
     // JS half, but the CSS half only settles here — without it a code-split route's import() never resolves.
     private static void FireResourceEvent(IJsEngine engine, DomContext context, IElement resource, string handler)
     {
