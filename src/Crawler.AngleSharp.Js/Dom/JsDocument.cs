@@ -15,7 +15,7 @@ public class JsDocument : JsNode
     public object? documentElement => Context.Wrap(Document.DocumentElement);
     public object? head => Context.Wrap(Document.Head);
     public object? body => Context.Wrap(Document.Body);
-    public object? defaultView => null;
+    public object? defaultView => Context.Window;
     public object styleSheets => Context.CreateArray([]);
     public object scripts => Context.WrapAll(Document.GetElementsByTagName("script"));
 

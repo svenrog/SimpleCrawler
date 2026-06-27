@@ -12,6 +12,8 @@ public sealed class DomContext
     private readonly Dictionary<INode, JsNode> _wrappers = new(ReferenceEqualityComparer.Instance);
     private readonly Dictionary<INode, Dictionary<string, object?>> _expandos = new(ReferenceEqualityComparer.Instance);
     private readonly List<object> _tasks = [];
+    private readonly List<IElement> _pendingResources = [];
+    private readonly HashSet<INode> _seenResources = new(ReferenceEqualityComparer.Instance);
 
     public DomContext(IDocument document, IJsEngine engine, Uri pageUri, bool enableExpandos = false)
     {
@@ -43,6 +45,10 @@ public sealed class DomContext
     public DomBridge Bridge { get; }
 
     public object? CurrentScript { get; set; }
+
+    // The JS global object, exposed to the bundle as document.defaultView (the `window` it reads
+    // through globalThis). Set once globals are wired up; null until then.
+    public object? Window { get; set; }
 
     public JsDocument DocumentWrapper => (JsDocument)Wrap(Document)!;
 
@@ -102,6 +108,12 @@ public sealed class DomContext
         return false;
     }
 
+    public void RemoveExpando(INode node, string name)
+    {
+        if (_expandos.TryGetValue(node, out var bag))
+            bag.Remove(name);
+    }
+
     public IEnumerable<string> ExpandoNames(INode node) =>
         _expandos.TryGetValue(node, out var bag) ? bag.Keys : [];
 
@@ -110,6 +122,29 @@ public sealed class DomContext
     public void Enqueue(object callback) => _tasks.Add(callback);
 
     public int PendingTaskCount => _tasks.Count;
+
+    // A <script src> or <link> appended at runtime (webpack lazy-route JS/CSS chunks, React 18's
+    // stylesheet loading, the AppInsights/GTM loaders). The renderer drains these between turns: a
+    // same-origin <script> is fetched and executed so its module registrations run; a <link>'s load
+    // event is fired. Both resolve the import() promise (Promise.all of the JS and CSS chunk) the route
+    // awaits — without them a code-split route never loads and the app sits on its loading fallback.
+    public void NotifyResourceAppended(IElement resource)
+    {
+        if (_seenResources.Add(resource))
+            _pendingResources.Add(resource);
+    }
+
+    public int PendingResourceCount => _pendingResources.Count;
+
+    public IReadOnlyList<IElement> TakePendingResources()
+    {
+        if (_pendingResources.Count == 0)
+            return [];
+
+        var batch = _pendingResources.ToArray();
+        _pendingResources.Clear();
+        return batch;
+    }
 
     public IReadOnlyList<object> TakeTasks()
     {

@@ -18,10 +18,13 @@ public sealed class JsHistory
     public void back() { }
     public void forward() { }
 
+    // Only a real string URL moves location. A `history.replaceState(state, "")` call omits the URL, and
+    // ClearScript marshals that missing argument to its Undefined sentinel (a non-null object whose
+    // ToString() is "[undefined]") rather than null — so the old `url?.ToString()` applied "[undefined]"
+    // as a path, corrupting location to "/[undefined]" and poisoning every URL the router derived from it.
     private void Navigate(object? url)
     {
-        var target = url?.ToString();
-        if (!string.IsNullOrEmpty(target))
+        if (url is string target && !string.IsNullOrEmpty(target))
             _location.Apply(target);
     }
 }

@@ -7,6 +7,7 @@ public class JsElement : JsNode
     private JsStyle? _style;
     private JsStyleSheet? _sheet;
     private JsRelList? _relList;
+    private JsDataset? _dataset;
 
     internal JsElement(IElement element, DomContext context) : base(element, context)
     {
@@ -38,7 +39,21 @@ public class JsElement : JsNode
 
     public string outerHTML => Element.OuterHtml;
 
+    // A real (CLR) property, not an expando, so webpack's chunk loader (`script.src=url`) writes the
+    // attribute the renderer reads back when it fetches and executes the dynamically appended chunk.
+    public string src
+    {
+        get => Element.GetAttribute("src") ?? string.Empty;
+        set => Element.SetAttribute("src", value ?? string.Empty);
+    }
+
+    public object children => Context.WrapAll(Element.Children);
+    public object? firstElementChild => Context.Wrap(Element.FirstElementChild);
+    public object? lastElementChild => Context.Wrap(Element.LastElementChild);
+    public int childElementCount => Element.ChildElementCount;
+
     public object style => _style ??= new JsStyle(Element);
+    public object dataset => _dataset ??= new JsDataset(Element);
     public object? sheet => string.Equals(Element.LocalName, "style", StringComparison.Ordinal) ? _sheet ??= new JsStyleSheet(Context) : null;
     public object relList => _relList ??= new JsRelList();
 

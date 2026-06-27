@@ -16,11 +16,15 @@ public interface IJsEngine : IDisposable
 
     T Evaluate<T>(string expression);
 
+    object GetGlobalObject();
+
     object CreateArray(IReadOnlyList<object?> items);
 
     object CreateScriptElement(string src);
 
     void InvokeCallback(object callback);
+
+    void CallGlobal(string name, params object?[] args);
 
     void RunMicrotasks();
 }

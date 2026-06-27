@@ -1,4 +1,5 @@
 using AngleSharp.Dom;
+using AngleSharp.Html.Dom;
 
 namespace Crawler.AngleSharp.Js.Dom;
 
@@ -39,13 +40,23 @@ public class JsNode
     public object? appendChild(JsNode child)
     {
         Node.AppendChild(child.Node);
+        NotifyIfScript(child.Node);
         return child;
     }
 
     public object? insertBefore(JsNode child, JsNode? reference)
     {
         Node.InsertBefore(child.Node, reference?.Node);
+        NotifyIfScript(child.Node);
         return child;
+    }
+
+    private void NotifyIfScript(INode node)
+    {
+        if (node is IHtmlScriptElement script && !string.IsNullOrEmpty(script.GetAttribute("src")))
+            Context.NotifyResourceAppended(script);
+        else if (node is IHtmlLinkElement link)
+            Context.NotifyResourceAppended(link);
     }
 
     public object? removeChild(JsNode child)
@@ -61,6 +72,11 @@ public class JsNode
     }
 
     public void remove() => Node.Parent?.RemoveChild(Node);
+
+    public bool isEqualNode(JsNode? other) => other is not null && Node.Equals(other.Node);
+    public bool isSameNode(JsNode? other) => other is not null && ReferenceEquals(Node, other.Node);
+    public bool hasChildNodes() => Node.HasChildNodes;
+    public object? cloneNode(object? deep = null) => Context.Wrap(Node.Clone(deep is true));
 
     public bool contains(JsNode? other)
     {

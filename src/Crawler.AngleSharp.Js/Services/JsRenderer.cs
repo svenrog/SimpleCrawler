@@ -66,7 +66,7 @@ public sealed class JsRenderer
         foreach (var module in moduleEntries)
             RunModule(engine, module, pageUrl);
 
-        Drain(engine, context, pageUrl);
+        Drain(engine, context, pageUri, client, pageUrl, cancellationToken);
 
         return Serialize(document.DocumentElement);
     }
@@ -93,28 +93,31 @@ public sealed class JsRenderer
         engine.EmbedHostObject("navigator", context.Navigator);
         engine.EmbedHostObject("localStorage", context.LocalStorage);
         engine.EmbedHostObject("sessionStorage", context.SessionStorage);
-        engine.EmbedHostObject("crypto", context.Crypto);
+        engine.EmbedHostObject("__crypto", context.Crypto);
         engine.EmbedHostObject("customElements", context.CustomElements);
         engine.EmbedHostObject("console", context.Console);
         engine.EmbedHostObject("performance", context.Performance);
-        engine.EmbedHostType("URL", typeof(JsUrl));
         engine.EmbedHostType("IntersectionObserver", typeof(JsIntersectionObserver));
         engine.EmbedHostType("ResizeObserver", typeof(JsResizeObserver));
         engine.EmbedHostType("MutationObserver", typeof(JsMutationObserver));
-        engine.EmbedHostType("Event", typeof(JsEvent));
-        engine.EmbedHostType("CustomEvent", typeof(JsCustomEvent));
         engine.EmbedHostType("TextEncoder", typeof(JsTextEncoder));
         engine.EmbedHostType("TextDecoder", typeof(JsTextDecoder));
 
-        // The DOM wrappers themselves as constructors so `node instanceof Element/Node/Text/Document`
-        // is true for them (bundles guard with these); without a defined right-hand side instanceof throws.
-        engine.EmbedHostType("Node", typeof(JsNode));
-        engine.EmbedHostType("Element", typeof(JsElement));
-        engine.EmbedHostType("Text", typeof(JsText));
-        engine.EmbedHostType("Document", typeof(JsDocument));
+        // A CLR host type embedded with AddHostType has no JS .prototype, so `x instanceof Element` throws
+        // on V8 ("Function has non-object prototype undefined") rather than testing the wrapper's type.
+        // So URL/Event (constructed) are embedded privately and re-exposed as JS shims that construct via
+        // the host type and carry a Symbol.hasInstance, while Node/Element/Text/Document (only ever an
+        // instanceof right-hand side, never `new`'d) are plain JS shims. __isInstance answers by CLR type.
+        engine.EmbedHostType("__ctor_URL", typeof(JsUrl));
+        engine.EmbedHostType("__ctor_Event", typeof(JsEvent));
+        engine.EmbedHostType("__ctor_CustomEvent", typeof(JsCustomEvent));
 
         var bridge = context.Bridge;
+        EmbedGlobalFunction(engine, "__isInstance", bridge.IsInstance);
+        engine.Execute(_instanceShimsPrelude);
+
         EmbedGlobalFunction(engine, "matchMedia", bridge.MatchMedia);
+        EmbedGlobalFunction(engine, "getComputedStyle", bridge.GetComputedStyle);
         EmbedGlobalFunction(engine, "setTimeout", bridge.SetTimeout);
         EmbedGlobalFunction(engine, "clearTimeout", bridge.Noop);
         EmbedGlobalFunction(engine, "setInterval", bridge.SetInterval);
@@ -132,6 +135,29 @@ public sealed class JsRenderer
         engine.Execute(
             "var window=globalThis;var self=globalThis;" +
             "globalThis.structuredClone=globalThis.structuredClone||function(v){return v===undefined?undefined:JSON.parse(JSON.stringify(v));};");
+
+        // document.defaultView must return the same `window` the bundle reads through globalThis: history
+        // libraries default `let {window = document.defaultView} = opts` then read window.history, so a null
+        // defaultView crashes them with "Cannot read properties of null (reading 'history')".
+        context.Window = engine.GetGlobalObject();
+
+        // crypto is a JS object (not the host wrapper directly) because uuid/nanoid bundles do
+        // crypto.randomUUID.bind(crypto), and a V8/ClearScript host method is not a real JS function
+        // (no .bind/.call). randomUUID delegates to the host for a real GUID; getRandomValues fills in JS.
+        engine.Execute(
+            "globalThis.crypto=globalThis.crypto||{" +
+            "randomUUID:function(){return __crypto.randomUUID();}," +
+            "getRandomValues:function(a){if(a)for(var i=0;i<a.length;i++)a[i]=Math.floor(Math.random()*256);return a;}};");
+
+        // The renderer fires load/error on a dynamically appended <script>/<link> by invoking the handler
+        // the bundle stashed on the node (an expando) with a matching event object — see FireResourceEvent.
+        engine.Execute("globalThis.__invokeResourceEvent=function(h,t){if(typeof h==='function')h({type:t});};");
+
+        // MessageChannel is how React's scheduler and state-batching helpers defer a flush ("if MessageChannel
+        // is defined, port2.postMessage triggers port1.onmessage" — else a fallback that never runs here). Each
+        // postMessage delivers to the paired port's onmessage as a macrotask via our setTimeout drain, so those
+        // deferred flushes (which commit data-driven render updates) actually happen. instanceof type, stays JS.
+        engine.Execute(_messageChannelPrelude);
 
         // history is a plain JS object delegating to the host wrapper rather than the host object itself,
         // because routers (React Router's history lib) reassign history.pushState/replaceState and set
@@ -180,6 +206,54 @@ public sealed class JsRenderer
         engine.EmbedFunction("__fn_" + name, function);
         engine.Execute($"globalThis.{name}=function(){{return __fn_{name}(...arguments);}};");
     }
+
+    // See the embedding site: CLR host types have no JS prototype, so the DOM/Web globals bundles use as an
+    // instanceof right-hand side are JS shims whose Symbol.hasInstance defers to the host type check. URL and
+    // Event also stay constructible by forwarding `new` to the privately embedded host type.
+    private const string _instanceShimsPrelude = """
+        (function(){
+          function ctor(host, kind){
+            var f = function(){ return new host(...arguments); };
+            Object.defineProperty(f, Symbol.hasInstance, {value:function(x){ return __isInstance(x, kind); }});
+            return f;
+          }
+          function only(kind){
+            var f = function(){};
+            Object.defineProperty(f, Symbol.hasInstance, {value:function(x){ return __isInstance(x, kind); }});
+            return f;
+          }
+          globalThis.URL = ctor(__ctor_URL, 'URL');
+          globalThis.Event = ctor(__ctor_Event, 'Event');
+          globalThis.CustomEvent = ctor(__ctor_CustomEvent, 'CustomEvent');
+          var node = only('Node');
+          node.ELEMENT_NODE=1; node.ATTRIBUTE_NODE=2; node.TEXT_NODE=3; node.CDATA_SECTION_NODE=4;
+          node.PROCESSING_INSTRUCTION_NODE=7; node.COMMENT_NODE=8; node.DOCUMENT_NODE=9;
+          node.DOCUMENT_TYPE_NODE=10; node.DOCUMENT_FRAGMENT_NODE=11;
+          globalThis.Node = node;
+          globalThis.Element = only('Element');
+          globalThis.Text = only('Text');
+          globalThis.Document = only('Document');
+        })();
+        """;
+
+    private const string _messageChannelPrelude = """
+        (function(){
+          if(globalThis.MessageChannel) return;
+          function Port(){ this.onmessage=null; this._other=null; }
+          Port.prototype.postMessage=function(data){
+            var other=this._other;
+            setTimeout(function(){ if(other&&other.onmessage) other.onmessage({data:data}); },0);
+          };
+          Port.prototype.start=function(){};
+          Port.prototype.close=function(){};
+          Port.prototype.addEventListener=function(t,cb){ if(t==='message') this.onmessage=cb; };
+          Port.prototype.removeEventListener=function(t,cb){ if(t==='message'&&this.onmessage===cb) this.onmessage=null; };
+          globalThis.MessagePort=globalThis.MessagePort||Port;
+          globalThis.MessageChannel=class MessageChannel{
+            constructor(){ this.port1=new Port(); this.port2=new Port(); this.port1._other=this.port2; this.port2._other=this.port1; }
+          };
+        })();
+        """;
 
     private const string _domGlobalsPrelude = """
         (function(){
@@ -283,16 +357,22 @@ public sealed class JsRenderer
         })();
         """;
 
-    private void Drain(IJsEngine engine, DomContext context, string pageUrl)
+    private void Drain(IJsEngine engine, DomContext context, Uri pageUri, HttpClient client, string pageUrl, CancellationToken cancellationToken)
     {
-        // The bundle defers work onto setTimeout/requestAnimationFrame (drained from our queue) and
-        // native promise jobs (dynamic import for lazy routes, drained at each RunMicrotasks boundary).
-        // V8 resolves dynamic import() on those boundaries rather than synchronously like Jint, so we
-        // keep pumping through empty turns until the queue has stayed idle for a few consecutive turns.
+        // The bundle defers work onto setTimeout/requestAnimationFrame (drained from our queue), native
+        // promise jobs (dynamic import for lazy routes, drained at each RunMicrotasks boundary), and
+        // <script src> chunks it appends to the DOM (fetched and executed here so their module
+        // registrations run and the awaiting import() resolves). V8 resolves dynamic import() on those
+        // boundaries rather than synchronously like Jint, so we keep pumping through empty turns until
+        // the queue has stayed idle for a few consecutive turns.
         var iterations = 0;
         var idle = 0;
         while (iterations++ < _options.MaxTaskDrainIterations && idle < _idleTurnsBeforeSettled)
         {
+            var resources = context.TakePendingResources();
+            foreach (var resource in resources)
+                LoadResource(engine, context, resource, pageUri, client, pageUrl, cancellationToken);
+
             var batch = context.TakeTasks();
             foreach (var callback in batch)
             {
@@ -307,7 +387,69 @@ public sealed class JsRenderer
             }
 
             engine.RunMicrotasks();
-            idle = batch.Count == 0 && context.PendingTaskCount == 0 ? idle + 1 : 0;
+            idle = resources.Count == 0 && batch.Count == 0 && context.PendingTaskCount == 0 && context.PendingResourceCount == 0
+                ? idle + 1
+                : 0;
+        }
+    }
+
+    // A <script>/<link> the bundle appended at runtime. Same-origin scripts are fetched and executed (so a
+    // webpack chunk's module registrations run); a <link> is treated as loaded without fetching, since a
+    // crawl needs no CSS. Either way the resource's load event fires to settle the awaiting import(). The
+    // cross-origin scripts (AppInsights/GTM/Flowbox) are analytics SDKs irrelevant to a crawl, so they are
+    // left pending — running them would be slow and produce no links.
+    private void LoadResource(IJsEngine engine, DomContext context, IElement resource, Uri pageUri, HttpClient client, string pageUrl, CancellationToken cancellationToken)
+    {
+        if (resource is IHtmlLinkElement)
+        {
+            FireResourceEvent(engine, context, resource, "onload");
+            return;
+        }
+
+        var src = resource.GetAttribute("src");
+        if (string.IsNullOrEmpty(src) || !Uri.TryCreate(pageUri, src, out var absolute))
+            return;
+
+        if (!string.Equals(absolute.Host, pageUri.Host, StringComparison.OrdinalIgnoreCase))
+            return;
+
+        var source = FetchSourceAsync(client, _sources, absolute, cancellationToken).GetAwaiter().GetResult();
+        if (source is null)
+        {
+            FireResourceEvent(engine, context, resource, "onerror");
+            return;
+        }
+
+        try
+        {
+            engine.Execute(source);
+        }
+        catch (JsException ex)
+        {
+            _logger.LogWarning("Chunk execution error on '{url}': {message}", pageUrl, ex.Message);
+            FireResourceEvent(engine, context, resource, "onerror");
+            return;
+        }
+
+        FireResourceEvent(engine, context, resource, "onload");
+    }
+
+    // webpack/React resolve a chunk's CSS (and script) promise from the resource's load event, checking
+    // event.type === 'load'; the handler lives in the node's expando table (it is assigned, not a real
+    // member). __invokeResourceEvent builds that event and calls it. The chunk's own push() settles the
+    // JS half, but the CSS half only settles here — without it a code-split route's import() never resolves.
+    private static void FireResourceEvent(IJsEngine engine, DomContext context, IElement resource, string handler)
+    {
+        if (context.TryGetExpando(resource, handler, out var callback) && callback is not null)
+        {
+            try
+            {
+                engine.CallGlobal("__invokeResourceEvent", callback, handler == "onload" ? "load" : "error");
+            }
+            catch
+            {
+                // A missing/odd handler must not abort the drain; the chunk itself already executed.
+            }
         }
     }
 

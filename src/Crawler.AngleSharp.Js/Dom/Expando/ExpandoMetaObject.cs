@@ -14,6 +14,7 @@ internal sealed class ExpandoMetaObject : DynamicMetaObject
     private static readonly MethodInfo _hasExpando = typeof(IExpandoNode).GetMethod(nameof(IExpandoNode.HasExpando))!;
     private static readonly MethodInfo _expandoGet = typeof(IExpandoNode).GetMethod(nameof(IExpandoNode.ExpandoGet))!;
     private static readonly MethodInfo _expandoSet = typeof(IExpandoNode).GetMethod(nameof(IExpandoNode.ExpandoSet))!;
+    private static readonly MethodInfo _expandoDelete = typeof(IExpandoNode).GetMethod(nameof(IExpandoNode.ExpandoDelete))!;
 
     private static readonly ConcurrentDictionary<Type, HashSet<string>> _members = new();
     private static readonly ConcurrentDictionary<Type, HashSet<string>> _writableMembers = new();
@@ -58,6 +59,26 @@ internal sealed class ExpandoMetaObject : DynamicMetaObject
         var assign = Expression.Block(Expression.Call(self, _expandoSet, name, boxed), boxed);
 
         return new DynamicMetaObject(assign, TypeRestriction().Merge(value.Restrictions));
+    }
+
+    public override DynamicMetaObject BindDeleteMember(DeleteMemberBinder binder)
+    {
+        if (HasRealMember(binder.Name))
+            return binder.FallbackDeleteMember(this);
+
+        var self = Expression.Convert(Expression, typeof(IExpandoNode));
+        var name = Expression.Constant(binder.Name);
+        var delete = Expression.Call(self, _expandoDelete, name);
+
+        // The binder asks for void (ClearScript), bool, or object; `delete` succeeds, so yield true where a
+        // value is expected and nothing where it is not.
+        Expression expression = binder.ReturnType == typeof(void)
+            ? delete
+            : Expression.Block(delete, binder.ReturnType == typeof(bool)
+                ? Expression.Constant(true)
+                : Expression.Convert(Expression.Constant(true), binder.ReturnType));
+
+        return new DynamicMetaObject(expression, TypeRestriction());
     }
 
     private BindingRestrictions TypeRestriction() => BindingRestrictions.GetTypeRestriction(Expression, LimitType);
