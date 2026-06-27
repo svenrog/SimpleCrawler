@@ -18,4 +18,10 @@ public class JsRenderOptions
     /// ClearScript/V8 only honours DynamicObject (not a custom meta-object), so it is a no-op there for now.
     /// </summary>
     public bool EnableDomExpandos { get; set; }
+
+    /// <summary>
+    /// Determines the dimensions of the window that should be communicated to the scripts
+    /// 1920x1080 is the default window size
+    /// </summary>
+    public Viewport Viewport { get; set; } = Viewport.Default;
 }

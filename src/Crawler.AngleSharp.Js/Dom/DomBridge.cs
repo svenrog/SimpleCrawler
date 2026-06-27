@@ -1,16 +1,19 @@
 using Crawler.AngleSharp.Js.Dom.Network;
 using Crawler.AngleSharp.Js.Dom.Window;
+using Crawler.AngleSharp.Js.Models;
 
 namespace Crawler.AngleSharp.Js.Dom;
 
 public sealed class DomBridge
 {
     private readonly DomContext _context;
+    private readonly Viewport _viewport;
     private int _handle;
 
-    internal DomBridge(DomContext context)
+    internal DomBridge(DomContext context, Viewport viewport)
     {
         _context = context;
+        _viewport = viewport;
     }
 
     public object? SetTimeout(params object?[] args) => Schedule(args);
@@ -19,7 +22,7 @@ public sealed class DomBridge
     public object MatchMedia(params object?[] args)
     {
         var query = args.Length > 0 ? args[0]?.ToString() ?? string.Empty : string.Empty;
-        return new JsMediaQueryList(query);
+        return new JsMediaQueryList(query, _viewport);
     }
 
     // A crawl has no layout engine, so computed style is just the element's inline declarations (and ""

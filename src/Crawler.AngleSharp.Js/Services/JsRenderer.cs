@@ -53,7 +53,7 @@ public sealed class JsRenderer
 
         var fetcher = new HttpModuleFetcher(client, _sources, cancellationToken);
         using var engine = _engineFactory.Create(fetcher, pageUri);
-        var context = new DomContext(document, engine, pageUri, _options.EnableDomExpandos);
+        var context = new DomContext(document, engine, pageUri, _options);
 
         if (_options.EnableFetch)
             engine.EmbedHostObject("__http", new JsHttp(client, pageUri, _logger, cancellationToken));

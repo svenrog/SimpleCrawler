@@ -1,3 +1,5 @@
+using Crawler.AngleSharp.Js.Models;
+
 namespace Crawler.AngleSharp.Js.Dom.Window;
 
 // A MediaQueryList that presents the crawl as a desktop viewport. Width/height queries are evaluated
@@ -7,13 +9,10 @@ namespace Crawler.AngleSharp.Js.Dom.Window;
 // unmatched: we can't model them and a false keeps their conditional UI off the crawl.
 public sealed class JsMediaQueryList
 {
-    private const int _viewportWidth = 1920;
-    private const int _viewportHeight = 1080;
-
-    public JsMediaQueryList(string query)
+    public JsMediaQueryList(string query, Viewport viewport)
     {
         media = query;
-        matches = Evaluate(query);
+        matches = Evaluate(query, viewport);
     }
 
     public string media { get; }
@@ -29,7 +28,7 @@ public sealed class JsMediaQueryList
     // A media query is a conjunction of features joined by "and"; we only model the dimensional ones. A
     // query with at least one width/height feature matches when the viewport satisfies all of them; a
     // query with none (hover, prefers-color-scheme, …) stays unmatched.
-    private static bool Evaluate(string query)
+    private static bool Evaluate(string query, Viewport viewport)
     {
         if (string.IsNullOrWhiteSpace(query))
             return false;
@@ -41,7 +40,7 @@ public sealed class JsMediaQueryList
                 continue;
 
             sawDimension = true;
-            var actual = isWidth ? _viewportWidth : _viewportHeight;
+            var actual = isWidth ? viewport.Width : viewport.Height;
             if (isMin ? actual < pixels : actual > pixels)
                 return false;
         }

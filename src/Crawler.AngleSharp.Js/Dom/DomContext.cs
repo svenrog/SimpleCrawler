@@ -2,6 +2,7 @@ using AngleSharp.Dom;
 using Crawler.AngleSharp.Js.Abstractions;
 using Crawler.AngleSharp.Js.Dom.Expando;
 using Crawler.AngleSharp.Js.Dom.Window;
+using Crawler.AngleSharp.Js.Models;
 
 namespace Crawler.AngleSharp.Js.Dom;
 
@@ -15,10 +16,11 @@ public sealed class DomContext
     private readonly List<IElement> _pendingResources = [];
     private readonly HashSet<INode> _seenResources = new(ReferenceEqualityComparer.Instance);
 
-    public DomContext(IDocument document, IJsEngine engine, Uri pageUri, bool enableExpandos = false)
+    public DomContext(IDocument document, IJsEngine engine, Uri pageUri, JsRenderOptions options)
     {
         _engine = engine;
-        _enableExpandos = enableExpandos;
+        _enableExpandos = options.EnableDomExpandos;
+
         Document = document;
         Location = new JsLocation(pageUri);
         History = new JsHistory(Location);
@@ -29,7 +31,7 @@ public sealed class DomContext
         CustomElements = new JsCustomElements();
         Console = new JsConsole();
         Performance = new JsPerformance(this);
-        Bridge = new DomBridge(this);
+        Bridge = new DomBridge(this, options.Viewport);
     }
 
     public IDocument Document { get; }
