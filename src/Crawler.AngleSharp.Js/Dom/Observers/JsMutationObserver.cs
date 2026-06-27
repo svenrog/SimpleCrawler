@@ -1,4 +1,4 @@
-namespace Crawler.AngleSharp.Js.Dom;
+﻿namespace Crawler.AngleSharp.Js.Dom.Observers;
 
 // A no-op MutationObserver: constructible and callable so SPAs that watch the DOM render, but it never
 // reports mutations (the tree is serialized once, after the drain settles). Mirrors JsIntersectionObserver.

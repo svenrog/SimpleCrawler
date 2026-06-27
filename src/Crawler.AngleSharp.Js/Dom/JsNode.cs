@@ -16,6 +16,7 @@ public class JsNode
     public int nodeType => (int)Node.NodeType;
     public string nodeName => Node.NodeName;
 
+    public object? ownerDocument => Context.Wrap(Node.Owner);
     public object? parentNode => Context.Wrap(Node.Parent);
     public object? firstChild => Context.Wrap(Node.FirstChild);
     public object? lastChild => Context.Wrap(Node.LastChild);

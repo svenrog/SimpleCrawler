@@ -59,7 +59,7 @@ internal sealed class V8JsEngine : IJsEngine
         }
         catch (ScriptEngineException ex)
         {
-            throw new JsException(ex.Message, ex);
+            throw new JsException(ex.Message, ex.ErrorDetails, ex);
         }
     }
 
@@ -79,11 +79,11 @@ internal sealed class V8JsEngine : IJsEngine
         }
         catch (ScriptEngineException ex)
         {
-            throw new JsException(ex.Message, ex);
+            throw new JsException(ex.Message, ex.ErrorDetails, ex);
         }
         catch (AggregateException ex) when (ex.InnerException is ScriptEngineException inner)
         {
-            throw new JsException(inner.Message, inner);
+            throw new JsException(inner.Message, inner.ErrorDetails, inner);
         }
     }
 

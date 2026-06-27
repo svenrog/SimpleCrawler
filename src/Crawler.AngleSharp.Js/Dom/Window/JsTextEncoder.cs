@@ -1,6 +1,6 @@
-using System.Text;
+﻿using System.Text;
 
-namespace Crawler.AngleSharp.Js.Dom;
+namespace Crawler.AngleSharp.Js.Dom.Window;
 
 public sealed class JsTextEncoder
 {

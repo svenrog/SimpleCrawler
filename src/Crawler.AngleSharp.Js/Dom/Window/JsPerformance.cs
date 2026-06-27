@@ -1,6 +1,7 @@
+﻿using Crawler.AngleSharp.Js.Dom;
 using System.Diagnostics;
 
-namespace Crawler.AngleSharp.Js.Dom;
+namespace Crawler.AngleSharp.Js.Dom.Window;
 
 public sealed class JsPerformance
 {
