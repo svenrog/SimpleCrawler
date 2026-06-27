@@ -96,7 +96,7 @@ public sealed class JsRenderer
         engine.EmbedHostObject("sessionStorage", context.SessionStorage);
         engine.EmbedHostObject("__crypto", context.Crypto);
         engine.EmbedHostObject("customElements", context.CustomElements);
-        engine.EmbedHostObject("console", context.Console);
+        engine.EmbedHostObject("__console", context.Console);
         engine.EmbedHostObject("performance", context.Performance);
         engine.EmbedHostType("IntersectionObserver", typeof(JsIntersectionObserver));
         engine.EmbedHostType("ResizeObserver", typeof(JsResizeObserver));
@@ -138,6 +138,7 @@ public sealed class JsRenderer
         context.Window = engine.GetGlobalObject();
 
         RunPrelude(engine, JsPreludes.Crypto);
+        RunPrelude(engine, JsPreludes.Console);
         RunPrelude(engine, JsPreludes.ResourceEvent);
         RunPrelude(engine, JsPreludes.MessageChannel);
         RunPrelude(engine, JsPreludes.History);

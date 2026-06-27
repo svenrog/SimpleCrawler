@@ -18,6 +18,7 @@ public class JsDocument : JsNode
     public object? defaultView => Context.Window;
     public object styleSheets => Context.CreateArray([]);
     public object scripts => Context.WrapAll(Document.GetElementsByTagName("script"));
+    public object location => Context.Location;
 
     // Next.js's inline bootstrap asserts document.currentScript is a <script>; the renderer points this
     // at the executing classic script and clears it afterward (null during modules/deferred work, per spec).

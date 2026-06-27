@@ -5,6 +5,7 @@ internal static class JsPreludes
     public static readonly PreludeEntry InstanceShims = Load("instance-shims.js");
     public static readonly PreludeEntry Global = Load("global.js");
     public static readonly PreludeEntry Crypto = Load("crypto.js");
+    public static readonly PreludeEntry Console = Load("console.js");
     public static readonly PreludeEntry ResourceEvent = Load("resource-event.js");
     public static readonly PreludeEntry MessageChannel = Load("message-channel.js");
     public static readonly PreludeEntry History = Load("history.js");
