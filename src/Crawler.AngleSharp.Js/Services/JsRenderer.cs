@@ -325,6 +325,9 @@ public sealed class JsRenderer
           }
           function fetch(input,init){
             init=init||{};
+            // A URL host object stringifies to "[object Object]" under V8, so read its href explicitly
+            // (a Request, handled below, carries .url instead). String() suffices for plain string inputs.
+            if(input && typeof input==='object' && typeof input.href==='string' && typeof input.url!=='string') input=input.href;
             var url,method,headers,body;
             if(input && typeof input==='object' && 'url' in input){ url=input.url; method=init.method||input.method||'GET'; headers=init.headers||input.headers; body=init.body!==undefined?init.body:input.body; }
             else { url=String(input); method=init.method||'GET'; headers=init.headers; body=init.body; }
