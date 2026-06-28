@@ -21,10 +21,8 @@ public class ProbeCrawlerTests : IClassFixture<ProbeHostFixture>
     {
         var data = new TheoryData<ProbeCapability, JsEngine>();
         foreach (var capability in Enum.GetValues<ProbeCapability>())
-        {
-            data.Add(capability, JsEngine.Jint);
-            data.Add(capability, JsEngine.V8);
-        }
+            foreach (var engine in ProbeHostFixture.EnginesFor(capability))
+                data.Add(capability, engine);
 
         return data;
     }

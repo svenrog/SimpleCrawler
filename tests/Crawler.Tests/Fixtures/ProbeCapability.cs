@@ -10,4 +10,5 @@ public enum ProbeCapability
     DeferredCallback,
     JQuery,
     BrowserApis,
+    DeepWalk,
 }
