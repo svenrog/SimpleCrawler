@@ -7,7 +7,6 @@ namespace Crawler.AngleSharp.Js.Dom;
 
 public partial class JsElement : JsNode, IJsLocation
 {
-
     public string src
     {
         get => Element.GetAttribute("src") ?? string.Empty;
