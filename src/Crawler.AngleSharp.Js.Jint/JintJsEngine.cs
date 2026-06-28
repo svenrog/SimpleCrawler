@@ -130,12 +130,15 @@ internal sealed class JintJsEngine : IJsEngine
 
     public void InvokeCallback(object callback)
     {
+        // Invoke through the engine, not the marshalled Func delegate directly: the delegate path runs the
+        // body without an active evaluation context, so a callee's default-parameter eval throws a bare NRE.
+        var function = (callback as Delegate)?.Target as JsValue ?? callback as JsValue;
         try
         {
-            if (callback is Func<JsValue, JsValue[], JsValue> function)
-                function(JsValue.Undefined, []);
-            else if (callback is JsValue value)
-                _engine.Invoke(value);
+            if (function is not null)
+                _engine.Invoke(function);
+            else if (callback is Func<JsValue, JsValue[], JsValue> raw)
+                raw(JsValue.Undefined, []);
         }
         catch (JavaScriptException ex)
         {
