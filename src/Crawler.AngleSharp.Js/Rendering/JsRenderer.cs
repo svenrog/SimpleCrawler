@@ -193,6 +193,10 @@ public sealed class JsRenderer
                 {
                     engine.InvokeCallback(callback);
                 }
+                catch (JsException ex)
+                {
+                    _logger.LogWarning("Task callback error on '{url}': {message}\n{details}", pageUrl, ex.Message, ex.ErrorDetails);
+                }
                 catch (Exception ex)
                 {
                     _logger.LogWarning("Task callback error on '{url}': {message}", pageUrl, ex.Message);

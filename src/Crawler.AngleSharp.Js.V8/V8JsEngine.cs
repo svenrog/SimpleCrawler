@@ -128,7 +128,14 @@ internal sealed class V8JsEngine : IJsEngine
 
     public void InvokeCallback(object callback)
     {
-        ((ScriptObject)callback).InvokeAsFunction();
+        try
+        {
+            ((ScriptObject)callback).InvokeAsFunction();
+        }
+        catch (ScriptEngineException ex)
+        {
+            throw new JsException(ex.Message, _stackTraceFormatter.Format(ex.Message, ex.ErrorDetails), ex);
+        }
     }
 
     public void CallGlobal(string name, params object?[] args)

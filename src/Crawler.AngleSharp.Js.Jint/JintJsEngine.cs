@@ -130,10 +130,17 @@ internal sealed class JintJsEngine : IJsEngine
 
     public void InvokeCallback(object callback)
     {
-        if (callback is Func<JsValue, JsValue[], JsValue> function)
-            function(JsValue.Undefined, []);
-        else if (callback is JsValue value)
-            _engine.Invoke(value);
+        try
+        {
+            if (callback is Func<JsValue, JsValue[], JsValue> function)
+                function(JsValue.Undefined, []);
+            else if (callback is JsValue value)
+                _engine.Invoke(value);
+        }
+        catch (JavaScriptException ex)
+        {
+            throw new JsException(ex.Message, ex.JavaScriptStackTrace, ex);
+        }
     }
 
     public void CallGlobal(string name, params object?[] args)
