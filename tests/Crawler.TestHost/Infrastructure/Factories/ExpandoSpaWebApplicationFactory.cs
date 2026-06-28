@@ -6,7 +6,10 @@ namespace Crawler.TestHost.Infrastructure.Factories;
 // A shell whose links are only built if the engine can store (and read back) expando properties on DOM
 // nodes the way React 18 stashes fibers — including a cyclic object graph. If EnableDomExpandos is off
 // (plain wrappers reject the assignment) the probe fails and no links render, so the crawl result proves
-// the expando path end to end.
+// the expando path end to end. It also assigns and reads back a freshly created element's onload handler:
+// webpack's chunk loader does `script.onload = fn`, and exposing onload only on the JsExpandoElement
+// subclass made that throw MissingMemberException on V8 (ClearScript's fallback can't resolve a real member
+// declared on the most-derived dynamic wrapper), silently breaking dynamic chunk loading.
 public class ExpandoSpaWebApplicationFactory
 {
     private const string _shellTemplate = """
@@ -21,9 +24,12 @@ public class ExpandoSpaWebApplicationFactory
                         var cyclic = {}; cyclic.self = cyclic;
                         probe.__fiber = cyclic;
                         document.__root = probe;
+                        var script = document.createElement('script');
+                        script.onload = function () { };
                         var ok = probe.__fiber === cyclic
                             && probe.__fiber.self === probe.__fiber
-                            && document.__root === probe;
+                            && document.__root === probe
+                            && typeof script.onload === 'function';
                         if (!ok) return;
                         var links = __LINKS__;
                         var app = document.getElementById('app');
