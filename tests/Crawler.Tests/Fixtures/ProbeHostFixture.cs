@@ -38,8 +38,14 @@ public sealed class ProbeHostFixture : AbstractHostFixture
 
     // DeepWalk guards a Jint-only enumeration policy; V8 host wrappers expose own-enumerable keys and never
     // matched the invariant (but never overflowed), so it runs on Jint only.
-    public static IEnumerable<JsEngine> EnginesFor(JsProbeCapability capability) =>
-        capability == JsProbeCapability.DeepWalk ? [JsEngine.Jint] : [JsEngine.Jint, JsEngine.V8];
+    public static IEnumerable<JsEngine> EnginesFor(JsProbeCapability capability)
+    {
+        return capability switch
+        {
+            JsProbeCapability.DeepWalk => [JsEngine.Jint],
+            _ => [JsEngine.Jint, JsEngine.V8],
+        };
+    }
 
     protected override JsRenderOptions CreateRenderOptions() =>
         new() { EnableFetch = true, EnableDomExpandos = true };
