@@ -1,6 +1,6 @@
-﻿namespace Crawler.AngleSharp.Js.Dom.Window;
+﻿namespace Crawler.AngleSharp.Js.Dom.Window.Logging;
 
-public sealed class JsConsole
+public sealed class NullJsConsole : IJsConsole
 {
     public void log(params object?[] args) { }
     public void info(params object?[] args) { }

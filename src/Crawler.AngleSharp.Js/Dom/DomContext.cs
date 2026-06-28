@@ -2,7 +2,9 @@ using AngleSharp.Dom;
 using Crawler.AngleSharp.Js.Abstractions;
 using Crawler.AngleSharp.Js.Dom.Expando;
 using Crawler.AngleSharp.Js.Dom.Window;
+using Crawler.AngleSharp.Js.Dom.Window.Logging;
 using Crawler.AngleSharp.Js.Models;
+using Microsoft.Extensions.Logging;
 
 namespace Crawler.AngleSharp.Js.Dom;
 
@@ -16,7 +18,7 @@ public sealed class DomContext
     private readonly List<IElement> _pendingResources = [];
     private readonly HashSet<INode> _seenResources = new(ReferenceEqualityComparer.Instance);
 
-    public DomContext(IDocument document, IJsEngine engine, Uri pageUri, JsRenderOptions options)
+    public DomContext(IDocument document, IJsEngine engine, Uri pageUri, JsRenderOptions options, ILogger logger)
     {
         _engine = engine;
         _enableExpandos = options.EnableDomExpandos;
@@ -29,9 +31,17 @@ public sealed class DomContext
         SessionStorage = new JsLocalStorage();
         Crypto = new JsCrypto();
         CustomElements = new JsCustomElements();
-        Console = new JsConsole();
         Performance = new JsPerformance(this);
         Bridge = new DomBridge(this, options.Viewport);
+
+        if (options.ScriptLogging.HasValue)
+        {
+            Console = new LoggingJsConsole(logger);
+        }
+        else
+        {
+            Console = new NullJsConsole();
+        }
     }
 
     public IDocument Document { get; }
@@ -42,7 +52,7 @@ public sealed class DomContext
     public JsLocalStorage SessionStorage { get; }
     public JsCrypto Crypto { get; }
     public JsCustomElements CustomElements { get; }
-    public JsConsole Console { get; }
+    public IJsConsole Console { get; }
     public JsPerformance Performance { get; }
     public DomBridge Bridge { get; }
 

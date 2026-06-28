@@ -1,3 +1,5 @@
+using Microsoft.Extensions.Logging;
+
 namespace Crawler.AngleSharp.Js.Models;
 
 public class JsRenderOptions
@@ -24,4 +26,9 @@ public class JsRenderOptions
     /// 1920x1080 is the default window size
     /// </summary>
     public Viewport Viewport { get; set; } = Viewport.Default;
+
+    /// <summary>
+    /// Determines if and which script logging level should be output to the log stream.
+    /// </summary>
+    public LogLevel? ScriptLogging { get; set; }
 }
