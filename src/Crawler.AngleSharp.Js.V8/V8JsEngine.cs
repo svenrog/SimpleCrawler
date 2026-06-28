@@ -12,11 +12,13 @@ namespace Crawler.AngleSharp.Js.V8;
 internal sealed class V8JsEngine : IJsEngine
 {
     private const int _moduleEvaluationTimeoutMs = 30000;
+    private const int _stackTraceContextRadius = 48;
 
     private readonly V8RuntimePool _pool;
     private readonly V8Runtime _runtime;
     private readonly V8ScriptEngine _engine;
     private readonly V8ModuleLoader _loader;
+    private readonly V8StackTraceFormatter _stackTraceFormatter = new(_stackTraceContextRadius);
     private ScriptObject? _arrayFactory;
     private ScriptObject? _scriptElementFactory;
 
@@ -59,7 +61,7 @@ internal sealed class V8JsEngine : IJsEngine
         }
         catch (ScriptEngineException ex)
         {
-            throw new JsException(ex.Message, ex.ErrorDetails, ex);
+            throw new JsException(ex.Message, _stackTraceFormatter.Format(ex.Message, ex.ErrorDetails), ex);
         }
     }
 
@@ -84,11 +86,11 @@ internal sealed class V8JsEngine : IJsEngine
         }
         catch (ScriptEngineException ex)
         {
-            throw new JsException(ex.Message, ex.ErrorDetails, ex);
+            throw new JsException(ex.Message, _stackTraceFormatter.Format(ex.Message, ex.ErrorDetails), ex);
         }
         catch (AggregateException ex) when (ex.InnerException is ScriptEngineException inner)
         {
-            throw new JsException(inner.Message, inner.ErrorDetails, inner);
+            throw new JsException(inner.Message, _stackTraceFormatter.Format(inner.Message, inner.ErrorDetails), inner);
         }
     }
 
