@@ -15,16 +15,16 @@ public sealed class ProbeHostFixture : AbstractHostFixture
 {
     private const int _basePort = 5280;
 
-    public static string HostName(ProbeCapability capability) =>
+    public static string HostName(JsProbeCapability capability) =>
         $"http://localhost:{_basePort + (int)capability}/";
 
-    public static IReadOnlyList<string> LinksFor(ProbeCapability capability)
+    public static IReadOnlyList<string> LinksFor(JsProbeCapability capability)
     {
         var baseUri = new Uri(HostName(capability));
 
         // The browser-API shell renders one /features/* link per passing probe; its manifest has no root
         // entry, so the start page the crawler always visits is added explicitly.
-        if (capability == ProbeCapability.BrowserApis)
+        if (capability == JsProbeCapability.BrowserApis)
         {
             return
             [
@@ -38,28 +38,28 @@ public sealed class ProbeHostFixture : AbstractHostFixture
 
     // DeepWalk guards a Jint-only enumeration policy; V8 host wrappers expose own-enumerable keys and never
     // matched the invariant (but never overflowed), so it runs on Jint only.
-    public static IEnumerable<JsEngine> EnginesFor(ProbeCapability capability) =>
-        capability == ProbeCapability.DeepWalk ? [JsEngine.Jint] : [JsEngine.Jint, JsEngine.V8];
+    public static IEnumerable<JsEngine> EnginesFor(JsProbeCapability capability) =>
+        capability == JsProbeCapability.DeepWalk ? [JsEngine.Jint] : [JsEngine.Jint, JsEngine.V8];
 
     protected override JsRenderOptions CreateRenderOptions() =>
         new() { EnableFetch = true, EnableDomExpandos = true };
 
     protected override IEnumerable<WebApplication> CreateHosts() =>
-        Enum.GetValues<ProbeCapability>().Select(CreateHost);
+        Enum.GetValues<JsProbeCapability>().Select(CreateHost);
 
-    private static WebApplication CreateHost(ProbeCapability capability)
+    private static WebApplication CreateHost(JsProbeCapability capability)
     {
         var host = HostName(capability);
 
         return capability switch
         {
-            ProbeCapability.AnchorHref => ProbeSpaWebApplicationFactory.Create(host, "Anchor Href SPA", "anchor-href.js"),
-            ProbeCapability.Expando => ProbeSpaWebApplicationFactory.Create(host, "Expando SPA", "expando.js"),
-            ProbeCapability.Fetch => ProbeSpaWebApplicationFactory.Create(host, "Fetch SPA", "fetch.js", mapLinksJson: true),
-            ProbeCapability.DeferredCallback => ProbeSpaWebApplicationFactory.Create(host, "Deferred Callback SPA", "deferred-callback.js"),
-            ProbeCapability.JQuery => ProbeSpaWebApplicationFactory.Create(host, "jQuery SPA", "jquery.js"),
-            ProbeCapability.BrowserApis => ProbeSpaWebApplicationFactory.Create(host, "Browser APIs SPA", "browser-apis.js"),
-            ProbeCapability.DeepWalk => ProbeSpaWebApplicationFactory.Create(host, "Deep Walk SPA", "deep-walk.js"),
+            JsProbeCapability.AnchorHref => ProbeSpaWebApplicationFactory.Create(host, "Anchor Href SPA", "anchor-href.js"),
+            JsProbeCapability.Expando => ProbeSpaWebApplicationFactory.Create(host, "Expando SPA", "expando.js"),
+            JsProbeCapability.Fetch => ProbeSpaWebApplicationFactory.Create(host, "Fetch SPA", "fetch.js", mapLinksJson: true),
+            JsProbeCapability.DeferredCallback => ProbeSpaWebApplicationFactory.Create(host, "Deferred Callback SPA", "deferred-callback.js"),
+            JsProbeCapability.JQuery => ProbeSpaWebApplicationFactory.Create(host, "jQuery SPA", "jquery.js"),
+            JsProbeCapability.BrowserApis => ProbeSpaWebApplicationFactory.Create(host, "Browser APIs SPA", "browser-apis.js"),
+            JsProbeCapability.DeepWalk => ProbeSpaWebApplicationFactory.Create(host, "Deep Walk SPA", "deep-walk.js"),
             _ => throw new ArgumentOutOfRangeException(nameof(capability)),
         };
     }

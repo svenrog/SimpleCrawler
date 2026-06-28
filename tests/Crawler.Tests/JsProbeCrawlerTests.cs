@@ -9,19 +9,19 @@ namespace Crawler.Tests;
 // behaviour works, so a crawl that matches the embedded manifest is the regression guard. See ProbeHostFixture
 // for which real-site bug each capability encodes.
 [Collection("Crawler")]
-public class ProbeCrawlerTests : IClassFixture<ProbeHostFixture>
+public class JsProbeCrawlerTests : IClassFixture<ProbeHostFixture>
 {
     private readonly ProbeHostFixture _context;
 
-    public ProbeCrawlerTests(ProbeHostFixture hostFixture)
+    public JsProbeCrawlerTests(ProbeHostFixture hostFixture)
     {
         _context = hostFixture;
     }
 
-    public static TheoryData<ProbeCapability, JsEngine> Cases()
+    public static TheoryData<JsProbeCapability, JsEngine> Cases()
     {
-        var data = new TheoryData<ProbeCapability, JsEngine>();
-        foreach (var capability in Enum.GetValues<ProbeCapability>())
+        var data = new TheoryData<JsProbeCapability, JsEngine>();
+        foreach (var capability in Enum.GetValues<JsProbeCapability>())
             foreach (var engine in ProbeHostFixture.EnginesFor(capability))
                 data.Add(capability, engine);
 
@@ -30,7 +30,7 @@ public class ProbeCrawlerTests : IClassFixture<ProbeHostFixture>
 
     [Theory]
     [MemberData(nameof(Cases))]
-    public async Task Crawler_Renders_Capability(ProbeCapability capability, JsEngine engine)
+    public async Task Crawler_Renders_Capability(JsProbeCapability capability, JsEngine engine)
     {
         if (engine == JsEngine.V8)
             Assert.SkipUnless(V8Support.IsAvailable, V8Support.UnavailableReason);
