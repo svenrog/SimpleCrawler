@@ -1,4 +1,5 @@
-﻿using Microsoft.Extensions.Logging;
+﻿using Crawler.AngleSharp.Js.Dom.Helpers;
+using Microsoft.Extensions.Logging;
 using System.Collections.Concurrent;
 using System.Text;
 
@@ -19,7 +20,7 @@ public sealed class LoggingJsConsole : IJsConsole
     public void assert(params object?[] args)
     {
         // console.assert(condition, ...msg) — logs only when condition is falsy
-        bool condition = args.Length > 0 && IsTruthy(args[0]);
+        bool condition = args.Length > 0 && JsValue.IsTruthy(args[0]);
         if (!condition)
         {
             var msg = args.Length > 1
@@ -187,16 +188,6 @@ public sealed class LoggingJsConsole : IJsConsole
         bool b => b ? "true" : "false",
         string s => s,
         _ => value.ToString() ?? "undefined"
-    };
-
-    private static bool IsTruthy(object? value) => value switch
-    {
-        null => false,
-        bool b => b,
-        int i => i != 0,
-        double d => d != 0 && !double.IsNaN(d),
-        string s => s.Length > 0,
-        _ => true
     };
 
     private static long ToInt(object? v) => v is IConvertible c ? c.ToInt64(null) : 0;
