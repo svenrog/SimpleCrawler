@@ -3,6 +3,7 @@ using Crawler.AngleSharp.Js.V8;
 using Crawler.Core.Models;
 using Crawler.Playwright;
 using Crawler.Puppeteer;
+using Crawler.Tests.Assertions;
 using Crawler.Tests.Fixtures;
 using Crawler.Tests.Helpers;
 using Microsoft.Extensions.DependencyInjection;
@@ -72,14 +73,6 @@ public class SpaCrawlerTests : IClassFixture<SpaHostFixture>
 
     protected static void AssertResult(string framework, IScrapeResult result)
     {
-        var links = SpaHostFixture.LinksFor(framework);
-
-        Assert.Equal(links.Count, result.Urls.Count);
-
-        var firstNotSecond = links.Except(result.Urls).ToList();
-        Assert.Empty(firstNotSecond);
-
-        var secondNotFirst = result.Urls.Except(links).ToList();
-        Assert.Empty(secondNotFirst);
+        LinkAssertions.AssertSameLinks(SpaHostFixture.LinksFor(framework), result.Urls);
     }
 }

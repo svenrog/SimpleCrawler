@@ -1,6 +1,7 @@
 ﻿using Crawler.AngleSharp;
 using Crawler.Core.Models;
 using Crawler.HtmlAgilityPack;
+using Crawler.Tests.Assertions;
 using Crawler.Playwright;
 using Crawler.Puppeteer;
 using Crawler.Tests.Fixtures;
@@ -67,12 +68,6 @@ public class StaticCrawlerTests : IClassFixture<StaticHostFixture>
 
     protected void AssertResult(IScrapeResult result)
     {
-        Assert.Equal(_context.Links.Count, result.Urls.Count);
-
-        var firstNotSecond = _context.Links.Except(result.Urls).ToList();
-        Assert.Empty(firstNotSecond);
-
-        var secondNotFirst = result.Urls.Except(_context.Links).ToList();
-        Assert.Empty(secondNotFirst);
+        LinkAssertions.AssertSameLinks(_context.Links, result.Urls);
     }
 }

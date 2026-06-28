@@ -29,6 +29,13 @@ internal partial class LinkAssertions
         return links;
     }
 
+    public static void AssertSameLinks(IReadOnlyCollection<string> expected, IReadOnlyCollection<string> actual)
+    {
+        Assert.Equal(expected.Count, actual.Count);
+        Assert.Empty(expected.Except(actual));
+        Assert.Empty(actual.Except(expected));
+    }
+
     public static List<string> GetJsonLinks(Uri baseUri, string json)
     {
         var manifest = JsonSerializer.Deserialize<List<LinkModel>>(json);
