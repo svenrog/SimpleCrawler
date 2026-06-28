@@ -22,6 +22,11 @@ public static class ResourceHelper
         return GetResponseString($"{_assemblyName.Name}.Response.{responseName}.json");
     }
 
+    public static string GetProbeResource(ReadOnlySpan<char> resourceFile)
+    {
+        return GetResponseString($"{_assemblyName.Name}.Probes.{resourceFile}");
+    }
+
     private static string GetResponseString(string resourceName)
     {
         using var stream = GetResponseStream(resourceName);

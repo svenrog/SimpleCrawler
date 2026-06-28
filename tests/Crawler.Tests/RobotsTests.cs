@@ -1,5 +1,6 @@
 ﻿using Crawler.Core.Models;
 using Crawler.HtmlAgilityPack;
+using Crawler.Tests.Assertions;
 using Crawler.Tests.Fixtures;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -26,10 +27,6 @@ public class RobotsTests : IClassFixture<RobotsHostFixture>
 
     protected void AssertResult(IScrapeResult result)
     {
-        var firstNotSecond = _context.Links.Except(result.Urls).ToList();
-        Assert.Empty(firstNotSecond);
-
-        var secondNotFirst = result.Urls.Except(_context.Links).ToList();
-        Assert.Empty(secondNotFirst);
+        LinkAssertions.AssertSameLinks(_context.Links, result.Urls);
     }
 }

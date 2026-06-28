@@ -10,6 +10,7 @@
 
   <ItemGroup>
     <EmbeddedResource Include="Response\**\*.*" />
+    <EmbeddedResource Include="Probes\**\*.*" />
     <EmbeddedResource Include="wwwroot\**\*.*">
       <LogicalName>$([System.String]::Copy('%(Identity)').Replace('\', '/'))</LogicalName>
     </EmbeddedResource>

@@ -1,4 +1,5 @@
 using Crawler.HtmlAgilityPack;
+using Crawler.Tests.Assertions;
 using Crawler.Tests.Fixtures;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -22,8 +23,6 @@ public class MetaRobotsTests : IClassFixture<MetaRobotsHostFixture>
 
         Assert.DoesNotContain(MetaRobotsHostFixture.HiddenUrl, result.Urls);
 
-        Assert.Equal(_context.Links.Count, result.Urls.Count);
-        Assert.Empty(_context.Links.Except(result.Urls));
-        Assert.Empty(result.Urls.Except(_context.Links));
+        LinkAssertions.AssertSameLinks(_context.Links, result.Urls);
     }
 }
