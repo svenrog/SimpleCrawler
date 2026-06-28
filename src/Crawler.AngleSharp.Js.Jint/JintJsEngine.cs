@@ -1,4 +1,5 @@
 using Crawler.AngleSharp.Js.Abstractions;
+using Crawler.AngleSharp.Js.Dom;
 using Crawler.AngleSharp.Js.Errors;
 using Crawler.AngleSharp.Js.Models;
 using Jint;
@@ -21,13 +22,25 @@ internal sealed class JintJsEngine : IJsEngine
         _moduleCache = moduleCache;
         _scriptCache = scriptCache;
 
-        // Convert exceptions thrown by host objects (e.g. `new URL('not-a-url')`, which a bundle wraps in a
-        // try/catch to probe validity) into catchable JS errors. Jint otherwise bubbles them straight to the
-        // CLR host, escaping the bundle's try/catch and aborting the whole render — ClearScript/V8 already
-        // surface host exceptions as JS errors, so this matches that behaviour.
-        _engine = new Engine(options => options
-            .EnableModules(new JintModuleLoader(fetcher, baseUri, moduleCache))
-            .CatchClrExceptions());
+        _engine = new Engine(options =>
+        {
+            // Convert exceptions thrown by host objects (e.g. `new URL('not-a-url')`, which a bundle wraps in
+            // a try/catch to probe validity) into catchable JS errors. Jint otherwise bubbles them straight to
+            // the CLR host, escaping the bundle's try/catch and aborting the whole render — ClearScript/V8
+            // already surface host exceptions as JS errors, so this matches that behaviour.
+            options
+                .EnableModules(new JintModuleLoader(fetcher, baseUri, moduleCache))
+                .CatchClrExceptions();
+
+            // A browser's DOM node exposes no own enumerable properties, so Object.keys(el)/for..in/spread/
+            // JSON.stringify see nothing and a bundle's deep clone/merge/serialize walker stops at it. Jint's
+            // default ObjectWrapper instead reports every CLR getter (children, parentNode, ownerDocument, ...)
+            // as an own key, so such a walker follows the DOM's reference cycles forever — overflowing the
+            // stack and allocating without bound. Report no enumerable keys for our node wrappers to match the
+            // browser; direct member access (el.innerHTML) is unaffected.
+            options.Interop.ObjectWrapperReportedPropertyKeys = static (_, target) =>
+                target is JsNode ? Array.Empty<JsValue>() : null;
+        });
     }
 
     public void EmbedHostObject(string name, object value)
