@@ -5,6 +5,7 @@ namespace Crawler.AngleSharp.Js.Dom;
 public class JsDocument : JsNode
 {
     private readonly Dictionary<string, string> _cookies = new(StringComparer.Ordinal);
+    private JsImplementation? _implementation;
 
     internal JsDocument(IDocument document, DomContext context) : base(document, context)
     {
@@ -19,6 +20,7 @@ public class JsDocument : JsNode
     public object styleSheets => Context.CreateArray([]);
     public object scripts => Context.WrapAll(Document.GetElementsByTagName("script"));
     public object location => Context.Location;
+    public object implementation => _implementation ??= new JsImplementation(Document, Context);
 
     // Next.js's inline bootstrap asserts document.currentScript is a <script>; the renderer points this
     // at the executing classic script and clears it afterward (null during modules/deferred work, per spec).
@@ -42,6 +44,10 @@ public class JsDocument : JsNode
     }
 
     public object createTextNode(object? data) => Context.Wrap(Document.CreateTextNode(data?.ToString() ?? string.Empty))!;
+
+    // jQuery builds a detached fragment for its support detection during init; without this its IIFE throws
+    // before assigning window.jQuery, so every later bundle that reads the jQuery global gets a ReferenceError.
+    public object createDocumentFragment() => Context.Wrap(Document.CreateDocumentFragment())!;
 
     public object? getElementById(string id) => Context.Wrap(Document.GetElementById(id));
     public object getElementsByTagName(string name) => Context.WrapAll(Document.GetElementsByTagName(name));
