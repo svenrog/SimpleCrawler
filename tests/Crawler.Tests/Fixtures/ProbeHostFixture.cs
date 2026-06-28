@@ -2,6 +2,7 @@ using Crawler.AngleSharp.Js.Models;
 using Crawler.TestHost.Infrastructure.Factories;
 using Crawler.TestHost.Infrastructure.Results;
 using Crawler.Tests.Assertions;
+using Crawler.Tests.Models;
 using Microsoft.AspNetCore.Builder;
 
 namespace Crawler.Tests.Fixtures;

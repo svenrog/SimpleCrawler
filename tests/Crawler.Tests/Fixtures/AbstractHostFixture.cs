@@ -9,6 +9,7 @@ using Crawler.HtmlAgilityPack;
 using Crawler.Playwright;
 using Crawler.Puppeteer;
 using Crawler.Tests.Common.Extensions;
+using Crawler.Tests.Models;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;

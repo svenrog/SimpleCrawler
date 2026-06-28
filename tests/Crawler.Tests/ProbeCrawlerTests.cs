@@ -1,6 +1,7 @@
 using Crawler.Tests.Assertions;
 using Crawler.Tests.Fixtures;
 using Crawler.Tests.Helpers;
+using Crawler.Tests.Models;
 
 namespace Crawler.Tests;
 
