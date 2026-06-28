@@ -21,6 +21,19 @@ public sealed class JsRenderer
 
     private static readonly HtmlParser _parser = new();
     private static readonly UTF8Encoding _utf8NoBom = new(encoderShouldEmitUTF8Identifier: false);
+    private static readonly string _bridgedGlobalDefs = BuildGlobalDefs(
+        "matchMedia", "getComputedStyle", "setTimeout", "clearTimeout", "setInterval", "clearInterval",
+        "requestAnimationFrame", "cancelAnimationFrame", "queueMicrotask", "addEventListener",
+        "removeEventListener", "dispatchEvent");
+
+    private static string BuildGlobalDefs(params string[] names)
+    {
+        var builder = new StringBuilder();
+        foreach (var name in names)
+            builder.Append("globalThis.").Append(name).Append("=function(){return __fn_").Append(name).Append("(...arguments);};");
+
+        return builder.ToString();
+    }
 
     private readonly IJsEngineFactory _engineFactory;
     private readonly JsRenderOptions _options;
@@ -41,11 +54,19 @@ public sealed class JsRenderer
         if (!ContainsScriptTag(shell))
             return shell;
 
+        using var totalTime = RenderProfiler.Scope("phase.total");
         var pageUri = new Uri(pageUrl);
         using var stream = new MemoryStream(shell, writable: false);
-        using var document = await _parser.ParseDocumentAsync(stream, cancellationToken);
 
-        var (regularScripts, moduleEntries) = await CollectScriptsAsync(document, pageUrl, client, _sources, cancellationToken);
+        // parse stays on Start/Stop: the `using var document` can't sit inside a Scope block without losing auto-dispose.
+        var parseTime = RenderProfiler.Start();
+        using var document = await _parser.ParseDocumentAsync(stream, cancellationToken);
+        RenderProfiler.Stop("phase.parse", parseTime);
+
+        IReadOnlyList<RegularScript> regularScripts;
+        IReadOnlyList<ModuleScript> moduleEntries;
+        using (RenderProfiler.Scope("phase.collect"))
+            (regularScripts, moduleEntries) = await CollectScriptsAsync(document, pageUrl, client, _sources, cancellationToken);
 
         // The markup had a <script>, but none were executable (e.g. JSON, importmap), so the DOM still
         // equals the shell: skip spinning up a JS engine (a fresh V8 isolate / Jint engine) and reserializing.
@@ -53,23 +74,37 @@ public sealed class JsRenderer
             return shell;
 
         var fetcher = new HttpModuleFetcher(client, _sources, cancellationToken);
-        using var engine = _engineFactory.Create(fetcher, pageUri);
+
+        IJsEngine rawEngine;
+        using (RenderProfiler.Scope("phase.engineCreate"))
+            rawEngine = _engineFactory.Create(fetcher, pageUri);
+
+        using var engine = RenderProfiler.Enabled ? new ProfilingJsEngine(rawEngine) : rawEngine;
         var context = new DomContext(document, engine, pageUri, _options, _logger);
 
         if (_options.EnableFetch)
             engine.EmbedHostObject("__http", new JsHttp(client, pageUri, _logger, cancellationToken));
 
-        SetupGlobals(engine, context, _options.EnableFetch);
+        using (RenderProfiler.Scope("phase.setupGlobals"))
+            SetupGlobals(engine, context, _options.EnableFetch);
 
-        foreach (var script in regularScripts)
-            RunRegular(engine, context, script, pageUrl);
+        using (RenderProfiler.Scope("phase.bundleExec"))
+        {
+            foreach (var script in regularScripts)
+                RunRegular(engine, context, script, pageUrl);
 
-        foreach (var module in moduleEntries)
-            RunModule(engine, module, pageUrl);
+            foreach (var module in moduleEntries)
+                RunModule(engine, module, pageUrl);
+        }
 
-        Drain(engine, context, pageUri, client, pageUrl, cancellationToken);
+        using (RenderProfiler.Scope("phase.drain"))
+            Drain(engine, context, pageUri, client, pageUrl, cancellationToken);
 
-        return Serialize(document.DocumentElement);
+        byte[] result;
+        using (RenderProfiler.Scope("phase.serialize"))
+            result = Serialize(document.DocumentElement);
+
+        return result;
     }
 
     // Stream the rendered tree straight to UTF-8 bytes rather than materializing OuterHtml first: a
@@ -117,33 +152,29 @@ public sealed class JsRenderer
         EmbedGlobalFunction(engine, "__isInstance", bridge.IsInstance);
         RunPrelude(engine, JsPreludes.InstanceShims);
 
-        EmbedGlobalFunction(engine, "matchMedia", bridge.MatchMedia);
-        EmbedGlobalFunction(engine, "getComputedStyle", bridge.GetComputedStyle);
-        EmbedGlobalFunction(engine, "setTimeout", bridge.SetTimeout);
-        EmbedGlobalFunction(engine, "clearTimeout", bridge.Noop);
-        EmbedGlobalFunction(engine, "setInterval", bridge.SetInterval);
-        EmbedGlobalFunction(engine, "clearInterval", bridge.Noop);
-        EmbedGlobalFunction(engine, "requestAnimationFrame", bridge.RequestAnimationFrame);
-        EmbedGlobalFunction(engine, "cancelAnimationFrame", bridge.Noop);
-        EmbedGlobalFunction(engine, "queueMicrotask", bridge.QueueMicrotask);
-        EmbedGlobalFunction(engine, "addEventListener", bridge.Noop);
-        EmbedGlobalFunction(engine, "removeEventListener", bridge.Noop);
-        EmbedGlobalFunction(engine, "dispatchEvent", bridge.ReturnTrue);
-
-        RunPrelude(engine, JsPreludes.Global);
+        // Embed the bridged globals as private host delegates, then define all their public JS wrappers in
+        // a single Execute rather than one per name — the wrapper bodies are identical boilerplate, so the
+        // only per-name cost worth paying is the host embed.
+        engine.EmbedFunction("__fn_matchMedia", bridge.MatchMedia);
+        engine.EmbedFunction("__fn_getComputedStyle", bridge.GetComputedStyle);
+        engine.EmbedFunction("__fn_setTimeout", bridge.SetTimeout);
+        engine.EmbedFunction("__fn_clearTimeout", bridge.Noop);
+        engine.EmbedFunction("__fn_setInterval", bridge.SetInterval);
+        engine.EmbedFunction("__fn_clearInterval", bridge.Noop);
+        engine.EmbedFunction("__fn_requestAnimationFrame", bridge.RequestAnimationFrame);
+        engine.EmbedFunction("__fn_cancelAnimationFrame", bridge.Noop);
+        engine.EmbedFunction("__fn_queueMicrotask", bridge.QueueMicrotask);
+        engine.EmbedFunction("__fn_addEventListener", bridge.Noop);
+        engine.EmbedFunction("__fn_removeEventListener", bridge.Noop);
+        engine.EmbedFunction("__fn_dispatchEvent", bridge.ReturnTrue);
+        engine.Execute(_bridgedGlobalDefs);
 
         // document.defaultView must return the same `window` the bundle reads through globalThis: history
         // libraries default `let {window = document.defaultView} = opts` then read window.history, so a null
         // defaultView crashes them with "Cannot read properties of null (reading 'history')".
         context.Window = engine.GetGlobalObject();
 
-        RunPrelude(engine, JsPreludes.Crypto);
-        RunPrelude(engine, JsPreludes.Console);
-        RunPrelude(engine, JsPreludes.ResourceEvent);
-        RunPrelude(engine, JsPreludes.MessageChannel);
-        RunPrelude(engine, JsPreludes.History);
-        RunPrelude(engine, JsPreludes.HtmlElement);
-        RunPrelude(engine, JsPreludes.DomGlobals);
+        RunPrelude(engine, JsPreludes.CombinedGlobals);
 
         if (enableFetch)
         {
