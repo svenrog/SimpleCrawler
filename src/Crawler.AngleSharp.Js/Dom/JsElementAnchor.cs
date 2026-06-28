@@ -1,5 +1,4 @@
 using Crawler.AngleSharp.Js.Abstractions;
-using Crawler.AngleSharp.Js.Dom.Helpers;
 
 namespace Crawler.AngleSharp.Js.Dom;
 
@@ -11,20 +10,16 @@ public partial class JsElement : JsNode, IJsLocation
 {
     public Uri? Url()
     {
-        if (Uri.TryCreate(new Uri(Context.Location.href), href, out Uri? uri))
-            return uri;
+        if (!Uri.TryCreate(Context.Location.href, UriKind.Absolute, out var baseUri))
+            return null;
 
-        return null;
+        return Uri.TryCreate(baseUri, href, out var uri) ? uri : null;
     }
 
     public string href
     {
         get => Element.GetAttribute("href") ?? string.Empty;
-        set
-        {
-            LocationHelper.Apply(this, value, includeHref: false);
-            Element.SetAttribute("href", value ?? string.Empty);
-        }
+        set => Element.SetAttribute("href", value ?? string.Empty);
     }
 
     public string protocol
