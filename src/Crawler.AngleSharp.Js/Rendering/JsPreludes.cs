@@ -13,6 +13,14 @@ internal static class JsPreludes
     public static readonly PreludeEntry DomGlobals = Load("dom-globals.js");
     public static readonly PreludeEntry Fetch = Load("fetch.js");
 
+    // The consecutive setup preludes folded into one cached script, so a fresh per-page context pays a
+    // single engine boundary crossing (and single compile-cache lookup) instead of eight.
+    public static readonly PreludeEntry CombinedGlobals = Combine("__combined_globals",
+        Global, Crypto, Console, ResourceEvent, MessageChannel, History, HtmlElement, DomGlobals);
+
+    private static PreludeEntry Combine(string key, params PreludeEntry[] parts) =>
+        new(key, string.Join("\n;\n", parts.Select(static p => p.Source)));
+
     private static PreludeEntry Load(string filename)
     {
         var type = typeof(JsPreludes);
