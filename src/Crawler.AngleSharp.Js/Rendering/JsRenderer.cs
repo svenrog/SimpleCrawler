@@ -239,7 +239,7 @@ public sealed class JsRenderer
         }
         catch (JsException ex)
         {
-            _logger.LogWarning("Chunk execution error on '{url}': {message}", pageUrl, ex.Message);
+            _logger.LogWarning("Chunk execution error on '{url}': {message}\n{details}", pageUrl, ex.Message, ex.ErrorDetails);
             FireResourceEvent(engine, context, resource, "onerror");
             return;
         }
@@ -295,7 +295,7 @@ public sealed class JsRenderer
         }
         catch (JsException ex)
         {
-            _logger.LogWarning("Module execution error on '{url}': {message}", pageUrl, ex.Message);
+            _logger.LogWarning("Module execution error on '{url}': {message}\n{details}", pageUrl, ex.Message, ex.ErrorDetails);
         }
     }
 
