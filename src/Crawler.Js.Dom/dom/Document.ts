@@ -4,6 +4,7 @@ import { Element } from "./Element";
 import { Text } from "./Text";
 import { Comment } from "./Comment";
 import { DocumentFragment } from "./DocumentFragment";
+import { customElements } from "./customElements";
 import { collectByTag, walkFind } from "./utils";
 import { querySelectorAll } from "../selector/querySelector";
 
@@ -20,7 +21,9 @@ export class Document extends Node {
     }
 
     createElement(tag: string): Element {
-        return new Element(tag);
+        const name = String(tag).toLowerCase();
+        const custom = customElements.tryCreate(name);
+        return custom || new Element(name);
     }
 
     createElementNS(ns: string, tag: string): Element {

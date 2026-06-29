@@ -7,9 +7,9 @@ import { querySelectorAll } from "../selector/querySelector";
 import { serializeChildren, serializeNode } from "../html/serializer";
 
 export class Element extends Node {
-    readonly localName: string;
-    readonly tagName: string;
-    readonly nodeName: string;
+    localName: string;
+    tagName: string;
+    nodeName: string;
     readonly namespaceURI: string;
     readonly style: any;
 
@@ -110,7 +110,55 @@ export class Element extends Node {
 
     insertBefore(child: Node, ref: Node | null): Node {
         this.cachedInnerHTML = null;
-        return super.insertBefore(child, ref);
+        const wasFrag = child.nodeType === NodeType.DocumentFragment;
+        const fragKids = wasFrag ? child.childNodes.slice() : null;
+        const r = super.insertBefore(child, ref);
+        if (this.isConnected) {
+            if (fragKids) for (const k of fragKids) this._notifyConnected(k);
+            else this._notifyConnected(child);
+        }
+        return r;
+    }
+
+    removeChild(child: Node): Node {
+        const wasConnected = (child as any).isConnected;
+        this.cachedInnerHTML = null;
+        const r = super.removeChild(child);
+        if (wasConnected) this._notifyDisconnected(child);
+        return r;
+    }
+
+    get isConnected(): boolean {
+        let n: Node | null = this.parentNode;
+        while (n) {
+            if (n.nodeType === NodeType.Document) return true;
+            n = n.parentNode;
+        }
+        return false;
+    }
+
+    private _notifyConnected(node: Node): void {
+        if (node.nodeType === NodeType.Element) {
+            const el = node as any;
+            if (!el._connected && typeof el.connectedCallback === "function" && el.isConnected) {
+                el._connected = true;
+                el.connectedCallback();
+            }
+        }
+        const kids = node.childNodes;
+        for (let i = 0; i < kids.length; i++) this._notifyConnected(kids[i]);
+    }
+
+    private _notifyDisconnected(node: Node): void {
+        if (node.nodeType === NodeType.Element) {
+            const el = node as any;
+            if (el._connected && typeof el.disconnectedCallback === "function") {
+                el._connected = false;
+                el.disconnectedCallback();
+            }
+        }
+        const kids = node.childNodes;
+        for (let i = 0; i < kids.length; i++) this._notifyDisconnected(kids[i]);
     }
 
     get id(): string {

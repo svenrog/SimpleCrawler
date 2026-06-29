@@ -145,5 +145,7 @@ export function parseHTML(doc: Document, input: unknown): Element {
     doc.documentElement = root;
     doc.head = head;
     doc.body = body;
+    root.parentNode = doc;
+    doc.childNodes = [root];
     return root;
 }

@@ -320,7 +320,51 @@
     }
     insertBefore(child, ref) {
       this.cachedInnerHTML = null;
-      return super.insertBefore(child, ref);
+      const wasFrag = child.nodeType === 11 /* DocumentFragment */;
+      const fragKids = wasFrag ? child.childNodes.slice() : null;
+      const r = super.insertBefore(child, ref);
+      if (this.isConnected) {
+        if (fragKids) for (const k of fragKids) this._notifyConnected(k);
+        else this._notifyConnected(child);
+      }
+      return r;
+    }
+    removeChild(child) {
+      const wasConnected = child.isConnected;
+      this.cachedInnerHTML = null;
+      const r = super.removeChild(child);
+      if (wasConnected) this._notifyDisconnected(child);
+      return r;
+    }
+    get isConnected() {
+      let n = this.parentNode;
+      while (n) {
+        if (n.nodeType === 9 /* Document */) return true;
+        n = n.parentNode;
+      }
+      return false;
+    }
+    _notifyConnected(node) {
+      if (node.nodeType === 1 /* Element */) {
+        const el = node;
+        if (!el._connected && typeof el.connectedCallback === "function" && el.isConnected) {
+          el._connected = true;
+          el.connectedCallback();
+        }
+      }
+      const kids = node.childNodes;
+      for (let i = 0; i < kids.length; i++) this._notifyConnected(kids[i]);
+    }
+    _notifyDisconnected(node) {
+      if (node.nodeType === 1 /* Element */) {
+        const el = node;
+        if (el._connected && typeof el.disconnectedCallback === "function") {
+          el._connected = false;
+          el.disconnectedCallback();
+        }
+      }
+      const kids = node.childNodes;
+      for (let i = 0; i < kids.length; i++) this._notifyDisconnected(kids[i]);
     }
     get id() {
       return this.attrs.get("id") || "";
@@ -392,6 +436,85 @@
     }
   };
 
+  // dom/customElements.ts
+  var CustomElementRegistry = class {
+    constructor() {
+      this._definitions = /* @__PURE__ */ new Map();
+      this._pending = /* @__PURE__ */ new Map();
+      this._nameStack = [];
+      this._doc = null;
+    }
+    setDocument(doc2) {
+      this._doc = doc2;
+    }
+    define(name, ctor, options) {
+      const tag = String(name).toLowerCase();
+      if (this._definitions.has(tag)) return;
+      const extendsTag = options && options.extends ? String(options.extends).toLowerCase() : null;
+      this._definitions.set(tag, { ctor, extendsTag });
+      if (this._doc) this._upgradeSubtree(this._doc.documentElement);
+      const waiters = this._pending.get(tag);
+      if (waiters) {
+        this._pending.delete(tag);
+        for (const w of waiters) w(ctor);
+      }
+    }
+    get(name) {
+      const def = this._definitions.get(String(name).toLowerCase());
+      return def ? def.ctor : void 0;
+    }
+    whenDefined(name) {
+      const tag = String(name).toLowerCase();
+      const def = this._definitions.get(tag);
+      if (def) return Promise.resolve(def.ctor);
+      return new Promise((resolve) => {
+        const arr = this._pending.get(tag) || [];
+        arr.push(resolve);
+        this._pending.set(tag, arr);
+      });
+    }
+    upgrade(root) {
+      if (root) this._upgradeSubtree(root);
+    }
+    // createElement path: construct a fresh instance with the registry-supplied tag on the name stack so a
+    // subclass `super()` lands on HTMLElement with the right localName. null for unregistered names.
+    tryCreate(name) {
+      const def = this._definitions.get(name);
+      if (!def) return null;
+      this._nameStack.push(name);
+      try {
+        return new def.ctor();
+      } finally {
+        this._nameStack.pop();
+      }
+    }
+    currentName() {
+      return this._nameStack[this._nameStack.length - 1];
+    }
+    _upgradeSubtree(root) {
+      const stack = [root];
+      while (stack.length) {
+        const n = stack.pop();
+        if (!n) continue;
+        if (n.nodeType === 1 /* Element */) {
+          const def = this._definitions.get(n.localName);
+          if (def) this._upgradeOne(n, def.ctor);
+        }
+        const kids = n.childNodes;
+        if (kids) for (let i = 0; i < kids.length; i++) stack.push(kids[i]);
+      }
+    }
+    _upgradeOne(el, ctor) {
+      if (ctor && el instanceof ctor) return;
+      if (ctor) Object.setPrototypeOf(el, ctor.prototype);
+      if (typeof el.connectedCallback === "function" && el.isConnected) {
+        el._connected = true;
+        el.connectedCallback();
+      }
+    }
+  };
+  var customElements = new CustomElementRegistry();
+
   // dom/Document.ts
   var Document = class extends Node {
     constructor(defaultView) {
@@ -403,7 +526,9 @@
       this.defaultView = defaultView || null;
     }
     createElement(tag) {
-      return new Element(tag);
+      const name = String(tag).toLowerCase();
+      const custom = customElements.tryCreate(name);
+      return custom || new Element(name);
     }
     createElementNS(ns, tag) {
       return new Element(tag, ns);
@@ -439,6 +564,39 @@
     createEvent() {
       return { initEvent() {
       } };
+    }
+  };
+
+  // dom/HTMLElement.ts
+  var HTMLElement = class extends Element {
+    constructor(tag, ns) {
+      super(tag || customElements.currentName() || "", ns);
+      this.shadowRoot = null;
+    }
+    attachShadow(init) {
+      if (this.shadowRoot) return this.shadowRoot;
+      const root = new DocumentFragment();
+      root.host = this;
+      root.mode = init && init.mode ? init.mode : "open";
+      this.shadowRoot = root;
+      return root;
+    }
+    connectedCallback() {
+    }
+    disconnectedCallback() {
+    }
+    adoptedCallback() {
+    }
+    attributeChangedCallback(_name, _oldValue, _newValue) {
+    }
+    setAttribute(name, value) {
+      const observed = this.constructor.observedAttributes;
+      const tracked = Array.isArray(observed) && observed.indexOf(name) >= 0;
+      const old = tracked ? this.getAttribute(name) : null;
+      super.setAttribute(name, value);
+      if (tracked && typeof this.attributeChangedCallback === "function") {
+        this.attributeChangedCallback(name, old, this.getAttribute(name));
+      }
     }
   };
 
@@ -685,6 +843,15 @@
     };
     global.URL = URL;
     global.URLSearchParams = URLSearchParams;
+    global.Node = Node;
+    global.Element = Element;
+    global.Document = Document;
+    global.Text = Text;
+    global.Comment = Comment;
+    global.DocumentFragment = DocumentFragment;
+    global.HTMLElement = HTMLElement;
+    global.customElements = customElements;
+    customElements.setDocument(doc);
     installTimerGlobals(global);
   }
 
@@ -906,6 +1073,8 @@
     doc2.documentElement = root;
     doc2.head = head;
     doc2.body = body;
+    root.parentNode = doc2;
+    doc2.childNodes = [root];
     return root;
   }
 
