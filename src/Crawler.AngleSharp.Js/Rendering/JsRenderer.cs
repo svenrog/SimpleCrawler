@@ -12,6 +12,7 @@ using Crawler.AngleSharp.Js.Models;
 using Crawler.AngleSharp.Js.Services;
 using Microsoft.Extensions.Logging;
 using System.Text;
+using System.Text.Json;
 
 namespace Crawler.AngleSharp.Js.Rendering;
 
@@ -53,6 +54,9 @@ public sealed class JsRenderer
         // bytes to extract links — so skip the parse, the engine, and the reserialize entirely.
         if (!ContainsScriptTag(shell))
             return shell;
+
+        if (_options.DomMode == DomMode.Js)
+            return await RenderJsAsync(shell, pageUrl, client, cancellationToken);
 
         using var totalTime = RenderProfiler.Scope("phase.total");
         var pageUri = new Uri(pageUrl);
@@ -119,6 +123,154 @@ public sealed class JsRenderer
             root.ToHtml(writer, HtmlMarkupFormatter.Instance);
 
         return buffer.ToArray();
+    }
+
+    // Js mode: the DOM lives entirely in JS (Preludes/dom.js). HTML goes in via __crawlerLoadHtml, the
+    // bundle mutates the JS DOM with no managed crossings, timers drain through __crawlerPump, and the
+    // tree is serialized back to HTML for the (still AngleSharp-backed, until Phase 7) static extractor.
+    private async Task<byte[]> RenderJsAsync(byte[] shell, string pageUrl, HttpClient client, CancellationToken cancellationToken)
+    {
+        using var totalTime = RenderProfiler.Scope("phase.total");
+        var pageUri = new Uri(pageUrl);
+        var html = _utf8NoBom.GetString(shell);
+
+        var fetcher = new HttpModuleFetcher(client, _sources, cancellationToken);
+
+        IJsEngine rawEngine;
+        using (RenderProfiler.Scope("phase.engineCreate"))
+            rawEngine = _engineFactory.Create(fetcher, pageUri);
+
+        using var engine = RenderProfiler.Enabled ? new ProfilingJsEngine(rawEngine) : rawEngine;
+
+        using (RenderProfiler.Scope("phase.setupGlobals"))
+            RunPrelude(engine, JsPreludes.Dom);
+
+        engine.CallGlobal("__crawlerSetLocation", pageUrl);
+
+        using (RenderProfiler.Scope("phase.parse"))
+        {
+            try
+            {
+                engine.CallGlobal("__crawlerLoadHtml", html);
+            }
+            catch (JsException ex)
+            {
+                _logger.LogWarning("JS DOM parse error on '{url}': {message}\n{details}", pageUrl, ex.Message, ex.ErrorDetails);
+                return shell;
+            }
+        }
+
+        IReadOnlyList<RegularScript> regularScripts;
+        IReadOnlyList<ModuleScript> moduleEntries;
+        using (RenderProfiler.Scope("phase.collect"))
+            (regularScripts, moduleEntries) = await CollectScriptsFromJsAsync(engine, pageUrl, client, _sources, cancellationToken);
+
+        // The markup had a <script> tag but the parser surfaced nothing executable (e.g. JSON), so the
+        // DOM still equals the shell: skip the bundle and just reserialize.
+        if (regularScripts.Count == 0 && moduleEntries.Count == 0)
+            return SerializeJs(engine);
+
+        if (_options.EnableFetch)
+            engine.EmbedHostObject("__http", new JsHttp(client, pageUri, _logger, cancellationToken));
+
+        using (RenderProfiler.Scope("phase.bundleExec"))
+        {
+            foreach (var script in regularScripts)
+                RunRegularJs(engine, script, pageUrl);
+
+            foreach (var module in moduleEntries)
+                RunModule(engine, module, pageUrl);
+        }
+
+        using (RenderProfiler.Scope("phase.drain"))
+            DrainJs(engine);
+
+        using (RenderProfiler.Scope("phase.serialize"))
+            return SerializeJs(engine);
+    }
+
+    private static async Task<(IReadOnlyList<RegularScript> Regular, IReadOnlyList<ModuleScript> Modules)> CollectScriptsFromJsAsync(IJsEngine engine, string pageUrl, HttpClient client, SourceCache sources, CancellationToken cancellationToken)
+    {
+        var baseUri = new Uri(pageUrl);
+        var regular = new List<RegularScript>();
+        var modules = new List<ModuleScript>();
+
+        var json = engine.Evaluate<string>("__crawlerCollectScripts()");
+        if (string.IsNullOrEmpty(json))
+            return (regular, modules);
+
+        using var doc = JsonDocument.Parse(json);
+        foreach (var entry in doc.RootElement.EnumerateArray())
+        {
+            var isModule = entry.TryGetProperty("module", out var moduleProp) && moduleProp.ValueKind == JsonValueKind.True;
+            var external = entry.TryGetProperty("external", out var externalProp) && externalProp.ValueKind == JsonValueKind.True;
+            var src = entry.TryGetProperty("src", out var srcProp) && srcProp.ValueKind == JsonValueKind.String ? srcProp.GetString()! : "";
+            var text = entry.TryGetProperty("text", out var textProp) && textProp.ValueKind == JsonValueKind.String ? textProp.GetString()! : "";
+
+            if (external)
+            {
+                if (!Uri.TryCreate(baseUri, src, out var absolute))
+                    continue;
+
+                var source = await FetchSourceAsync(client, sources, absolute, cancellationToken);
+                if (source is null)
+                    continue;
+
+                if (isModule)
+                    modules.Add(new ModuleScript(absolute.ToString(), source));
+                else
+                    regular.Add(new RegularScript(source, absolute.ToString(), External: true));
+            }
+            else
+            {
+                if (string.IsNullOrEmpty(text))
+                    continue;
+
+                if (isModule)
+                    modules.Add(new ModuleScript(pageUrl, text));
+                else
+                    regular.Add(new RegularScript(text, pageUrl, External: false));
+            }
+        }
+
+        return (regular, modules);
+    }
+
+    private void RunRegularJs(IJsEngine engine, RegularScript script, string pageUrl)
+    {
+        try
+        {
+            if (script.External)
+                engine.ExecuteCached(script.Src, script.Source);
+            else
+                engine.Execute(script.Source);
+        }
+        catch (JsException ex)
+        {
+            _logger.LogWarning("Bundle execution error on '{url}': {message}\n{details}", pageUrl, ex.Message, ex.ErrorDetails);
+        }
+    }
+
+    private void DrainJs(IJsEngine engine)
+    {
+        // Mirrors the Bridge drain's "settle after idle turns": __crawlerPending reports the queue depth
+        // before __crawlerPump runs it, so a turn with no pending work counts as idle.
+        var iterations = 0;
+        var idle = 0;
+        while (iterations++ < _options.MaxTaskDrainIterations && idle < _idleTurnsBeforeSettled)
+        {
+            engine.RunMicrotasks();
+            var pending = engine.Evaluate<int>("__crawlerPending()");
+            engine.Evaluate<int>("__crawlerPump()");
+            engine.RunMicrotasks();
+            idle = pending == 0 ? idle + 1 : 0;
+        }
+    }
+
+    private byte[] SerializeJs(IJsEngine engine)
+    {
+        var html = engine.Evaluate<string>("__crawlerSerialize()");
+        return string.IsNullOrEmpty(html) ? [] : _utf8NoBom.GetBytes(html);
     }
 
     private static void SetupGlobals(IJsEngine engine, DomContext context, bool enableFetch)

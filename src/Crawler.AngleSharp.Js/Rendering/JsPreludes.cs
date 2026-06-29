@@ -13,6 +13,10 @@ internal static class JsPreludes
     public static readonly PreludeEntry DomGlobals = Load("dom-globals.js");
     public static readonly PreludeEntry Fetch = Load("fetch.js");
 
+    // The self-contained pure-JS DOM (parser + node tree + globals). Js mode runs this alone; it owns
+    // document/window/navigation so the bundle never crosses into managed wrappers.
+    public static readonly PreludeEntry Dom = Load("dom.js");
+
     // The consecutive setup preludes folded into one cached script, so a fresh per-page context pays a
     // single engine boundary crossing (and single compile-cache lookup) instead of eight.
     public static readonly PreludeEntry CombinedGlobals = Combine("__combined_globals",

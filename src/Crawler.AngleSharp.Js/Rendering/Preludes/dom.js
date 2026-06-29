@@ -330,37 +330,207 @@
         } catch (e) { }
     }
 
-    function hydrate(spec, parent) {
-        var node;
-        if (spec.text != null) { node = new Text(spec.text); }
-        else if (spec.comment != null) { node = new Comment(spec.comment); }
-        else {
-            node = new Element(spec.tag);
-            if (spec.attrs) for (var k in spec.attrs) if (spec.attrs.hasOwnProperty(k)) node._attrs[k] = spec.attrs[k];
-            if (spec.children) for (var i = 0; i < spec.children.length; i++) hydrate(spec.children[i], node);
-        }
-        if (parent) parent.appendChild(node); else {
-            doc.documentElement = node;
-            doc.head = node.getElementsByTagName('head')[0] || null;
-            doc.body = node.getElementsByTagName('body')[0] || null;
-        }
-        return node;
+    var RAWTEXT = { script: 1, style: 1 };
+    var NAMED = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ', copy: '©', reg: '®', trade: '™', hellip: '…', mdash: '—', ndash: '–', lsquo: '‘', rsquo: '’', ldquo: '“', rdquo: '”', laquo: '«', raquo: '»', deg: '°', plusmn: '±', times: '×', divide: '÷', micro: 'µ', euro: '€', pound: '£', cent: '¢', yen: '¥', sect: '§', para: '¶', middot: '·', bull: '•', frac12: '½', frac14: '¼', frac34: '¾', sup2: '²', sup3: '³' };
+    var _RE_TAGNAME = /[a-zA-Z][a-zA-Z0-9:_-]*/y;
+    var _RE_WS = /[\t\n\f\r ]+/y;
+    var _RE_ATTRNAME = /[^\t\n\f\r \/>"'<=]+/y;
+    var _RE_BAREVAL = /[^\t\n\f\r >]*/y;
+
+    function decodeEntities(s) {
+        if (s == null || s.indexOf('&') < 0) return s;
+        return s.replace(/&#(x?[0-9a-fA-F]+);|&([a-zA-Z][a-zA-Z0-9]*);/g, function (m, num, name) {
+            if (num != null) {
+                var code = num.charAt(0) === 'x' || num.charAt(0) === 'X' ? parseInt(num.slice(1), 16) : parseInt(num, 10);
+                return code > 0 && isFinite(code) ? String.fromCharCode(code) : m;
+            }
+            return NAMED.hasOwnProperty(name) ? NAMED[name] : m;
+        });
     }
 
-    global.__crawler = {
-        setLocation: function (url) { applyUrl(url); },
-        hydrate: function (json) { hydrate(typeof json === 'string' ? JSON.parse(json) : json, null); },
-        pump: function () {
-            if (!tasks.length) return 0;
-            var batch = tasks; tasks = [];
-            for (var i = 0; i < batch.length; i++) { try { batch[i](); } catch (e) { } }
-            return tasks.length;
-        },
-        serialize: function () { return serializeNode(doc.documentElement); },
-        finalize: function (maxIters) {
-            var iters = 0;
-            while (tasks.length && iters++ < maxIters) { this.pump(); }
-            return this.serialize();
+    function indexOfCI(haystack, needle, from) {
+        var n = needle.length, hl = haystack.length;
+        for (var p = from; p <= hl - n; p++) {
+            for (var q = 0; q < n; q++) {
+                var c = haystack.charAt(p + q);
+                if (c !== needle.charAt(q) && c.toLowerCase() !== needle.charAt(q)) break;
+                if (q === n - 1) return p;
+            }
         }
-    };
+        return -1;
+    }
+
+    // Pragmatic, not spec-complete: enough HTML to host a client-rendered bundle and re-serialize its
+    // anchors. It tolerates common malformances and degrades to fewer links rather than crashing.
+    function parseHTML(input) {
+        input = input == null ? '' : String(input);
+        var len = input.length;
+
+        var root = new Element('html');
+        var head = new Element('head');
+        var body = new Element('body');
+        root.appendChild(head);
+        root.appendChild(body);
+
+        var open = [body];
+
+        function cur() { return open[open.length - 1]; }
+        function appendText(parent, text) {
+            var last = parent.childNodes[parent.childNodes.length - 1];
+            if (last && last.nodeType === TEXT_NODE) last.data += text;
+            else parent.appendChild(new Text(text));
+        }
+
+        var i = 0;
+        while (i < len) {
+            var ch = input.charAt(i);
+            if (ch !== '<') {
+                var textEnd = input.indexOf('<', i);
+                if (textEnd < 0) textEnd = len;
+                appendText(cur(), decodeEntities(input.slice(i, textEnd)));
+                i = textEnd;
+                continue;
+            }
+
+            if (input.slice(i, i + 4) === '<!--') {
+                var cEnd = input.indexOf('-->', i + 4);
+                cur().appendChild(new Comment(input.slice(i + 4, cEnd < 0 ? len : cEnd)));
+                i = cEnd < 0 ? len : cEnd + 3;
+                continue;
+            }
+            if (input.charAt(i + 1) === '!' || input.charAt(i + 1) === '?') {
+                var declEnd = input.indexOf('>', i);
+                i = declEnd < 0 ? len : declEnd + 1;
+                continue;
+            }
+            if (input.charAt(i + 1) === '/') {
+                _RE_TAGNAME.lastIndex = i + 2;
+                var tm = _RE_TAGNAME.exec(input);
+                if (tm) {
+                    var closeName = tm[0].toLowerCase();
+                    for (var k = open.length - 1; k > 0; k--) {
+                        if (open[k].localName === closeName) { open.length = k; break; }
+                    }
+                }
+                var slashEnd = input.indexOf('>', i);
+                i = slashEnd < 0 ? len : slashEnd + 1;
+                continue;
+            }
+
+            _RE_TAGNAME.lastIndex = i + 1;
+            var sm = _RE_TAGNAME.exec(input);
+            if (!sm) { appendText(cur(), '<'); i++; continue; }
+            var tag = sm[0].toLowerCase();
+            var j = _RE_TAGNAME.lastIndex;
+            var attrs = null;
+            var selfClosed = false;
+
+            while (j < len) {
+                _RE_WS.lastIndex = j;
+                if (_RE_WS.exec(input)) j = _RE_WS.lastIndex;
+                if (j >= len) break;
+                var atC = input.charAt(j);
+                if (atC === '>') { j++; break; }
+                if (atC === '/' && input.charAt(j + 1) === '>') { selfClosed = true; j += 2; break; }
+                _RE_ATTRNAME.lastIndex = j;
+                var am = _RE_ATTRNAME.exec(input);
+                if (!am) { j++; continue; }
+                var an = am[0].toLowerCase();
+                j = _RE_ATTRNAME.lastIndex;
+                _RE_WS.lastIndex = j;
+                if (_RE_WS.exec(input)) j = _RE_WS.lastIndex;
+                var val = '';
+                if (input.charAt(j) === '=') {
+                    j++;
+                    _RE_WS.lastIndex = j;
+                    if (_RE_WS.exec(input)) j = _RE_WS.lastIndex;
+                    var quote = input.charAt(j);
+                    if (quote === '"' || quote === "'") {
+                        var qEnd = input.indexOf(quote, j + 1);
+                        val = decodeEntities(qEnd < 0 ? input.slice(j + 1) : input.slice(j + 1, qEnd));
+                        j = qEnd < 0 ? len : qEnd + 1;
+                    } else {
+                        _RE_BAREVAL.lastIndex = j;
+                        var bm = _RE_BAREVAL.exec(input);
+                        val = decodeEntities(bm ? bm[0] : '');
+                        j = _RE_BAREVAL.lastIndex;
+                    }
+                }
+                (attrs || (attrs = {}))[an] = val;
+            }
+
+            if (tag === 'html') {
+                if (attrs) for (var ha in attrs) if (attrs.hasOwnProperty(ha)) root._attrs[ha] = attrs[ha];
+                i = j; continue;
+            }
+            if (tag === 'head') {
+                open = [head];
+                if (attrs) for (var he in attrs) if (attrs.hasOwnProperty(he)) head._attrs[he] = attrs[he];
+                i = j; continue;
+            }
+            if (tag === 'body') {
+                open = [body];
+                if (attrs) for (var bo in attrs) if (attrs.hasOwnProperty(bo)) body._attrs[bo] = attrs[bo];
+                i = j; continue;
+            }
+
+            var el = new Element(tag);
+            if (attrs) for (var key in attrs) if (attrs.hasOwnProperty(key)) el._attrs[key] = attrs[key];
+
+            if (RAWTEXT[tag]) {
+                var rawFrom = j;
+                var rawTo = indexOfCI(input, '</' + tag, rawFrom);
+                var raw = rawTo < 0 ? input.slice(rawFrom) : input.slice(rawFrom, rawTo);
+                if (raw) el.appendChild(new Text(raw));
+                var rawGt = rawTo < 0 ? len : input.indexOf('>', rawTo);
+                i = rawGt < 0 ? len : rawGt + 1;
+                cur().appendChild(el);
+                continue;
+            }
+
+            cur().appendChild(el);
+            if (!VOID[tag] && !selfClosed) open.push(el);
+            i = j;
+        }
+
+        doc.documentElement = root;
+        doc.head = head;
+        doc.body = body;
+        return root;
+    }
+
+    function collectScripts() {
+        var out = [];
+        if (!doc.documentElement) return out;
+        function walk(n) {
+            for (var i = 0; i < n.childNodes.length; i++) {
+                var c = n.childNodes[i];
+                if (c.nodeType !== ELEMENT_NODE) continue;
+                if (c.localName === 'script') {
+                    var type = c._attrs.type || '';
+                    if (type && type !== 'text/javascript' && type !== 'module' && type !== 'application/javascript') {
+                        walk(c); continue;
+                    }
+                    out.push({ module: type === 'module', external: !!c._attrs.src, src: c._attrs.src || '', text: textOf(c) });
+                }
+                walk(c);
+            }
+        }
+        walk(doc.documentElement);
+        return out;
+    }
+
+    function pumpTasks() {
+        if (!tasks.length) return 0;
+        var batch = tasks; tasks = [];
+        for (var i = 0; i < batch.length; i++) { try { batch[i](); } catch (e) { } }
+        return tasks.length;
+    }
+
+    global.__crawlerSetLocation = function (url) { applyUrl(url); };
+    global.__crawlerLoadHtml = function (html) { parseHTML(html); };
+    global.__crawlerCollectScripts = function () { return JSON.stringify(collectScripts()); };
+    global.__crawlerPending = function () { return tasks.length; };
+    global.__crawlerPump = function () { return pumpTasks(); };
+    global.__crawlerSerialize = function () { return doc.documentElement ? serializeNode(doc.documentElement) : ''; };
 })(typeof globalThis !== 'undefined' ? globalThis : this);
