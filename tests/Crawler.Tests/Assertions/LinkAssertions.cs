@@ -31,8 +31,6 @@ internal partial class LinkAssertions
 
     public static void AssertSameLinks(IReadOnlyCollection<string> expected, IReadOnlyCollection<string> actual)
     {
-        var missingInExpected = expected.Except(actual);
-        var missingInActual = actual.Except(expected);
         Assert.Equal(expected.Count, actual.Count);
         Assert.Empty(expected.Except(actual));
         Assert.Empty(actual.Except(expected));
