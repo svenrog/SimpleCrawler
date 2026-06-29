@@ -8,4 +8,8 @@ export class Comment extends Node {
         super(NodeType.Comment);
         this.data = data == null ? "" : String(data);
     }
+
+    protected _shallowClone(): Node {
+        return new Comment(this.data);
+    }
 }

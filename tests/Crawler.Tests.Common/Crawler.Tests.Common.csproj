@@ -21,8 +21,4 @@
 		<ProjectReference Include="..\..\src\Crawler.Puppeteer\Crawler.Puppeteer.csproj" />
 	</ItemGroup>
 
-	<ItemGroup>
-		
-	</ItemGroup>
-
 </Project>

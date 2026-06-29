@@ -1,11 +1,23 @@
 "use strict";
 (() => {
+  var __defProp = Object.defineProperty;
+  var __export = (target, all) => {
+    for (var name in all)
+      __defProp(target, name, { get: all[name], enumerable: true });
+  };
+
+  // dom/documentRef.ts
+  var documentRef = { current: null };
+
   // dom/Node.ts
   var Node = class {
     constructor(type) {
       this.parentNode = null;
       this.childNodes = [];
       this.nodeType = type;
+    }
+    get ownerDocument() {
+      return documentRef.current;
     }
     appendChild(child) {
       return this.insertBefore(child, null);
@@ -57,10 +69,44 @@
       const i = s.indexOf(this);
       return i > 0 ? s[i - 1] : null;
     }
+    // ChildNode / ParentNode insertion helpers. Svelte 5's compiled output threads its DOM through
+    // anchor.before(node) and target.append(...nodes); a string argument becomes a Text node.
+    before(...nodes) {
+      const parent = this.parentNode;
+      if (!parent) return;
+      for (const n of nodes) parent.insertBefore(asNode(n), this);
+    }
+    after(...nodes) {
+      const parent = this.parentNode;
+      if (!parent) return;
+      const ref = this.nextSibling;
+      for (const n of nodes) parent.insertBefore(asNode(n), ref);
+    }
+    replaceWith(...nodes) {
+      const parent = this.parentNode;
+      if (!parent) return;
+      for (const n of nodes) parent.insertBefore(asNode(n), this);
+      parent.removeChild(this);
+    }
+    append(...nodes) {
+      for (const n of nodes) this.appendChild(asNode(n));
+    }
+    prepend(...nodes) {
+      const ref = this.firstChild;
+      for (const n of nodes) this.insertBefore(asNode(n), ref);
+    }
+    cloneNode(deep) {
+      const clone = this._shallowClone();
+      if (deep) for (const c of this.childNodes) clone.appendChild(c.cloneNode(true));
+      return clone;
+    }
   };
+  function asNode(value) {
+    return value instanceof Node ? value : documentRef.current.createTextNode(value);
+  }
 
   // dom/Text.ts
-  var Text = class extends Node {
+  var Text = class _Text extends Node {
     constructor(data) {
       super(3 /* Text */);
       this.data = data == null ? "" : String(data);
@@ -76,6 +122,9 @@
     }
     set textContent(v) {
       this.data = v == null ? "" : String(v);
+    }
+    _shallowClone() {
+      return new _Text(this.data);
     }
   };
 
@@ -232,7 +281,7 @@
   }
 
   // dom/Element.ts
-  var Element = class extends Node {
+  var Element = class _Element extends Node {
     constructor(tag, ns) {
       super(1 /* Element */);
       this.attrs = /* @__PURE__ */ new Map();
@@ -383,6 +432,29 @@
       const kids = node.childNodes;
       for (let i = 0; i < kids.length; i++) this._notifyDisconnected(kids[i]);
     }
+    get dataset() {
+      const attrs = this.attrs;
+      const key = (p) => "data-" + p.replace(/[A-Z]/g, (m) => "-" + m.toLowerCase());
+      return new Proxy({}, {
+        get(_t, p) {
+          if (typeof p !== "string") return void 0;
+          const v = attrs.get(key(p));
+          return v == null ? void 0 : v;
+        },
+        set(_t, p, value) {
+          if (typeof p === "string") attrs.set(key(p), String(value));
+          return true;
+        },
+        has(_t, p) {
+          return typeof p === "string" && attrs.has(key(p));
+        }
+      });
+    }
+    _shallowClone() {
+      const el = new _Element(this.localName, this.namespaceURI);
+      for (const [k, v] of this.attrs) el.attrs.set(k, v);
+      return el;
+    }
     get id() {
       return this.attrs.get("id") || "";
     }
@@ -439,17 +511,278 @@
   };
 
   // dom/Comment.ts
-  var Comment = class extends Node {
+  var Comment = class _Comment extends Node {
     constructor(data) {
       super(8 /* Comment */);
       this.data = data == null ? "" : String(data);
     }
+    _shallowClone() {
+      return new _Comment(this.data);
+    }
   };
 
   // dom/DocumentFragment.ts
-  var DocumentFragment = class extends Node {
+  var DocumentFragment = class _DocumentFragment extends Node {
     constructor() {
       super(11 /* DocumentFragment */);
+    }
+    _shallowClone() {
+      return new _DocumentFragment();
+    }
+  };
+
+  // html/entities.ts
+  var NAMED = {
+    amp: "&",
+    lt: "<",
+    gt: ">",
+    quot: '"',
+    apos: "'",
+    nbsp: " ",
+    copy: "\xA9",
+    reg: "\xAE",
+    trade: "\u2122",
+    hellip: "\u2026",
+    mdash: "\u2014",
+    ndash: "\u2013",
+    lsquo: "\u2018",
+    rsquo: "\u2019",
+    ldquo: "\u201C",
+    rdquo: "\u201D",
+    laquo: "\xAB",
+    raquo: "\xBB",
+    deg: "\xB0",
+    plusmn: "\xB1",
+    times: "\xD7",
+    divide: "\xF7",
+    micro: "\xB5",
+    euro: "\u20AC",
+    pound: "\xA3",
+    cent: "\xA2",
+    yen: "\xA5",
+    sect: "\xA7",
+    para: "\xB6",
+    middot: "\xB7",
+    bull: "\u2022",
+    frac12: "\xBD",
+    frac14: "\xBC",
+    frac34: "\xBE",
+    sup2: "\xB2",
+    sup3: "\xB3"
+  };
+  function decodeEntities(s) {
+    if (s.indexOf("&") < 0) return s;
+    return s.replace(/&#(x?[0-9a-fA-F]+);|&([a-zA-Z][a-zA-Z0-9]*);/g, (m, num, name) => {
+      if (num != null) {
+        const code = num.charAt(0) === "x" || num.charAt(0) === "X" ? parseInt(num.slice(1), 16) : parseInt(num, 10);
+        return code > 0 && isFinite(code) ? String.fromCharCode(code) : m;
+      }
+      return Object.prototype.hasOwnProperty.call(NAMED, name) ? NAMED[name] : m;
+    });
+  }
+  function indexOfCI(haystack, needle, from) {
+    const n = needle.length, hl = haystack.length;
+    for (let p = from; p <= hl - n; p++) {
+      for (let q = 0; q < n; q++) {
+        const c = haystack.charAt(p + q);
+        if (c !== needle.charAt(q) && c.toLowerCase() !== needle.charAt(q)) break;
+        if (q === n - 1) return p;
+      }
+    }
+    return -1;
+  }
+
+  // html/tokenizer.ts
+  function createTagScanners() {
+    return {
+      tagName: /[a-zA-Z][a-zA-Z0-9:_-]*/y,
+      ws: /[\t\n\f\r ]+/y,
+      attrName: /[^\t\n\f\r \/>"'<=]+/y,
+      bareVal: /[^\t\n\f\r >]*/y
+    };
+  }
+  function findRawTextClose(input, tag, from) {
+    return indexOfCI(input, "</" + tag, from);
+  }
+
+  // html/parser.ts
+  function parseHTML(doc2, input) {
+    const src = input == null ? "" : String(input);
+    const len = src.length;
+    const sc = createTagScanners();
+    const root = new Element("html");
+    const head = new Element("head");
+    const body = new Element("body");
+    root.appendChild(head);
+    root.appendChild(body);
+    let open = [body];
+    const cur = () => open[open.length - 1];
+    function appendText(parent, text) {
+      const last = parent.childNodes[parent.childNodes.length - 1];
+      if (last && last.nodeType === 3 /* Text */) last.data += text;
+      else parent.appendChild(new Text(text));
+    }
+    let i = 0;
+    while (i < len) {
+      const ch = src.charAt(i);
+      if (ch !== "<") {
+        let textEnd = src.indexOf("<", i);
+        if (textEnd < 0) textEnd = len;
+        appendText(cur(), decodeEntities(src.slice(i, textEnd)));
+        i = textEnd;
+        continue;
+      }
+      if (src.slice(i, i + 4) === "<!--") {
+        const cEnd = src.indexOf("-->", i + 4);
+        cur().appendChild(new Comment(src.slice(i + 4, cEnd < 0 ? len : cEnd)));
+        i = cEnd < 0 ? len : cEnd + 3;
+        continue;
+      }
+      if (src.charAt(i + 1) === "!" || src.charAt(i + 1) === "?") {
+        const declEnd = src.indexOf(">", i);
+        const end = declEnd < 0 ? len : declEnd;
+        const bang = src.charAt(i + 1) === "!";
+        const inner = src.slice(i + 2, end);
+        if (!bang) cur().appendChild(new Comment("?" + inner));
+        else if (!/^doctype/i.test(inner)) cur().appendChild(new Comment(inner));
+        i = declEnd < 0 ? len : declEnd + 1;
+        continue;
+      }
+      if (src.charAt(i + 1) === "/") {
+        sc.tagName.lastIndex = i + 2;
+        const tm = sc.tagName.exec(src);
+        if (tm) {
+          const closeName = tm[0].toLowerCase();
+          for (let k = open.length - 1; k > 0; k--) {
+            if (open[k].localName === closeName) {
+              open.length = k;
+              break;
+            }
+          }
+        }
+        const slashEnd = src.indexOf(">", i);
+        i = slashEnd < 0 ? len : slashEnd + 1;
+        continue;
+      }
+      sc.tagName.lastIndex = i + 1;
+      const sm = sc.tagName.exec(src);
+      if (!sm) {
+        appendText(cur(), "<");
+        i++;
+        continue;
+      }
+      const tag = sm[0].toLowerCase();
+      let j = sc.tagName.lastIndex;
+      let attrs = null;
+      let selfClosed = false;
+      while (j < len) {
+        sc.ws.lastIndex = j;
+        if (sc.ws.exec(src)) j = sc.ws.lastIndex;
+        if (j >= len) break;
+        const atC = src.charAt(j);
+        if (atC === ">") {
+          j++;
+          break;
+        }
+        if (atC === "/" && src.charAt(j + 1) === ">") {
+          selfClosed = true;
+          j += 2;
+          break;
+        }
+        sc.attrName.lastIndex = j;
+        const am = sc.attrName.exec(src);
+        if (!am) {
+          j++;
+          continue;
+        }
+        const an = am[0].toLowerCase();
+        j = sc.attrName.lastIndex;
+        sc.ws.lastIndex = j;
+        if (sc.ws.exec(src)) j = sc.ws.lastIndex;
+        let val = "";
+        if (src.charAt(j) === "=") {
+          j++;
+          sc.ws.lastIndex = j;
+          if (sc.ws.exec(src)) j = sc.ws.lastIndex;
+          const quote = src.charAt(j);
+          if (quote === '"' || quote === "'") {
+            const qEnd = src.indexOf(quote, j + 1);
+            val = decodeEntities(qEnd < 0 ? src.slice(j + 1) : src.slice(j + 1, qEnd));
+            j = qEnd < 0 ? len : qEnd + 1;
+          } else {
+            sc.bareVal.lastIndex = j;
+            const bm = sc.bareVal.exec(src);
+            val = decodeEntities(bm ? bm[0] : "");
+            j = sc.bareVal.lastIndex;
+          }
+        }
+        (attrs || (attrs = {}))[an] = val;
+      }
+      if (tag === "html") {
+        if (attrs) for (const ha in attrs) root.setAttribute(ha, attrs[ha]);
+        i = j;
+        continue;
+      }
+      if (tag === "head") {
+        open = [head];
+        if (attrs) for (const he in attrs) head.setAttribute(he, attrs[he]);
+        i = j;
+        continue;
+      }
+      if (tag === "body") {
+        open = [body];
+        if (attrs) for (const bo in attrs) body.setAttribute(bo, attrs[bo]);
+        i = j;
+        continue;
+      }
+      const el = new Element(tag);
+      if (attrs) for (const key in attrs) el.setAttribute(key, attrs[key]);
+      if (RAWTEXT_ELEMENTS[tag]) {
+        const rawFrom = j;
+        const rawTo = findRawTextClose(src, tag, rawFrom);
+        const raw = rawTo < 0 ? src.slice(rawFrom) : src.slice(rawFrom, rawTo);
+        if (raw) el.appendChild(new Text(raw));
+        const rawGt = rawTo < 0 ? len : src.indexOf(">", rawTo);
+        i = rawGt < 0 ? len : rawGt + 1;
+        cur().appendChild(el);
+        continue;
+      }
+      cur().appendChild(el);
+      if (!VOID_ELEMENTS[tag] && !selfClosed) open.push(el);
+      i = j;
+    }
+    doc2.documentElement = root;
+    doc2.head = head;
+    doc2.body = body;
+    root.parentNode = doc2;
+    doc2.childNodes = [root];
+    return root;
+  }
+  function parseFragment(html) {
+    const scratch = {};
+    parseHTML(scratch, html);
+    const kids = scratch.body.childNodes.slice();
+    for (const k of kids) k.parentNode = null;
+    return kids;
+  }
+
+  // dom/HTMLTemplateElement.ts
+  var HTMLTemplateElement = class _HTMLTemplateElement extends Element {
+    constructor() {
+      super("template");
+      this.content = new DocumentFragment();
+    }
+    get innerHTML() {
+      return serializeChildren(this.content);
+    }
+    set innerHTML(v) {
+      this.content.childNodes = [];
+      for (const k of parseFragment(v)) this.content.appendChild(k);
+    }
+    _shallowClone() {
+      const clone = new _HTMLTemplateElement();
+      for (const c of this.content.childNodes) clone.content.appendChild(c.cloneNode(true));
+      return clone;
     }
   };
 
@@ -459,6 +792,7 @@
       this._definitions = /* @__PURE__ */ new Map();
       this._pending = /* @__PURE__ */ new Map();
       this._nameStack = [];
+      this._upgradeTarget = null;
       this._doc = null;
     }
     setDocument(doc2) {
@@ -508,6 +842,11 @@
     currentName() {
       return this._nameStack[this._nameStack.length - 1];
     }
+    takeUpgradeTarget() {
+      const t = this._upgradeTarget;
+      this._upgradeTarget = null;
+      return t;
+    }
     _upgradeSubtree(root) {
       const stack = [root];
       while (stack.length) {
@@ -522,8 +861,15 @@
       }
     }
     _upgradeOne(el, ctor) {
-      if (ctor && el instanceof ctor) return;
-      if (ctor) Object.setPrototypeOf(el, ctor.prototype);
+      if (!ctor || el instanceof ctor) return;
+      Object.setPrototypeOf(el, ctor.prototype);
+      this._upgradeTarget = el;
+      try {
+        new ctor();
+      } catch {
+      } finally {
+        this._upgradeTarget = null;
+      }
       if (typeof el.connectedCallback === "function" && el.isConnected) {
         el._connected = true;
         el.connectedCallback();
@@ -533,7 +879,7 @@
   var customElements = new CustomElementRegistry();
 
   // dom/Document.ts
-  var Document = class extends Node {
+  var Document = class _Document extends Node {
     constructor(defaultView) {
       super(9 /* Document */);
       this.documentElement = null;
@@ -544,6 +890,7 @@
     }
     createElement(tag) {
       const name = String(tag).toLowerCase();
+      if (name === "template") return new HTMLTemplateElement();
       const custom = customElements.tryCreate(name);
       return custom || new Element(name);
     }
@@ -582,6 +929,12 @@
       return { initEvent() {
       } };
     }
+    get ownerDocument() {
+      return null;
+    }
+    _shallowClone() {
+      return new _Document(this.defaultView);
+    }
   };
 
   // dom/HTMLElement.ts
@@ -589,6 +942,8 @@
     constructor(tag, ns) {
       super(tag || customElements.currentName() || "", ns);
       this.shadowRoot = null;
+      const target = customElements.takeUpgradeTarget();
+      if (target) return target;
     }
     attachShadow(init) {
       if (this.shadowRoot) return this.shadowRoot;
@@ -615,6 +970,62 @@
         this.attributeChangedCallback(name, old, this.getAttribute(name));
       }
     }
+  };
+
+  // dom/htmlInterfaces.ts
+  var htmlInterfaces_exports = {};
+  __export(htmlInterfaces_exports, {
+    HTMLAnchorElement: () => HTMLAnchorElement,
+    HTMLButtonElement: () => HTMLButtonElement,
+    HTMLCanvasElement: () => HTMLCanvasElement,
+    HTMLFormElement: () => HTMLFormElement,
+    HTMLIFrameElement: () => HTMLIFrameElement,
+    HTMLImageElement: () => HTMLImageElement,
+    HTMLInputElement: () => HTMLInputElement,
+    HTMLLinkElement: () => HTMLLinkElement,
+    HTMLOptionElement: () => HTMLOptionElement,
+    HTMLScriptElement: () => HTMLScriptElement,
+    HTMLSelectElement: () => HTMLSelectElement,
+    HTMLStyleElement: () => HTMLStyleElement,
+    HTMLTextAreaElement: () => HTMLTextAreaElement,
+    HTMLUnknownElement: () => HTMLUnknownElement,
+    MathMLElement: () => MathMLElement,
+    SVGElement: () => SVGElement,
+    SVGSVGElement: () => SVGSVGElement
+  });
+  var HTMLIFrameElement = class extends HTMLElement {
+  };
+  var HTMLInputElement = class extends HTMLElement {
+  };
+  var HTMLTextAreaElement = class extends HTMLElement {
+  };
+  var HTMLSelectElement = class extends HTMLElement {
+  };
+  var HTMLOptionElement = class extends HTMLElement {
+  };
+  var HTMLButtonElement = class extends HTMLElement {
+  };
+  var HTMLAnchorElement = class extends HTMLElement {
+  };
+  var HTMLImageElement = class extends HTMLElement {
+  };
+  var HTMLFormElement = class extends HTMLElement {
+  };
+  var HTMLStyleElement = class extends HTMLElement {
+  };
+  var HTMLScriptElement = class extends HTMLElement {
+  };
+  var HTMLLinkElement = class extends HTMLElement {
+  };
+  var HTMLCanvasElement = class extends HTMLElement {
+  };
+  var HTMLUnknownElement = class extends HTMLElement {
+  };
+  var SVGElement = class extends Element {
+  };
+  var SVGSVGElement = class extends SVGElement {
+  };
+  var MathMLElement = class extends Element {
   };
 
   // browser/navigator.ts
@@ -1031,6 +1442,7 @@
 
   // browser/globals.ts
   var doc = new Document(globalThis);
+  documentRef.current = doc;
   function installDOM(global) {
     global.document = doc;
     global.window = global;
@@ -1083,6 +1495,8 @@
     global.Comment = Comment;
     global.DocumentFragment = DocumentFragment;
     global.HTMLElement = HTMLElement;
+    global.HTMLTemplateElement = HTMLTemplateElement;
+    for (const name in htmlInterfaces_exports) global[name] = htmlInterfaces_exports[name];
     global.customElements = customElements;
     customElements.setDocument(doc);
     global.Event = Event;
@@ -1096,229 +1510,6 @@
     global.localStorage = createStorage();
     global.sessionStorage = createStorage();
     installTimerGlobals(global);
-  }
-
-  // html/entities.ts
-  var NAMED = {
-    amp: "&",
-    lt: "<",
-    gt: ">",
-    quot: '"',
-    apos: "'",
-    nbsp: " ",
-    copy: "\xA9",
-    reg: "\xAE",
-    trade: "\u2122",
-    hellip: "\u2026",
-    mdash: "\u2014",
-    ndash: "\u2013",
-    lsquo: "\u2018",
-    rsquo: "\u2019",
-    ldquo: "\u201C",
-    rdquo: "\u201D",
-    laquo: "\xAB",
-    raquo: "\xBB",
-    deg: "\xB0",
-    plusmn: "\xB1",
-    times: "\xD7",
-    divide: "\xF7",
-    micro: "\xB5",
-    euro: "\u20AC",
-    pound: "\xA3",
-    cent: "\xA2",
-    yen: "\xA5",
-    sect: "\xA7",
-    para: "\xB6",
-    middot: "\xB7",
-    bull: "\u2022",
-    frac12: "\xBD",
-    frac14: "\xBC",
-    frac34: "\xBE",
-    sup2: "\xB2",
-    sup3: "\xB3"
-  };
-  function decodeEntities(s) {
-    if (s.indexOf("&") < 0) return s;
-    return s.replace(/&#(x?[0-9a-fA-F]+);|&([a-zA-Z][a-zA-Z0-9]*);/g, (m, num, name) => {
-      if (num != null) {
-        const code = num.charAt(0) === "x" || num.charAt(0) === "X" ? parseInt(num.slice(1), 16) : parseInt(num, 10);
-        return code > 0 && isFinite(code) ? String.fromCharCode(code) : m;
-      }
-      return Object.prototype.hasOwnProperty.call(NAMED, name) ? NAMED[name] : m;
-    });
-  }
-  function indexOfCI(haystack, needle, from) {
-    const n = needle.length, hl = haystack.length;
-    for (let p = from; p <= hl - n; p++) {
-      for (let q = 0; q < n; q++) {
-        const c = haystack.charAt(p + q);
-        if (c !== needle.charAt(q) && c.toLowerCase() !== needle.charAt(q)) break;
-        if (q === n - 1) return p;
-      }
-    }
-    return -1;
-  }
-
-  // html/tokenizer.ts
-  function createTagScanners() {
-    return {
-      tagName: /[a-zA-Z][a-zA-Z0-9:_-]*/y,
-      ws: /[\t\n\f\r ]+/y,
-      attrName: /[^\t\n\f\r \/>"'<=]+/y,
-      bareVal: /[^\t\n\f\r >]*/y
-    };
-  }
-  function findRawTextClose(input, tag, from) {
-    return indexOfCI(input, "</" + tag, from);
-  }
-
-  // html/parser.ts
-  function parseHTML(doc2, input) {
-    const src = input == null ? "" : String(input);
-    const len = src.length;
-    const sc = createTagScanners();
-    const root = new Element("html");
-    const head = new Element("head");
-    const body = new Element("body");
-    root.appendChild(head);
-    root.appendChild(body);
-    let open = [body];
-    const cur = () => open[open.length - 1];
-    function appendText(parent, text) {
-      const last = parent.childNodes[parent.childNodes.length - 1];
-      if (last && last.nodeType === 3 /* Text */) last.data += text;
-      else parent.appendChild(new Text(text));
-    }
-    let i = 0;
-    while (i < len) {
-      const ch = src.charAt(i);
-      if (ch !== "<") {
-        let textEnd = src.indexOf("<", i);
-        if (textEnd < 0) textEnd = len;
-        appendText(cur(), decodeEntities(src.slice(i, textEnd)));
-        i = textEnd;
-        continue;
-      }
-      if (src.slice(i, i + 4) === "<!--") {
-        const cEnd = src.indexOf("-->", i + 4);
-        cur().appendChild(new Comment(src.slice(i + 4, cEnd < 0 ? len : cEnd)));
-        i = cEnd < 0 ? len : cEnd + 3;
-        continue;
-      }
-      if (src.charAt(i + 1) === "!" || src.charAt(i + 1) === "?") {
-        const declEnd = src.indexOf(">", i);
-        i = declEnd < 0 ? len : declEnd + 1;
-        continue;
-      }
-      if (src.charAt(i + 1) === "/") {
-        sc.tagName.lastIndex = i + 2;
-        const tm = sc.tagName.exec(src);
-        if (tm) {
-          const closeName = tm[0].toLowerCase();
-          for (let k = open.length - 1; k > 0; k--) {
-            if (open[k].localName === closeName) {
-              open.length = k;
-              break;
-            }
-          }
-        }
-        const slashEnd = src.indexOf(">", i);
-        i = slashEnd < 0 ? len : slashEnd + 1;
-        continue;
-      }
-      sc.tagName.lastIndex = i + 1;
-      const sm = sc.tagName.exec(src);
-      if (!sm) {
-        appendText(cur(), "<");
-        i++;
-        continue;
-      }
-      const tag = sm[0].toLowerCase();
-      let j = sc.tagName.lastIndex;
-      let attrs = null;
-      let selfClosed = false;
-      while (j < len) {
-        sc.ws.lastIndex = j;
-        if (sc.ws.exec(src)) j = sc.ws.lastIndex;
-        if (j >= len) break;
-        const atC = src.charAt(j);
-        if (atC === ">") {
-          j++;
-          break;
-        }
-        if (atC === "/" && src.charAt(j + 1) === ">") {
-          selfClosed = true;
-          j += 2;
-          break;
-        }
-        sc.attrName.lastIndex = j;
-        const am = sc.attrName.exec(src);
-        if (!am) {
-          j++;
-          continue;
-        }
-        const an = am[0].toLowerCase();
-        j = sc.attrName.lastIndex;
-        sc.ws.lastIndex = j;
-        if (sc.ws.exec(src)) j = sc.ws.lastIndex;
-        let val = "";
-        if (src.charAt(j) === "=") {
-          j++;
-          sc.ws.lastIndex = j;
-          if (sc.ws.exec(src)) j = sc.ws.lastIndex;
-          const quote = src.charAt(j);
-          if (quote === '"' || quote === "'") {
-            const qEnd = src.indexOf(quote, j + 1);
-            val = decodeEntities(qEnd < 0 ? src.slice(j + 1) : src.slice(j + 1, qEnd));
-            j = qEnd < 0 ? len : qEnd + 1;
-          } else {
-            sc.bareVal.lastIndex = j;
-            const bm = sc.bareVal.exec(src);
-            val = decodeEntities(bm ? bm[0] : "");
-            j = sc.bareVal.lastIndex;
-          }
-        }
-        (attrs || (attrs = {}))[an] = val;
-      }
-      if (tag === "html") {
-        if (attrs) for (const ha in attrs) root.setAttribute(ha, attrs[ha]);
-        i = j;
-        continue;
-      }
-      if (tag === "head") {
-        open = [head];
-        if (attrs) for (const he in attrs) head.setAttribute(he, attrs[he]);
-        i = j;
-        continue;
-      }
-      if (tag === "body") {
-        open = [body];
-        if (attrs) for (const bo in attrs) body.setAttribute(bo, attrs[bo]);
-        i = j;
-        continue;
-      }
-      const el = new Element(tag);
-      if (attrs) for (const key in attrs) el.setAttribute(key, attrs[key]);
-      if (RAWTEXT_ELEMENTS[tag]) {
-        const rawFrom = j;
-        const rawTo = findRawTextClose(src, tag, rawFrom);
-        const raw = rawTo < 0 ? src.slice(rawFrom) : src.slice(rawFrom, rawTo);
-        if (raw) el.appendChild(new Text(raw));
-        const rawGt = rawTo < 0 ? len : src.indexOf(">", rawTo);
-        i = rawGt < 0 ? len : rawGt + 1;
-        cur().appendChild(el);
-        continue;
-      }
-      cur().appendChild(el);
-      if (!VOID_ELEMENTS[tag] && !selfClosed) open.push(el);
-      i = j;
-    }
-    doc2.documentElement = root;
-    doc2.head = head;
-    doc2.body = body;
-    root.parentNode = doc2;
-    doc2.childNodes = [root];
-    return root;
   }
 
   // crawler/api.ts

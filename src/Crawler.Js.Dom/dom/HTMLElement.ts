@@ -11,6 +11,8 @@ export class HTMLElement extends Element {
 
     constructor(tag?: string, ns?: string) {
         super(tag || customElements.currentName() || "", ns);
+        const target = customElements.takeUpgradeTarget();
+        if (target) return target;
     }
 
     attachShadow(init?: { mode?: string }): any {

@@ -5,6 +5,8 @@ import { Text } from "../dom/Text";
 import { Comment } from "../dom/Comment";
 import { DocumentFragment } from "../dom/DocumentFragment";
 import { HTMLElement } from "../dom/HTMLElement";
+import { HTMLTemplateElement } from "../dom/HTMLTemplateElement";
+import * as htmlInterfaces from "../dom/htmlInterfaces";
 import { customElements } from "../dom/customElements";
 import { navigator } from "./navigator";
 import { createLocation } from "./location";
@@ -20,8 +22,10 @@ import { crypto } from "./crypto";
 import { MessageChannel, MessagePort } from "./MessageChannel";
 import { createStorage } from "./Storage";
 import { performance } from "./Performance";
+import { documentRef } from "../dom/documentRef";
 
 export const doc = new Document(globalThis as any);
+documentRef.current = doc;
 
 export function installDOM(global: any): void {
     global.document = doc;
@@ -56,6 +60,8 @@ export function installDOM(global: any): void {
     global.Comment = Comment;
     global.DocumentFragment = DocumentFragment;
     global.HTMLElement = HTMLElement;
+    global.HTMLTemplateElement = HTMLTemplateElement;
+    for (const name in htmlInterfaces) global[name] = (htmlInterfaces as any)[name];
     global.customElements = customElements;
     customElements.setDocument(doc);
     global.Event = Event;

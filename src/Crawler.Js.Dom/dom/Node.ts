@@ -1,4 +1,5 @@
 import { NodeType } from "../types/NodeType";
+import { documentRef } from "./documentRef";
 
 export abstract class Node {
     readonly nodeType: NodeType;
@@ -7,6 +8,10 @@ export abstract class Node {
 
     protected constructor(type: NodeType) {
         this.nodeType = type;
+    }
+
+    get ownerDocument(): any {
+        return documentRef.current;
     }
 
     appendChild(child: Node): Node {
@@ -67,4 +72,47 @@ export abstract class Node {
         const i = s.indexOf(this);
         return i > 0 ? s[i - 1] : null;
     }
+
+    // ChildNode / ParentNode insertion helpers. Svelte 5's compiled output threads its DOM through
+    // anchor.before(node) and target.append(...nodes); a string argument becomes a Text node.
+    before(...nodes: any[]): void {
+        const parent = this.parentNode;
+        if (!parent) return;
+        for (const n of nodes) parent.insertBefore(asNode(n), this);
+    }
+
+    after(...nodes: any[]): void {
+        const parent = this.parentNode;
+        if (!parent) return;
+        const ref = this.nextSibling;
+        for (const n of nodes) parent.insertBefore(asNode(n), ref);
+    }
+
+    replaceWith(...nodes: any[]): void {
+        const parent = this.parentNode;
+        if (!parent) return;
+        for (const n of nodes) parent.insertBefore(asNode(n), this);
+        parent.removeChild(this);
+    }
+
+    append(...nodes: any[]): void {
+        for (const n of nodes) this.appendChild(asNode(n));
+    }
+
+    prepend(...nodes: any[]): void {
+        const ref = this.firstChild;
+        for (const n of nodes) this.insertBefore(asNode(n), ref);
+    }
+
+    cloneNode(deep?: boolean): Node {
+        const clone = this._shallowClone();
+        if (deep) for (const c of this.childNodes) clone.appendChild(c.cloneNode(true));
+        return clone;
+    }
+
+    protected abstract _shallowClone(): Node;
+}
+
+function asNode(value: any): Node {
+    return value instanceof Node ? value : documentRef.current.createTextNode(value);
 }

@@ -179,6 +179,31 @@ export class Element extends Node {
         for (let i = 0; i < kids.length; i++) this._notifyDisconnected(kids[i]);
     }
 
+    get dataset(): any {
+        const attrs = this.attrs;
+        const key = (p: string) => "data-" + p.replace(/[A-Z]/g, (m) => "-" + m.toLowerCase());
+        return new Proxy({}, {
+            get(_t, p) {
+                if (typeof p !== "string") return undefined;
+                const v = attrs.get(key(p));
+                return v == null ? undefined : v;
+            },
+            set(_t, p, value) {
+                if (typeof p === "string") attrs.set(key(p), String(value));
+                return true;
+            },
+            has(_t, p) {
+                return typeof p === "string" && attrs.has(key(p));
+            },
+        });
+    }
+
+    protected _shallowClone(): Node {
+        const el = new Element(this.localName, this.namespaceURI);
+        for (const [k, v] of this.attrs) el.attrs.set(k, v);
+        return el;
+    }
+
     get id(): string {
         return this.attrs.get("id") || "";
     }

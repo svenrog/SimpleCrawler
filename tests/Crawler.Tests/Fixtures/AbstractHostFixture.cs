@@ -62,6 +62,7 @@ public abstract class AbstractHostFixture : IAsyncDisposable
             Concurrency = 8,
             RespectMetaRobots = false,
             RespectRobotsTxt = false,
+            EnableSitemapDiscovery = false,
         };
     }
 

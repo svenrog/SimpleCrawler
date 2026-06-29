@@ -5,4 +5,8 @@ export class DocumentFragment extends Node {
     constructor() {
         super(NodeType.DocumentFragment);
     }
+
+    protected _shallowClone(): Node {
+        return new DocumentFragment();
+    }
 }

@@ -10,13 +10,14 @@ interface Definition {
 // Custom-element registry. `define` retroactively upgrades elements the parser already created as plain
 // Elements (the Astro island case: <astro-island> is in the server-rendered HTML long before the bundle
 // registers it), and `tryCreate` hands `createElement` a real subclass instance so framework field
-// initializers run. Upgrade can't re-run a class constructor on an existing object, so it swaps the
-// prototype and fires the connected callback — sufficient for components that read state in
-// connectedCallback rather than the constructor.
+// initializers run. Upgrade swaps the prototype and re-runs the subclass constructor against the existing
+// element (HTMLElement returns the upgrade target), so instance-field initializers — e.g. Astro's island
+// stores its `hydrate`/`hydrator` as constructor fields — actually land on the parsed node.
 export class CustomElementRegistry {
     private readonly _definitions = new Map<string, Definition>();
     private readonly _pending = new Map<string, Array<(ctor: any) => void>>();
     private readonly _nameStack: string[] = [];
+    private _upgradeTarget: any = null;
     private _doc: Document | null = null;
 
     setDocument(doc: Document): void {
@@ -73,6 +74,12 @@ export class CustomElementRegistry {
         return this._nameStack[this._nameStack.length - 1];
     }
 
+    takeUpgradeTarget(): any {
+        const t = this._upgradeTarget;
+        this._upgradeTarget = null;
+        return t;
+    }
+
     private _upgradeSubtree(root: unknown): void {
         const stack: any[] = [root];
         while (stack.length) {
@@ -88,8 +95,12 @@ export class CustomElementRegistry {
     }
 
     private _upgradeOne(el: any, ctor: any): void {
-        if (ctor && el instanceof ctor) return;
-        if (ctor) Object.setPrototypeOf(el, ctor.prototype);
+        if (!ctor || el instanceof ctor) return;
+        Object.setPrototypeOf(el, ctor.prototype);
+        this._upgradeTarget = el;
+        try { new ctor(); }
+        catch { /* a throwing upgrade constructor must not abort the rest of the subtree walk */ }
+        finally { this._upgradeTarget = null; }
         if (typeof el.connectedCallback === "function" && el.isConnected) {
             el._connected = true;
             el.connectedCallback();

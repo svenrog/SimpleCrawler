@@ -22,4 +22,8 @@ export class Text extends Node {
     set textContent(v: unknown) {
         this.data = v == null ? "" : String(v);
     }
+
+    protected _shallowClone(): Node {
+        return new Text(this.data);
+    }
 }

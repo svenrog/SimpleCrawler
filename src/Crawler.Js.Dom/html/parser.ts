@@ -1,4 +1,5 @@
 import type { Document } from "../dom/Document";
+import type { Node } from "../dom/Node";
 import { Element } from "../dom/Element";
 import { Text } from "../dom/Text";
 import { Comment } from "../dom/Comment";
@@ -46,6 +47,13 @@ export function parseHTML(doc: Document, input: unknown): Element {
         }
         if (src.charAt(i + 1) === "!" || src.charAt(i + 1) === "?") {
             const declEnd = src.indexOf(">", i);
+            const end = declEnd < 0 ? len : declEnd;
+            // <!doctype …> is a declaration with no node; every other <!…>/<?…> is a bogus comment that
+            // the HTML parser surfaces as a Comment. Solid/Svelte emit <!$>/<!/> markers and walk them.
+            const bang = src.charAt(i + 1) === "!";
+            const inner = src.slice(i + 2, end);
+            if (!bang) cur().appendChild(new Comment("?" + inner));
+            else if (!/^doctype/i.test(inner)) cur().appendChild(new Comment(inner));
             i = declEnd < 0 ? len : declEnd + 1;
             continue;
         }
@@ -148,4 +156,14 @@ export function parseHTML(doc: Document, input: unknown): Element {
     root.parentNode = doc;
     doc.childNodes = [root];
     return root;
+}
+
+// Parse a markup fragment (e.g. an innerHTML or <template> body) into detached nodes. The full-document
+// parser nests everything under html/head/body, so the fragment's nodes are the resulting body's children.
+export function parseFragment(html: unknown): Node[] {
+    const scratch: any = {};
+    parseHTML(scratch as Document, html);
+    const kids = (scratch.body as Element).childNodes.slice();
+    for (const k of kids) k.parentNode = null;
+    return kids;
 }
