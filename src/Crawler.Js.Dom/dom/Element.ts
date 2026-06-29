@@ -59,8 +59,26 @@ export class Element extends Node {
         (this.listeners[t] ||= []).push(cb);
     }
 
-    removeEventListener(): void { }
-    dispatchEvent(): boolean { return true; }
+    removeEventListener(t: string, cb: (...args: any[]) => void): void {
+        const list = this.listeners[t];
+        if (!list) return;
+        const i = list.indexOf(cb);
+        if (i >= 0) list.splice(i, 1);
+    }
+
+    dispatchEvent(event: any): boolean {
+        const list = this.listeners[event.type];
+        if (!list || !list.length) return true;
+        event.target = this;
+        event.currentTarget = this;
+        const snapshot = list.slice();
+        for (let i = 0; i < snapshot.length; i++) {
+            try { snapshot[i](event); } catch { /* a failing listener must not abort dispatch */ }
+            if (event._stoppedImmediate) break;
+        }
+        event.currentTarget = null;
+        return !event.defaultPrevented;
+    }
     setAttributeNode(): void { }
 
     getElementsByTagName(tag: string): Element[] {

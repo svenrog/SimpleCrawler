@@ -12,6 +12,14 @@ import { createHistory } from "./history";
 import { installTimerGlobals } from "../scheduler/taskQueue";
 import { URL } from "../url/Url";
 import { URLSearchParams } from "../url/URLSearchParams";
+import { Event } from "./Event";
+import { CustomEvent } from "./CustomEvent";
+import { TextEncoder } from "./TextEncoder";
+import { TextDecoder } from "./TextDecoder";
+import { crypto } from "./crypto";
+import { MessageChannel, MessagePort } from "./MessageChannel";
+import { createStorage } from "./Storage";
+import { performance } from "./Performance";
 
 export const doc = new Document(globalThis as any);
 
@@ -50,5 +58,15 @@ export function installDOM(global: any): void {
     global.HTMLElement = HTMLElement;
     global.customElements = customElements;
     customElements.setDocument(doc);
+    global.Event = Event;
+    global.CustomEvent = CustomEvent;
+    global.TextEncoder = global.TextEncoder || TextEncoder;
+    global.TextDecoder = global.TextDecoder || TextDecoder;
+    global.crypto = global.crypto || crypto;
+    global.MessageChannel = global.MessageChannel || MessageChannel;
+    global.MessagePort = global.MessagePort || MessagePort;
+    global.performance = global.performance || performance;
+    global.localStorage = createStorage();
+    global.sessionStorage = createStorage();
     installTimerGlobals(global);
 }

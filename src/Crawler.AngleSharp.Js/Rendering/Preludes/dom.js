@@ -270,10 +270,27 @@
       var _a;
       ((_a = this.listeners)[t] || (_a[t] = [])).push(cb);
     }
-    removeEventListener() {
+    removeEventListener(t, cb) {
+      const list = this.listeners[t];
+      if (!list) return;
+      const i = list.indexOf(cb);
+      if (i >= 0) list.splice(i, 1);
     }
-    dispatchEvent() {
-      return true;
+    dispatchEvent(event) {
+      const list = this.listeners[event.type];
+      if (!list || !list.length) return true;
+      event.target = this;
+      event.currentTarget = this;
+      const snapshot = list.slice();
+      for (let i = 0; i < snapshot.length; i++) {
+        try {
+          snapshot[i](event);
+        } catch {
+        }
+        if (event._stoppedImmediate) break;
+      }
+      event.currentTarget = null;
+      return !event.defaultPrevented;
     }
     setAttributeNode() {
     }
@@ -796,6 +813,222 @@
     }
   };
 
+  // browser/Event.ts
+  var Event = class {
+    constructor(type, init) {
+      this.isTrusted = false;
+      this.defaultPrevented = false;
+      this.eventPhase = 0;
+      this.target = null;
+      this.currentTarget = null;
+      this._stoppedImmediate = false;
+      this.type = String(type);
+      this.bubbles = !!(init && init.bubbles);
+      this.cancelable = !!(init && init.cancelable);
+      this.timeStamp = Date.now();
+    }
+    preventDefault() {
+      if (this.cancelable) this.defaultPrevented = true;
+    }
+    stopPropagation() {
+    }
+    stopImmediatePropagation() {
+      this._stoppedImmediate = true;
+    }
+  };
+
+  // browser/CustomEvent.ts
+  var CustomEvent = class extends Event {
+    constructor(type, init) {
+      super(type, init);
+      this.detail = init && init.detail !== void 0 ? init.detail : null;
+    }
+  };
+
+  // browser/TextEncoder.ts
+  var TextEncoder = class {
+    constructor() {
+      this.encoding = "utf-8";
+    }
+    encode(input) {
+      const s = input == null ? "" : String(input);
+      const out = [];
+      for (let i = 0; i < s.length; ) {
+        const c = s.charCodeAt(i++);
+        if (c < 128) {
+          out.push(c);
+        } else if (c < 2048) {
+          out.push(192 | c >> 6, 128 | c & 63);
+        } else if (c >= 55296 && c <= 56319 && i < s.length) {
+          const c2 = s.charCodeAt(i++);
+          const cp = 65536 + ((c & 1023) << 10) + (c2 & 1023);
+          out.push(240 | cp >> 18, 128 | cp >> 12 & 63, 128 | cp >> 6 & 63, 128 | cp & 63);
+        } else {
+          out.push(224 | c >> 12, 128 | c >> 6 & 63, 128 | c & 63);
+        }
+      }
+      return new Uint8Array(out);
+    }
+  };
+
+  // browser/TextDecoder.ts
+  var TextDecoder = class {
+    constructor() {
+      this.encoding = "utf-8";
+    }
+    decode(input) {
+      if (input == null) return "";
+      if (typeof input === "string") return input;
+      const bytes = input;
+      let out = "";
+      let i = 0;
+      const len = bytes.length;
+      while (i < len) {
+        const b1 = bytes[i++];
+        if (b1 < 128) {
+          out += String.fromCharCode(b1);
+        } else if (b1 < 224) {
+          const b2 = bytes[i++];
+          out += String.fromCharCode((b1 & 31) << 6 | b2 & 63);
+        } else if (b1 < 240) {
+          const b2 = bytes[i++];
+          const b3 = bytes[i++];
+          out += String.fromCharCode((b1 & 15) << 12 | (b2 & 63) << 6 | b3 & 63);
+        } else {
+          const b2 = bytes[i++];
+          const b3 = bytes[i++];
+          const b4 = bytes[i++];
+          const cp = (b1 & 7) << 18 | (b2 & 63) << 12 | (b3 & 63) << 6 | b4 & 63;
+          const adj = cp - 65536;
+          out += String.fromCharCode(55296 | adj >> 10, 56320 | adj & 63);
+        }
+      }
+      return out;
+    }
+  };
+
+  // browser/crypto.ts
+  function randomByte() {
+    return Math.floor(Math.random() * 256);
+  }
+  function hex(n) {
+    return n < 16 ? "0" + n.toString(16) : n.toString(16);
+  }
+  var crypto = {
+    getRandomValues(arr) {
+      if (arr) for (let i = 0; i < arr.length; i++) arr[i] = randomByte();
+      return arr;
+    },
+    randomUUID() {
+      const b = new Uint8Array(16);
+      for (let i = 0; i < 16; i++) b[i] = randomByte();
+      b[6] = b[6] & 15 | 64;
+      b[8] = b[8] & 63 | 128;
+      const h = [];
+      for (let i = 0; i < 16; i++) h.push(hex(b[i]));
+      return h[0] + h[1] + h[2] + h[3] + "-" + h[4] + h[5] + "-" + h[6] + h[7] + "-" + h[8] + h[9] + "-" + h[10] + h[11] + h[12] + h[13] + h[14] + h[15];
+    }
+  };
+
+  // browser/MessageChannel.ts
+  var MessagePort = class {
+    constructor() {
+      this.onmessage = null;
+      this.other = null;
+    }
+    postMessage(data) {
+      const o = this.other;
+      if (o) enqueue(() => {
+        if (o.onmessage) o.onmessage({ data });
+      });
+    }
+    start() {
+    }
+    close() {
+    }
+    addEventListener(type, cb) {
+      if (type === "message") this.onmessage = cb;
+    }
+    removeEventListener(type, cb) {
+      if (type === "message" && this.onmessage === cb) this.onmessage = null;
+    }
+    _link(other) {
+      this.other = other;
+    }
+  };
+  var MessageChannel = class {
+    constructor() {
+      this.port1 = new MessagePort();
+      this.port2 = new MessagePort();
+      this.port1._link(this.port2);
+      this.port2._link(this.port1);
+    }
+  };
+
+  // browser/Storage.ts
+  var Storage = class {
+    constructor() {
+      this.store = /* @__PURE__ */ new Map();
+    }
+    get length() {
+      return this.store.size;
+    }
+    getItem(key) {
+      return this.store.has(key) ? this.store.get(key) : null;
+    }
+    setItem(key, value) {
+      this.store.set(String(key), value == null ? "" : String(value));
+    }
+    removeItem(key) {
+      this.store.delete(String(key));
+    }
+    clear() {
+      this.store.clear();
+    }
+    key(index) {
+      if (index < 0 || index >= this.store.size) return null;
+      let i = 0;
+      for (const k of this.store.keys()) {
+        if (i++ === index) return k;
+      }
+      return null;
+    }
+  };
+  function createStorage() {
+    return new Storage();
+  }
+
+  // browser/Performance.ts
+  var startTime = Date.now();
+  var Performance = class {
+    constructor() {
+      this.timeOrigin = startTime;
+    }
+    now() {
+      return Date.now() - startTime;
+    }
+    mark() {
+      return null;
+    }
+    measure() {
+      return null;
+    }
+    clearMarks() {
+    }
+    clearMeasures() {
+    }
+    getEntries() {
+      return [];
+    }
+    getEntriesByName() {
+      return [];
+    }
+    getEntriesByType() {
+      return [];
+    }
+  };
+  var performance = new Performance();
+
   // browser/globals.ts
   var doc = new Document(globalThis);
   function installDOM(global) {
@@ -852,6 +1085,16 @@
     global.HTMLElement = HTMLElement;
     global.customElements = customElements;
     customElements.setDocument(doc);
+    global.Event = Event;
+    global.CustomEvent = CustomEvent;
+    global.TextEncoder = global.TextEncoder || TextEncoder;
+    global.TextDecoder = global.TextDecoder || TextDecoder;
+    global.crypto = global.crypto || crypto;
+    global.MessageChannel = global.MessageChannel || MessageChannel;
+    global.MessagePort = global.MessagePort || MessagePort;
+    global.performance = global.performance || performance;
+    global.localStorage = createStorage();
+    global.sessionStorage = createStorage();
     installTimerGlobals(global);
   }
 
