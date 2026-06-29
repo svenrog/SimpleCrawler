@@ -1,5 +1,5 @@
-using Crawler.AngleSharp.Js.Jint;
-using Crawler.AngleSharp.Js.V8;
+using Crawler.Js.Jint;
+using Crawler.Js.V8;
 using Crawler.Core.Models;
 using Crawler.Playwright;
 using Crawler.Puppeteer;
@@ -53,7 +53,7 @@ public class SpaCrawlerTests : IClassFixture<SpaHostFixture>
     [MemberData(nameof(Frameworks))]
     public async Task AngleSharpJintCrawler_can_Crawl(string framework)
     {
-        var subject = _context.ServiceProvider.GetRequiredService<DefaultAngleSharpJintCrawler>();
+        var subject = _context.ServiceProvider.GetRequiredService<DefaultJintCrawler>();
         var result = await subject.Start(SpaHostFixture.HostName(framework), _context.CancellationSource.Token);
 
         AssertResult(framework, result);
@@ -65,7 +65,7 @@ public class SpaCrawlerTests : IClassFixture<SpaHostFixture>
     {
         Assert.SkipUnless(V8Support.IsAvailable, V8Support.UnavailableReason);
 
-        var subject = _context.ServiceProvider.GetRequiredService<DefaultAngleSharpV8Crawler>();
+        var subject = _context.ServiceProvider.GetRequiredService<DefaultV8Crawler>();
         var result = await subject.Start(SpaHostFixture.HostName(framework), _context.CancellationSource.Token);
 
         AssertResult(framework, result);

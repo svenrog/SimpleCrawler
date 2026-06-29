@@ -1,4 +1,4 @@
-using Crawler.AngleSharp.Js.Models;
+using Crawler.Js.Models;
 using Crawler.TestHost.Infrastructure.Factories;
 using Crawler.TestHost.Infrastructure.Results;
 using Crawler.Tests.Assertions;

@@ -1,6 +1,6 @@
 using BenchmarkDotNet.Attributes;
-using Crawler.AngleSharp.Js.Jint;
-using Crawler.AngleSharp.Js.V8;
+using Crawler.Js.Jint;
+using Crawler.Js.V8;
 using Crawler.Core;
 using Crawler.Playwright;
 using Crawler.Puppeteer;
@@ -28,8 +28,8 @@ public class SpaRenderBenchmarks
     private CancellationTokenSource _tokenSource;
     private ServiceProvider _serviceProvider;
 
-    private DefaultAngleSharpJintCrawler _angleSharpJintCrawler;
-    private DefaultAngleSharpV8Crawler _angleSharpV8Crawler;
+    private DefaultJintCrawler _angleSharpJintCrawler;
+    private DefaultV8Crawler _angleSharpV8Crawler;
     private DefaultPlaywrightCrawler _playwrightCrawler;
     private DefaultPuppeteerCrawler _puppeteerCrawler;
 
@@ -45,8 +45,8 @@ public class SpaRenderBenchmarks
             RespectRobotsTxt = false,
         };
 
-        services.AddAngleSharpJintCrawler(options);
-        services.AddAngleSharpV8Crawler(options);
+        services.AddJintCrawler(options);
+        services.AddV8Crawler(options);
         services.AddPlaywrightCrawler(options);
         services.AddPuppeteerCrawler(options);
         services.AddSingleton<ILogger>(NullLogger.Instance);
@@ -54,8 +54,8 @@ public class SpaRenderBenchmarks
 
         _serviceProvider = services.BuildServiceProvider();
 
-        _angleSharpJintCrawler = _serviceProvider.GetRequiredService<DefaultAngleSharpJintCrawler>();
-        _angleSharpV8Crawler = _serviceProvider.GetRequiredService<DefaultAngleSharpV8Crawler>();
+        _angleSharpJintCrawler = _serviceProvider.GetRequiredService<DefaultJintCrawler>();
+        _angleSharpV8Crawler = _serviceProvider.GetRequiredService<DefaultV8Crawler>();
         _playwrightCrawler = _serviceProvider.GetRequiredService<DefaultPlaywrightCrawler>();
         _puppeteerCrawler = _serviceProvider.GetService<DefaultPuppeteerCrawler>();
 

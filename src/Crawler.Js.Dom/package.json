@@ -4,7 +4,7 @@
   "private": true,
   "description": "TypeScript frontend that compiles to the embedded dom.js prelude for the Crawler.Js backends",
   "scripts": {
-    "build": "esbuild index.ts --bundle --format=iife --platform=neutral --target=es2020 --outfile=../Crawler.AngleSharp.Js/Rendering/Preludes/dom.js",
+    "build": "esbuild index.ts --bundle --format=iife --platform=neutral --target=es2020 --outfile=../Crawler.Js/Rendering/Preludes/dom.js",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {

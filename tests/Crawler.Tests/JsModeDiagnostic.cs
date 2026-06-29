@@ -1,8 +1,8 @@
-using Crawler.AngleSharp.Js.Abstractions;
-using Crawler.AngleSharp.Js.Jint;
-using Crawler.AngleSharp.Js.Models;
-using Crawler.AngleSharp.Js.Rendering;
-using Crawler.AngleSharp.Js.V8;
+using Crawler.Js.Abstractions;
+using Crawler.Js.Jint;
+using Crawler.Js.Models;
+using Crawler.Js.Rendering;
+using Crawler.Js.V8;
 using Crawler.Core;
 using Crawler.Tests.Helpers;
 using Crawler.Tests.Models;
@@ -59,9 +59,9 @@ public class JsModeDiagnostic
         {
             var services = new ServiceCollection();
             var options = new CrawlerOptions { RespectRobotsTxt = false, RespectMetaRobots = false };
-            if (engine == JsEngine.V8) services.AddAngleSharpV8Crawler(options); else services.AddAngleSharpJintCrawler(options);
+            if (engine == JsEngine.V8) services.AddV8Crawler(options); else services.AddJintCrawler(options);
             var provider = services.BuildServiceProvider();
-            var key = engine == JsEngine.V8 ? "anglesharp-js-v8" : "anglesharp-js-jint";
+            var key = engine == JsEngine.V8 ? "js-v8" : "js-jint";
             var factory = provider.GetRequiredKeyedService<IJsEngineFactory>(key);
             var logger = new CapturingLogger();
             var renderer = new JsRenderer(factory, new JsRenderOptions(), logger);
@@ -104,9 +104,9 @@ public class JsModeDiagnostic
         {
             var services = new ServiceCollection();
             var options = new CrawlerOptions { RespectRobotsTxt = false, RespectMetaRobots = false };
-            if (engine == JsEngine.V8) services.AddAngleSharpV8Crawler(options); else services.AddAngleSharpJintCrawler(options);
+            if (engine == JsEngine.V8) services.AddV8Crawler(options); else services.AddJintCrawler(options);
             var provider = services.BuildServiceProvider();
-            var key = engine == JsEngine.V8 ? "anglesharp-js-v8" : "anglesharp-js-jint";
+            var key = engine == JsEngine.V8 ? "js-v8" : "js-jint";
             var factory = provider.GetRequiredKeyedService<IJsEngineFactory>(key);
             var logger = new CapturingLogger();
             var renderer = new JsRenderer(factory, new JsRenderOptions(), logger);
@@ -158,11 +158,11 @@ public class JsModeDiagnostic
             var services = new ServiceCollection();
             var options = new CrawlerOptions { RespectRobotsTxt = false, RespectMetaRobots = false };
             if (engine == JsEngine.V8)
-                services.AddAngleSharpV8Crawler(options);
+                services.AddV8Crawler(options);
             else
-                services.AddAngleSharpJintCrawler(options);
+                services.AddJintCrawler(options);
             var provider = services.BuildServiceProvider();
-            var key = engine == JsEngine.V8 ? "anglesharp-js-v8" : "anglesharp-js-jint";
+            var key = engine == JsEngine.V8 ? "js-v8" : "js-jint";
             var factory = provider.GetRequiredKeyedService<IJsEngineFactory>(key);
 
             var logger = new CapturingLogger();

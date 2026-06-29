@@ -39,7 +39,7 @@ Adjusting which implementation is used can be done by referencing another implem
 
 The Anglesharp maintainers claims the library handles JavaScript with AngleSharp.Js. In reality it only does so on an experimental level, complex libraries like React do not work.
 
-So we added the `Crawler.AngleSharp.Js` project that provides a core Js-based rendering engine for simpler sites. There are 2 script engine implementations, `ClearScript.V8` and `Jint`.
+So we added the `Crawler.Js` project that provides a core Js-based rendering engine for simpler sites. There are 2 script engine implementations, `ClearScript.V8` and `Jint`.
 
 Both are tested with major Js frameworks like `React`, `Vue`, `Preact`, `Svelte` and `Solid`.
 

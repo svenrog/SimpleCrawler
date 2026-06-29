@@ -1,7 +1,7 @@
 ﻿using BenchmarkDotNet.Attributes;
 using Crawler.AngleSharp;
-using Crawler.AngleSharp.Js.Jint;
-using Crawler.AngleSharp.Js.V8;
+using Crawler.Js.Jint;
+using Crawler.Js.V8;
 using Crawler.Core;
 using Crawler.HtmlAgilityPack;
 using Crawler.Playwright;
@@ -26,8 +26,8 @@ public class CrawlerBenchmarks
 
     private DefaultHtmlAgilityPackCrawler _htmlAgilityPackCrawler;
     private DefaultAngleSharpCrawler _angleSharpCrawler;
-    private DefaultAngleSharpJintCrawler _angleSharpJintCrawler;
-    private DefaultAngleSharpV8Crawler _angleSharpV8Crawler;
+    private DefaultJintCrawler _angleSharpJintCrawler;
+    private DefaultV8Crawler _angleSharpV8Crawler;
     private DefaultPlaywrightCrawler _playwrightCrawler;
     private DefaultPuppeteerCrawler _puppeteerCrawler;
 
@@ -44,8 +44,8 @@ public class CrawlerBenchmarks
 
         services.AddHtmlAgilityPackCrawler(options);
         services.AddAngleSharpCrawler(options);
-        services.AddAngleSharpJintCrawler(options);
-        services.AddAngleSharpV8Crawler(options);
+        services.AddJintCrawler(options);
+        services.AddV8Crawler(options);
         services.AddPlaywrightCrawler(options);
         services.AddPuppeteerCrawler(options);
         services.AddSingleton<ILogger>(NullLogger.Instance);
@@ -55,8 +55,8 @@ public class CrawlerBenchmarks
 
         _htmlAgilityPackCrawler = _serviceProvider.GetRequiredService<DefaultHtmlAgilityPackCrawler>();
         _angleSharpCrawler = _serviceProvider.GetRequiredService<DefaultAngleSharpCrawler>();
-        _angleSharpJintCrawler = _serviceProvider.GetRequiredService<DefaultAngleSharpJintCrawler>();
-        _angleSharpV8Crawler = _serviceProvider.GetRequiredService<DefaultAngleSharpV8Crawler>();
+        _angleSharpJintCrawler = _serviceProvider.GetRequiredService<DefaultJintCrawler>();
+        _angleSharpV8Crawler = _serviceProvider.GetRequiredService<DefaultV8Crawler>();
         _playwrightCrawler = _serviceProvider.GetRequiredService<DefaultPlaywrightCrawler>();
         _puppeteerCrawler = _serviceProvider.GetService<DefaultPuppeteerCrawler>();
 

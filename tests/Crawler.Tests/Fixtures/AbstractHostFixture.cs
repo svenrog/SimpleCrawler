@@ -1,8 +1,8 @@
 ﻿using Crawler.AngleSharp;
-using Crawler.AngleSharp.Js;
-using Crawler.AngleSharp.Js.Jint;
-using Crawler.AngleSharp.Js.Models;
-using Crawler.AngleSharp.Js.V8;
+using Crawler.Js;
+using Crawler.Js.Jint;
+using Crawler.Js.Models;
+using Crawler.Js.V8;
 using Crawler.Core;
 using Crawler.Core.Models;
 using Crawler.HtmlAgilityPack;
@@ -33,8 +33,8 @@ public abstract class AbstractHostFixture : IAsyncDisposable
         var renderOptions = CreateRenderOptions();
 
         services.AddAngleSharpCrawler(options);
-        services.AddAngleSharpJintCrawler(options, renderOptions);
-        services.AddAngleSharpV8Crawler(options, renderOptions);
+        services.AddJintCrawler(options, renderOptions);
+        services.AddV8Crawler(options, renderOptions);
         services.AddHtmlAgilityPackCrawler(options);
         services.AddPlaywrightCrawler(options);
         services.AddPuppeteerCrawler(options);
@@ -72,10 +72,10 @@ public abstract class AbstractHostFixture : IAsyncDisposable
 
     protected virtual List<string> GetLinks() => [];
 
-    public AngleSharpJsCrawler<ScrapeResult> GetJsCrawler(JsEngine engine) => engine switch
+    public JsCrawler<ScrapeResult> GetJsCrawler(JsEngine engine) => engine switch
     {
-        JsEngine.Jint => ServiceProvider.GetRequiredService<DefaultAngleSharpJintCrawler>(),
-        JsEngine.V8 => ServiceProvider.GetRequiredService<DefaultAngleSharpV8Crawler>(),
+        JsEngine.Jint => ServiceProvider.GetRequiredService<DefaultJintCrawler>(),
+        JsEngine.V8 => ServiceProvider.GetRequiredService<DefaultV8Crawler>(),
         _ => throw new ArgumentOutOfRangeException(nameof(engine)),
     };
 

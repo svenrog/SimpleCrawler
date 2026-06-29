@@ -1,8 +1,8 @@
-using Crawler.AngleSharp.Js.Abstractions;
-using Crawler.AngleSharp.Js.Jint;
-using Crawler.AngleSharp.Js.Models;
-using Crawler.AngleSharp.Js.Rendering;
-using Crawler.AngleSharp.Js.V8;
+using Crawler.Js.Abstractions;
+using Crawler.Js.Jint;
+using Crawler.Js.Models;
+using Crawler.Js.Rendering;
+using Crawler.Js.V8;
 using Crawler.Core;
 using Crawler.Tests.Helpers;
 using Crawler.Tests.Models;
@@ -20,11 +20,11 @@ public class JsDomRendererTests
     private static JsRenderer CreateJsRenderer(JsEngine engine)
     {
         var services = new ServiceCollection();
-        var key = engine == JsEngine.V8 ? "anglesharp-js-v8" : "anglesharp-js-jint";
+        var key = engine == JsEngine.V8 ? "js-v8" : "js-jint";
         if (engine == JsEngine.V8)
-            services.AddAngleSharpV8Crawler(new CrawlerOptions());
+            services.AddV8Crawler(new CrawlerOptions());
         else
-            services.AddAngleSharpJintCrawler(new CrawlerOptions());
+            services.AddJintCrawler(new CrawlerOptions());
         var provider = services.BuildServiceProvider();
         var factory = provider.GetRequiredKeyedService<IJsEngineFactory>(key);
         return new JsRenderer(factory, new JsRenderOptions(), NullLogger.Instance);

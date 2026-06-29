@@ -196,7 +196,7 @@ tsup / esbuild — bundle + type-check
 Single self-contained CJS bundle
       │
       ▼
-src/Crawler.AngleSharp.Js/Rendering/Preludes/dom.js   (committed)
+src/Crawler.Js/Rendering/Preludes/dom.js   (committed)
 ```
 The entry (`index.ts`) is side-effect-only: it installs the DOM and assigns the `__crawler*`
 API onto `globalThis`, and exports nothing. That means the CJS output carries no runtime
