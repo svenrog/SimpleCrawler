@@ -1,6 +1,6 @@
 "use strict";
 (() => {
-  // network/fetch.ts
+  // network/utils.ts
   function toHeaderObject(h) {
     const out = {};
     if (!h) return out;
@@ -21,6 +21,8 @@
     }
     return out;
   }
+
+  // network/Headers.ts
   var Headers = class {
     constructor(init) {
       this._m = {};
@@ -55,6 +57,8 @@
       return Object.keys(this._m);
     }
   };
+
+  // network/Response.ts
   var Response = class _Response {
     constructor(r) {
       this._r = r;
@@ -86,22 +90,8 @@
       return new _Response(this._r);
     }
   };
-  var Request = class {
-    constructor(input, init) {
-      init = init || {};
-      if (input && typeof input === "object" && "url" in input) {
-        this.url = input.url;
-        this.method = init.method || input.method || "GET";
-        this.headers = new Headers(init.headers || input.headers);
-        this.body = init.body !== void 0 ? init.body : input.body;
-      } else {
-        this.url = String(input);
-        this.method = init.method || "GET";
-        this.headers = new Headers(init.headers);
-        this.body = init.body;
-      }
-    }
-  };
+
+  // network/fetch.ts
   function fetch(input, init) {
     init = init || {};
     if (input && typeof input === "object" && typeof input.href === "string" && typeof input.url !== "string") input = input.href;
@@ -121,6 +111,26 @@
     if (r.error) return Promise.reject(new TypeError(r.error));
     return Promise.resolve(new Response(r));
   }
+
+  // network/Request.ts
+  var Request = class {
+    constructor(input, init) {
+      init = init || {};
+      if (input && typeof input === "object" && "url" in input) {
+        this.url = input.url;
+        this.method = init.method || input.method || "GET";
+        this.headers = new Headers(init.headers || input.headers);
+        this.body = init.body !== void 0 ? init.body : input.body;
+      } else {
+        this.url = String(input);
+        this.method = init.method || "GET";
+        this.headers = new Headers(init.headers);
+        this.body = init.body;
+      }
+    }
+  };
+
+  // network/XMLHttpRequest.ts
   var XMLHttpRequest = class {
     constructor() {
       this.readyState = 0;
@@ -202,6 +212,8 @@
   XMLHttpRequest.HEADERS_RECEIVED = 2;
   XMLHttpRequest.LOADING = 3;
   XMLHttpRequest.DONE = 4;
+
+  // network/api.ts
   function installNetwork(global) {
     global.Headers = global.Headers || Headers;
     global.Response = global.Response || Response;
@@ -209,5 +221,7 @@
     global.fetch = global.fetch || fetch;
     global.XMLHttpRequest = global.XMLHttpRequest || XMLHttpRequest;
   }
+
+  // network/index.ts
   installNetwork(globalThis);
 })();

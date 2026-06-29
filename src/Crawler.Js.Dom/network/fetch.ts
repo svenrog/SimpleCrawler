@@ -2,7 +2,6 @@
 // Promise so .then()/await chains settle on the existing microtask drain without Task<->Promise bridging.
 // Opt-in only: JsRenderOptions.EnableFetch, since it issues live HTTP requests.
 
-import { __http } from "./constants";
 import { Response } from "./Response";
 import { toHeaderObject } from "./utils";
 

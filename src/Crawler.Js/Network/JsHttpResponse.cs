@@ -1,4 +1,4 @@
-﻿namespace Crawler.Js.Dom.Network;
+﻿namespace Crawler.Js.Network;
 
 public sealed class JsHttpResponse
 {

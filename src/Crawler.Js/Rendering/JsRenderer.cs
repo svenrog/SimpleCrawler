@@ -1,7 +1,7 @@
 using Crawler.Js.Abstractions;
-using Crawler.Js.Dom.Network;
 using Crawler.Js.Errors;
 using Crawler.Js.Models;
+using Crawler.Js.Network;
 using Crawler.Js.Services;
 using Microsoft.Extensions.Logging;
 using System.Text;
@@ -35,19 +35,19 @@ public sealed class JsRenderer
         if (!ContainsScriptTag(shell))
             return Task.FromResult(shell);
 
-        return RunAsync(shell, pageUrl, client, cancellationToken, SerializeJs, shell);
+        return RunAsync(shell, pageUrl, client, SerializeJs, shell, cancellationToken);
     }
 
     // Crawl path: anchors/canonical/robots are read straight off the live DOM — no serialize, no
     // AngleSharp reparse. Scriptless shells still parse, because extraction needs the tree.
     internal Task<JsExtract> ExtractAsync(byte[] shell, string pageUrl, HttpClient client, CancellationToken cancellationToken)
-        => RunAsync(shell, pageUrl, client, cancellationToken, CollectLinks, _emptyExtract);
+        => RunAsync(shell, pageUrl, client, CollectLinks, _emptyExtract, cancellationToken);
 
     // The DOM lives entirely in JS (Preludes/dom.js). HTML goes in via __crawlerLoadHtml, the bundle mutates
     // the JS DOM with no managed crossings, and timers drain through __crawlerPump. `finalize` produces the
     // caller's result from the settled tree (serialize for rendering, collect-links for crawling); `abortValue`
     // is returned if the DOM parse itself fails before the tree exists.
-    private async Task<T> RunAsync<T>(byte[] shell, string pageUrl, HttpClient client, CancellationToken cancellationToken, Func<IJsEngine, T> finalize, T abortValue)
+    private async Task<T> RunAsync<T>(byte[] shell, string pageUrl, HttpClient client, Func<IJsEngine, T> finalize, T abortValue, CancellationToken cancellationToken)
     {
         var totalTime = RenderProfiler.Start();
 

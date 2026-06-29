@@ -1,5 +1,3 @@
-import { __http } from "./constants";
-
 export class XMLHttpRequest {
     static UNSENT = 0;
     static OPENED = 1;
