@@ -12,7 +12,7 @@ import { navigator } from "./navigator";
 import { createLocation } from "./location";
 import { createHistory } from "./history";
 import { installTimerGlobals } from "../scheduler/taskQueue";
-import { URL } from "../url/Url";
+import { URL } from "../url/URL";
 import { URLSearchParams } from "../url/URLSearchParams";
 import { Event } from "./Event";
 import { CustomEvent } from "./CustomEvent";

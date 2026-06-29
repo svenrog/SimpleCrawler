@@ -531,6 +531,306 @@
     }
   };
 
+  // dom/customElements.ts
+  var CustomElementRegistry = class {
+    constructor() {
+      this._definitions = /* @__PURE__ */ new Map();
+      this._pending = /* @__PURE__ */ new Map();
+      this._nameStack = [];
+      this._upgradeTarget = null;
+      this._doc = null;
+    }
+    setDocument(doc2) {
+      this._doc = doc2;
+    }
+    define(name, ctor, options) {
+      const tag = String(name).toLowerCase();
+      if (this._definitions.has(tag)) return;
+      const extendsTag = options && options.extends ? String(options.extends).toLowerCase() : null;
+      this._definitions.set(tag, { ctor, extendsTag });
+      if (this._doc) this._upgradeSubtree(this._doc.documentElement);
+      const waiters = this._pending.get(tag);
+      if (waiters) {
+        this._pending.delete(tag);
+        for (const w of waiters) w(ctor);
+      }
+    }
+    get(name) {
+      const def = this._definitions.get(String(name).toLowerCase());
+      return def ? def.ctor : void 0;
+    }
+    whenDefined(name) {
+      const tag = String(name).toLowerCase();
+      const def = this._definitions.get(tag);
+      if (def) return Promise.resolve(def.ctor);
+      return new Promise((resolve) => {
+        const arr = this._pending.get(tag) || [];
+        arr.push(resolve);
+        this._pending.set(tag, arr);
+      });
+    }
+    upgrade(root) {
+      if (root) this._upgradeSubtree(root);
+    }
+    // createElement path: construct a fresh instance with the registry-supplied tag on the name stack so a
+    // subclass `super()` lands on HTMLElement with the right localName. null for unregistered names.
+    tryCreate(name) {
+      const def = this._definitions.get(name);
+      if (!def) return null;
+      this._nameStack.push(name);
+      try {
+        return new def.ctor();
+      } finally {
+        this._nameStack.pop();
+      }
+    }
+    currentName() {
+      return this._nameStack[this._nameStack.length - 1];
+    }
+    takeUpgradeTarget() {
+      const t = this._upgradeTarget;
+      this._upgradeTarget = null;
+      return t;
+    }
+    _upgradeSubtree(root) {
+      const stack = [root];
+      while (stack.length) {
+        const n = stack.pop();
+        if (!n) continue;
+        if (n.nodeType === 1 /* Element */) {
+          const def = this._definitions.get(n.localName);
+          if (def) this._upgradeOne(n, def.ctor);
+        }
+        const kids = n.childNodes;
+        if (kids) for (let i = 0; i < kids.length; i++) stack.push(kids[i]);
+      }
+    }
+    _upgradeOne(el, ctor) {
+      if (!ctor || el instanceof ctor) return;
+      Object.setPrototypeOf(el, ctor.prototype);
+      this._upgradeTarget = el;
+      try {
+        new ctor();
+      } catch {
+      } finally {
+        this._upgradeTarget = null;
+      }
+      if (typeof el.connectedCallback === "function" && el.isConnected) {
+        el._connected = true;
+        el.connectedCallback();
+      }
+    }
+  };
+  var customElements = new CustomElementRegistry();
+
+  // dom/HTMLElement.ts
+  var HTMLElement = class extends Element {
+    constructor(tag, ns) {
+      super(tag || customElements.currentName() || "", ns);
+      this.shadowRoot = null;
+      const target = customElements.takeUpgradeTarget();
+      if (target) return target;
+    }
+    attachShadow(init) {
+      if (this.shadowRoot) return this.shadowRoot;
+      const root = new DocumentFragment();
+      root.host = this;
+      root.mode = init && init.mode ? init.mode : "open";
+      this.shadowRoot = root;
+      return root;
+    }
+    connectedCallback() {
+    }
+    disconnectedCallback() {
+    }
+    adoptedCallback() {
+    }
+    attributeChangedCallback(_name, _oldValue, _newValue) {
+    }
+    setAttribute(name, value) {
+      const observed = this.constructor.observedAttributes;
+      const tracked = Array.isArray(observed) && observed.indexOf(name) >= 0;
+      const old = tracked ? this.getAttribute(name) : null;
+      super.setAttribute(name, value);
+      if (tracked && typeof this.attributeChangedCallback === "function") {
+        this.attributeChangedCallback(name, old, this.getAttribute(name));
+      }
+    }
+  };
+
+  // url/resolve.ts
+  function currentLocation() {
+    return globalThis.location;
+  }
+  function resolveUrl(u, base) {
+    const input = String(u ?? "");
+    if (/^[a-zA-Z][\w+.-]*:\/\//.test(input)) return input;
+    const b = String(base || currentLocation()?.href || "http://localhost/");
+    const bm = b.match(/^([a-zA-Z][\w+.-]*:\/\/[^/?#]*)([^?#]*)/) || [];
+    const origin = bm[1] || "http://localhost";
+    if (input.charAt(0) === "/") return origin + input;
+    if (input.charAt(0) === "#" || input.charAt(0) === "?") return origin + (bm[2] || "/") + input;
+    const dir = (bm[2] || "/").replace(/[^/]*$/, "");
+    return origin + dir + input;
+  }
+  function applyUrl(u) {
+    try {
+      let abs = u;
+      if (u.indexOf("http") !== 0) {
+        const base = currentLocation()?.origin || "http://localhost";
+        abs = u.charAt(0) === "/" ? base + u : base + "/" + u;
+      }
+      const m = abs.match(/^(https?:)\/\/([^/?#]+)([^?#]*)(\?[^#]*)?(#.*)?$/);
+      if (!m) return;
+      const loc = currentLocation();
+      if (!loc) return;
+      loc.href = abs;
+      loc.protocol = m[1];
+      loc.host = m[2];
+      loc.hostname = m[2].split(":")[0];
+      loc.port = m[2].split(":")[1] || "";
+      loc.pathname = m[3] || "/";
+      loc.search = m[4] || "";
+      loc.hash = m[5] || "";
+      loc.origin = m[1] + "//" + m[2];
+    } catch {
+    }
+  }
+
+  // url/URLSearchParams.ts
+  var URLSearchParams = class {
+    constructor(init) {
+      this.pairs = [];
+      let src = init;
+      if (typeof src === "string" && src.charAt(0) === "?") src = src.slice(1);
+      if (typeof src === "string" && src) {
+        src.split("&").forEach((p) => {
+          if (!p) return;
+          const i = p.indexOf("=");
+          this.pairs.push(i < 0 ? [decodeURIComponent(p), ""] : [decodeURIComponent(p.slice(0, i)), decodeURIComponent(p.slice(i + 1))]);
+        });
+      }
+    }
+    get(k) {
+      for (const pair of this.pairs) if (pair[0] === k) return pair[1];
+      return null;
+    }
+    getAll(k) {
+      return this.pairs.filter((p) => p[0] === k).map((p) => p[1]);
+    }
+    has(k) {
+      return this.get(k) !== null;
+    }
+    set(k, v) {
+      this.delete(k);
+      this.pairs.push([k, String(v)]);
+    }
+    append(k, v) {
+      this.pairs.push([k, String(v)]);
+    }
+    delete(k) {
+      this.pairs = this.pairs.filter((p) => p[0] !== k);
+    }
+    forEach(cb) {
+      this.pairs.forEach((p) => cb(p[1], p[0]));
+    }
+    entries() {
+      let i = 0;
+      const it = {
+        next: () => i < this.pairs.length ? { value: this.pairs[i++], done: false } : { value: void 0, done: true },
+        [Symbol.iterator]() {
+          return this;
+        }
+      };
+      return it;
+    }
+    keys() {
+      return this.pairs.map((p) => p[0])[Symbol.iterator]();
+    }
+    values() {
+      return this.pairs.map((p) => p[1])[Symbol.iterator]();
+    }
+    toString() {
+      return this.pairs.map((p) => encodeURIComponent(p[0]) + "=" + encodeURIComponent(p[1])).join("&");
+    }
+    [Symbol.iterator]() {
+      return this.entries();
+    }
+  };
+
+  // url/URL.ts
+  var URL = class {
+    constructor(url, base) {
+      const abs = resolveUrl(url, base);
+      const m = abs.match(/^([a-zA-Z][\w+.-]*:)\/\/([^/?#]*)([^?#]*)(\?[^#]*)?(#.*)?$/) || [];
+      this.href = abs;
+      this.protocol = m[1] || "";
+      this.host = m[2] || "";
+      this.hostname = (m[2] || "").split(":")[0];
+      this.port = (m[2] || "").split(":")[1] || "";
+      this.pathname = m[3] || "/";
+      this.search = m[4] || "";
+      this.hash = m[5] || "";
+      this.origin = this.protocol + "//" + this.host;
+      this.searchParams = new URLSearchParams(this.search);
+    }
+    toString() {
+      return this.href;
+    }
+  };
+
+  // dom/HTMLAnchorElement.ts
+  var HTMLAnchorElement = class extends HTMLElement {
+    constructor() {
+      super("a");
+    }
+    get href() {
+      const raw = this.getAttribute("href");
+      if (raw == null) return "";
+      try {
+        return new URL(raw).href;
+      } catch {
+        return raw;
+      }
+    }
+    set href(value) {
+      this.setAttribute("href", value == null ? "" : String(value));
+    }
+    resolved() {
+      const raw = this.getAttribute("href");
+      if (!raw) return null;
+      try {
+        return new URL(raw);
+      } catch {
+        return null;
+      }
+    }
+    get protocol() {
+      return this.resolved()?.protocol ?? "";
+    }
+    get host() {
+      return this.resolved()?.host ?? "";
+    }
+    get hostname() {
+      return this.resolved()?.hostname ?? "";
+    }
+    get port() {
+      return this.resolved()?.port ?? "";
+    }
+    get pathname() {
+      return this.resolved()?.pathname ?? "";
+    }
+    get search() {
+      return this.resolved()?.search ?? "";
+    }
+    get hash() {
+      return this.resolved()?.hash ?? "";
+    }
+    get origin() {
+      return this.resolved()?.origin ?? "";
+    }
+  };
+
   // html/entities.ts
   var NAMED = {
     amp: "&",
@@ -735,7 +1035,7 @@
         i = j;
         continue;
       }
-      const el = new Element(tag);
+      const el = tag === "a" ? new HTMLAnchorElement() : new Element(tag);
       if (attrs) for (const key in attrs) el.setAttribute(key, attrs[key]);
       if (RAWTEXT_ELEMENTS[tag]) {
         const rawFrom = j;
@@ -786,98 +1086,6 @@
     }
   };
 
-  // dom/customElements.ts
-  var CustomElementRegistry = class {
-    constructor() {
-      this._definitions = /* @__PURE__ */ new Map();
-      this._pending = /* @__PURE__ */ new Map();
-      this._nameStack = [];
-      this._upgradeTarget = null;
-      this._doc = null;
-    }
-    setDocument(doc2) {
-      this._doc = doc2;
-    }
-    define(name, ctor, options) {
-      const tag = String(name).toLowerCase();
-      if (this._definitions.has(tag)) return;
-      const extendsTag = options && options.extends ? String(options.extends).toLowerCase() : null;
-      this._definitions.set(tag, { ctor, extendsTag });
-      if (this._doc) this._upgradeSubtree(this._doc.documentElement);
-      const waiters = this._pending.get(tag);
-      if (waiters) {
-        this._pending.delete(tag);
-        for (const w of waiters) w(ctor);
-      }
-    }
-    get(name) {
-      const def = this._definitions.get(String(name).toLowerCase());
-      return def ? def.ctor : void 0;
-    }
-    whenDefined(name) {
-      const tag = String(name).toLowerCase();
-      const def = this._definitions.get(tag);
-      if (def) return Promise.resolve(def.ctor);
-      return new Promise((resolve) => {
-        const arr = this._pending.get(tag) || [];
-        arr.push(resolve);
-        this._pending.set(tag, arr);
-      });
-    }
-    upgrade(root) {
-      if (root) this._upgradeSubtree(root);
-    }
-    // createElement path: construct a fresh instance with the registry-supplied tag on the name stack so a
-    // subclass `super()` lands on HTMLElement with the right localName. null for unregistered names.
-    tryCreate(name) {
-      const def = this._definitions.get(name);
-      if (!def) return null;
-      this._nameStack.push(name);
-      try {
-        return new def.ctor();
-      } finally {
-        this._nameStack.pop();
-      }
-    }
-    currentName() {
-      return this._nameStack[this._nameStack.length - 1];
-    }
-    takeUpgradeTarget() {
-      const t = this._upgradeTarget;
-      this._upgradeTarget = null;
-      return t;
-    }
-    _upgradeSubtree(root) {
-      const stack = [root];
-      while (stack.length) {
-        const n = stack.pop();
-        if (!n) continue;
-        if (n.nodeType === 1 /* Element */) {
-          const def = this._definitions.get(n.localName);
-          if (def) this._upgradeOne(n, def.ctor);
-        }
-        const kids = n.childNodes;
-        if (kids) for (let i = 0; i < kids.length; i++) stack.push(kids[i]);
-      }
-    }
-    _upgradeOne(el, ctor) {
-      if (!ctor || el instanceof ctor) return;
-      Object.setPrototypeOf(el, ctor.prototype);
-      this._upgradeTarget = el;
-      try {
-        new ctor();
-      } catch {
-      } finally {
-        this._upgradeTarget = null;
-      }
-      if (typeof el.connectedCallback === "function" && el.isConnected) {
-        el._connected = true;
-        el.connectedCallback();
-      }
-    }
-  };
-  var customElements = new CustomElementRegistry();
-
   // dom/Document.ts
   var Document = class _Document extends Node {
     constructor(defaultView) {
@@ -891,6 +1099,7 @@
     createElement(tag) {
       const name = String(tag).toLowerCase();
       if (name === "template") return new HTMLTemplateElement();
+      if (name === "a") return new HTMLAnchorElement();
       const custom = customElements.tryCreate(name);
       return custom || new Element(name);
     }
@@ -937,41 +1146,6 @@
     }
   };
 
-  // dom/HTMLElement.ts
-  var HTMLElement = class extends Element {
-    constructor(tag, ns) {
-      super(tag || customElements.currentName() || "", ns);
-      this.shadowRoot = null;
-      const target = customElements.takeUpgradeTarget();
-      if (target) return target;
-    }
-    attachShadow(init) {
-      if (this.shadowRoot) return this.shadowRoot;
-      const root = new DocumentFragment();
-      root.host = this;
-      root.mode = init && init.mode ? init.mode : "open";
-      this.shadowRoot = root;
-      return root;
-    }
-    connectedCallback() {
-    }
-    disconnectedCallback() {
-    }
-    adoptedCallback() {
-    }
-    attributeChangedCallback(_name, _oldValue, _newValue) {
-    }
-    setAttribute(name, value) {
-      const observed = this.constructor.observedAttributes;
-      const tracked = Array.isArray(observed) && observed.indexOf(name) >= 0;
-      const old = tracked ? this.getAttribute(name) : null;
-      super.setAttribute(name, value);
-      if (tracked && typeof this.attributeChangedCallback === "function") {
-        this.attributeChangedCallback(name, old, this.getAttribute(name));
-      }
-    }
-  };
-
   // dom/htmlInterfaces.ts
   var htmlInterfaces_exports = {};
   __export(htmlInterfaces_exports, {
@@ -1004,8 +1178,6 @@
   var HTMLOptionElement = class extends HTMLElement {
   };
   var HTMLButtonElement = class extends HTMLElement {
-  };
-  var HTMLAnchorElement = class extends HTMLElement {
   };
   var HTMLImageElement = class extends HTMLElement {
   };
@@ -1048,45 +1220,6 @@
       hash: "",
       origin: "http://localhost"
     };
-  }
-
-  // url/resolve.ts
-  function currentLocation() {
-    return globalThis.location;
-  }
-  function resolveUrl(u, base) {
-    const input = String(u ?? "");
-    if (/^[a-zA-Z][\w+.-]*:\/\//.test(input)) return input;
-    const b = String(base || currentLocation()?.href || "http://localhost/");
-    const bm = b.match(/^([a-zA-Z][\w+.-]*:\/\/[^/?#]*)([^?#]*)/) || [];
-    const origin = bm[1] || "http://localhost";
-    if (input.charAt(0) === "/") return origin + input;
-    if (input.charAt(0) === "#" || input.charAt(0) === "?") return origin + (bm[2] || "/") + input;
-    const dir = (bm[2] || "/").replace(/[^/]*$/, "");
-    return origin + dir + input;
-  }
-  function applyUrl(u) {
-    try {
-      let abs = u;
-      if (u.indexOf("http") !== 0) {
-        const base = currentLocation()?.origin || "http://localhost";
-        abs = u.charAt(0) === "/" ? base + u : base + "/" + u;
-      }
-      const m = abs.match(/^(https?:)\/\/([^/?#]+)([^?#]*)(\?[^#]*)?(#.*)?$/);
-      if (!m) return;
-      const loc = currentLocation();
-      if (!loc) return;
-      loc.href = abs;
-      loc.protocol = m[1];
-      loc.host = m[2];
-      loc.hostname = m[2].split(":")[0];
-      loc.port = m[2].split(":")[1] || "";
-      loc.pathname = m[3] || "/";
-      loc.search = m[4] || "";
-      loc.hash = m[5] || "";
-      loc.origin = m[1] + "//" + m[2];
-    } catch {
-    }
   }
 
   // browser/history.ts
@@ -1141,88 +1274,6 @@
     global.cancelAnimationFrame = () => {
     };
   }
-
-  // url/URLSearchParams.ts
-  var URLSearchParams = class {
-    constructor(init) {
-      this.pairs = [];
-      let src = init;
-      if (typeof src === "string" && src.charAt(0) === "?") src = src.slice(1);
-      if (typeof src === "string" && src) {
-        src.split("&").forEach((p) => {
-          if (!p) return;
-          const i = p.indexOf("=");
-          this.pairs.push(i < 0 ? [decodeURIComponent(p), ""] : [decodeURIComponent(p.slice(0, i)), decodeURIComponent(p.slice(i + 1))]);
-        });
-      }
-    }
-    get(k) {
-      for (const pair of this.pairs) if (pair[0] === k) return pair[1];
-      return null;
-    }
-    getAll(k) {
-      return this.pairs.filter((p) => p[0] === k).map((p) => p[1]);
-    }
-    has(k) {
-      return this.get(k) !== null;
-    }
-    set(k, v) {
-      this.delete(k);
-      this.pairs.push([k, String(v)]);
-    }
-    append(k, v) {
-      this.pairs.push([k, String(v)]);
-    }
-    delete(k) {
-      this.pairs = this.pairs.filter((p) => p[0] !== k);
-    }
-    forEach(cb) {
-      this.pairs.forEach((p) => cb(p[1], p[0]));
-    }
-    entries() {
-      let i = 0;
-      const it = {
-        next: () => i < this.pairs.length ? { value: this.pairs[i++], done: false } : { value: void 0, done: true },
-        [Symbol.iterator]() {
-          return this;
-        }
-      };
-      return it;
-    }
-    keys() {
-      return this.pairs.map((p) => p[0])[Symbol.iterator]();
-    }
-    values() {
-      return this.pairs.map((p) => p[1])[Symbol.iterator]();
-    }
-    toString() {
-      return this.pairs.map((p) => encodeURIComponent(p[0]) + "=" + encodeURIComponent(p[1])).join("&");
-    }
-    [Symbol.iterator]() {
-      return this.entries();
-    }
-  };
-
-  // url/Url.ts
-  var URL = class {
-    constructor(url, base) {
-      const abs = resolveUrl(url, base);
-      const m = abs.match(/^([a-zA-Z][\w+.-]*:)\/\/([^/?#]*)([^?#]*)(\?[^#]*)?(#.*)?$/) || [];
-      this.href = abs;
-      this.protocol = m[1] || "";
-      this.host = m[2] || "";
-      this.hostname = (m[2] || "").split(":")[0];
-      this.port = (m[2] || "").split(":")[1] || "";
-      this.pathname = m[3] || "/";
-      this.search = m[4] || "";
-      this.hash = m[5] || "";
-      this.origin = this.protocol + "//" + this.host;
-      this.searchParams = new URLSearchParams(this.search);
-    }
-    toString() {
-      return this.href;
-    }
-  };
 
   // browser/Event.ts
   var Event = class {

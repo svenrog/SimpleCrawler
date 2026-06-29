@@ -1,6 +1,7 @@
 import type { Document } from "../dom/Document";
 import type { Node } from "../dom/Node";
 import { Element } from "../dom/Element";
+import { HTMLAnchorElement } from "../dom/HTMLAnchorElement";
 import { Text } from "../dom/Text";
 import { Comment } from "../dom/Comment";
 import { NodeType } from "../types/NodeType";
@@ -131,7 +132,7 @@ export function parseHTML(doc: Document, input: unknown): Element {
             continue;
         }
 
-        const el = new Element(tag);
+        const el = tag === "a" ? new HTMLAnchorElement() : new Element(tag);
         if (attrs) for (const key in attrs) el.setAttribute(key, attrs[key]);
 
         if (RAWTEXT_ELEMENTS[tag]) {

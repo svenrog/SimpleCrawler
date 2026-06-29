@@ -5,6 +5,7 @@ import { Text } from "./Text";
 import { Comment } from "./Comment";
 import { DocumentFragment } from "./DocumentFragment";
 import { HTMLTemplateElement } from "./HTMLTemplateElement";
+import { HTMLAnchorElement } from "./HTMLAnchorElement";
 import { customElements } from "./customElements";
 import { collectByTag, walkFind } from "./utils";
 import { querySelectorAll } from "../selector/querySelector";
@@ -24,6 +25,7 @@ export class Document extends Node {
     createElement(tag: string): Element {
         const name = String(tag).toLowerCase();
         if (name === "template") return new HTMLTemplateElement();
+        if (name === "a") return new HTMLAnchorElement();
         const custom = customElements.tryCreate(name);
         return custom || new Element(name);
     }
