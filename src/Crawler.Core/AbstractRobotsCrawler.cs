@@ -44,6 +44,9 @@ public abstract class AbstractRobotsCrawler<TResponse, TResult> : AbstractCrawle
 
     protected override async ValueTask BackgroundDiscovery(CancellationToken cancellationToken)
     {
+        if (!_options.EnableSitemapDiscovery)
+            return;
+
         var sitemap = _robots!.LoadSitemapAsync(_entryUri!, null, cancellationToken);
         await foreach (var item in sitemap)
         {
