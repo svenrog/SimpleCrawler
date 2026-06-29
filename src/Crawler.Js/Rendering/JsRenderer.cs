@@ -95,6 +95,7 @@ public sealed class JsRenderer
         if (_options.EnableFetch)
         {
             engine.EmbedHostObject("__http", new JsHttp(client, pageUri, _logger, cancellationToken));
+            RunPrelude(engine, JsPreludes.Fetch);
         }
 
         var bundleExecutionTime = RenderProfiler.Start();

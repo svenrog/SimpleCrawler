@@ -2,7 +2,7 @@ import { Node } from "./Node";
 import { NodeType } from "../types/NodeType";
 import { Text } from "./Text";
 import { createStyleDeclaration } from "../css/CSSStyleDeclaration";
-import { collectByTag, textOf } from "./utils";
+import { collectByTag, textOf, hideOwnFields } from "./utils";
 import { querySelectorAll } from "../selector/querySelector";
 import { serializeChildren, serializeNode } from "../html/serializer";
 
@@ -25,6 +25,7 @@ export class Element extends Node {
         this.nodeName = this.tagName;
         this.namespaceURI = ns || "http://www.w3.org/1999/xhtml";
         this.style = createStyleDeclaration();
+        hideOwnFields(this);
     }
 
     setAttribute(name: string, value: unknown): void {

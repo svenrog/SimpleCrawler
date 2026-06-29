@@ -51,6 +51,20 @@ export function installDOM(global: any): void {
         this.disconnect = () => { };
         this.takeRecords = () => [];
     };
+    global.IntersectionObserver = function () {
+        this.observe = () => { };
+        this.unobserve = () => { };
+        this.disconnect = () => { };
+        this.takeRecords = () => [];
+    };
+    global.ResizeObserver = function () {
+        this.observe = () => { };
+        this.unobserve = () => { };
+        this.disconnect = () => { };
+    };
+    // A deep-clone good enough for the JSON-serialisable state bundles round-trip; non-JSON inputs
+    // (functions, cycles) aren't supported, matching nothing real but never reached by our targets.
+    global.structuredClone = global.structuredClone || ((value: any) => value == null ? value : JSON.parse(JSON.stringify(value)));
     global.URL = URL;
     global.URLSearchParams = URLSearchParams;
     global.Node = Node;

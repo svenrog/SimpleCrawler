@@ -7,7 +7,7 @@ import { DocumentFragment } from "./DocumentFragment";
 import { HTMLTemplateElement } from "./HTMLTemplateElement";
 import { HTMLAnchorElement } from "./HTMLAnchorElement";
 import { customElements } from "./customElements";
-import { collectByTag, walkFind } from "./utils";
+import { collectByTag, walkFind, hideOwnFields } from "./utils";
 import { querySelectorAll } from "../selector/querySelector";
 
 export class Document extends Node {
@@ -20,6 +20,7 @@ export class Document extends Node {
     constructor(defaultView?: any) {
         super(NodeType.Document);
         this.defaultView = defaultView || null;
+        hideOwnFields(this);
     }
 
     createElement(tag: string): Element {
@@ -70,6 +71,33 @@ export class Document extends Node {
 
     createEvent(): any {
         return { initEvent() { } };
+    }
+
+    // jQuery's UMD factory feature-detects against `implementation.createHTMLDocument` during init; a missing
+    // implementation threw before the global was assigned, so later bundles saw "jQuery is not defined".
+    get implementation(): any {
+        return {
+            hasFeature: () => true,
+            createDocumentType: () => ({}),
+            createHTMLDocument: (title?: string) => {
+                const d = new Document();
+                const html = d.createElement("html");
+                const head = d.createElement("head");
+                const body = d.createElement("body");
+                html.appendChild(head);
+                html.appendChild(body);
+                d.appendChild(html);
+                d.documentElement = html;
+                d.head = head;
+                d.body = body;
+                if (title) {
+                    const t = d.createElement("title");
+                    t.textContent = title;
+                    head.appendChild(t);
+                }
+                return d;
+            },
+        };
     }
 
     get ownerDocument(): any {

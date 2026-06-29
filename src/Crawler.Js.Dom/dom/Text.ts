@@ -1,5 +1,6 @@
 import { Node } from "./Node";
 import { NodeType } from "../types/NodeType";
+import { hideOwnFields } from "./utils";
 
 export class Text extends Node {
     data: string;
@@ -7,6 +8,7 @@ export class Text extends Node {
     constructor(data: unknown) {
         super(NodeType.Text);
         this.data = data == null ? "" : String(data);
+        hideOwnFields(this);
     }
 
     get nodeValue(): string {

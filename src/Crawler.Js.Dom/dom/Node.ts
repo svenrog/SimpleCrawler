@@ -1,5 +1,6 @@
 import { NodeType } from "../types/NodeType";
 import { documentRef } from "./documentRef";
+import { hideOwnFields } from "./utils";
 
 export abstract class Node {
     readonly nodeType: NodeType;
@@ -8,6 +9,7 @@ export abstract class Node {
 
     protected constructor(type: NodeType) {
         this.nodeType = type;
+        hideOwnFields(this);
     }
 
     get ownerDocument(): any {

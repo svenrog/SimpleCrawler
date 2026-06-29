@@ -9,12 +9,52 @@
   // dom/documentRef.ts
   var documentRef = { current: null };
 
+  // dom/utils.ts
+  function hideOwnFields(node) {
+    const keys = Object.keys(node);
+    for (let i = 0; i < keys.length; i++) {
+      Object.defineProperty(node, keys[i], { enumerable: false });
+    }
+  }
+  function escapeAttr(v) {
+    return String(v).replace(/&/g, "&amp;").replace(/"/g, "&quot;");
+  }
+  function escapeText(v) {
+    return String(v).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  }
+  function collectByTag(node, tag, out) {
+    const kids = node.childNodes;
+    for (let i = 0; i < kids.length; i++) {
+      const c = kids[i];
+      if (c.nodeType === 1 /* Element */) {
+        if (c.localName === tag) out.push(c);
+        collectByTag(c, tag, out);
+      }
+    }
+  }
+  function textOf(node) {
+    if (node.nodeType === 3 /* Text */) return node.data;
+    let s = "";
+    for (const c of node.childNodes) s += textOf(c);
+    return s;
+  }
+  function walkFind(node, pred) {
+    if (!node) return null;
+    if (node.nodeType === 1 /* Element */ && pred(node)) return node;
+    for (const c of node.childNodes) {
+      const r = walkFind(c, pred);
+      if (r) return r;
+    }
+    return null;
+  }
+
   // dom/Node.ts
   var Node = class {
     constructor(type) {
       this.parentNode = null;
       this.childNodes = [];
       this.nodeType = type;
+      hideOwnFields(this);
     }
     get ownerDocument() {
       return documentRef.current;
@@ -110,6 +150,7 @@
     constructor(data) {
       super(3 /* Text */);
       this.data = data == null ? "" : String(data);
+      hideOwnFields(this);
     }
     get nodeValue() {
       return this.data;
@@ -167,39 +208,6 @@
       }
     };
     return new Proxy({}, handler);
-  }
-
-  // dom/utils.ts
-  function escapeAttr(v) {
-    return String(v).replace(/&/g, "&amp;").replace(/"/g, "&quot;");
-  }
-  function escapeText(v) {
-    return String(v).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-  }
-  function collectByTag(node, tag, out) {
-    const kids = node.childNodes;
-    for (let i = 0; i < kids.length; i++) {
-      const c = kids[i];
-      if (c.nodeType === 1 /* Element */) {
-        if (c.localName === tag) out.push(c);
-        collectByTag(c, tag, out);
-      }
-    }
-  }
-  function textOf(node) {
-    if (node.nodeType === 3 /* Text */) return node.data;
-    let s = "";
-    for (const c of node.childNodes) s += textOf(c);
-    return s;
-  }
-  function walkFind(node, pred) {
-    if (!node) return null;
-    if (node.nodeType === 1 /* Element */ && pred(node)) return node;
-    for (const c of node.childNodes) {
-      const r = walkFind(c, pred);
-      if (r) return r;
-    }
-    return null;
   }
 
   // selector/querySelector.ts
@@ -293,6 +301,7 @@
       this.nodeName = this.tagName;
       this.namespaceURI = ns || "http://www.w3.org/1999/xhtml";
       this.style = createStyleDeclaration();
+      hideOwnFields(this);
     }
     setAttribute(name, value) {
       this.attrs.set(name, value == null ? "" : String(value));
@@ -515,6 +524,7 @@
     constructor(data) {
       super(8 /* Comment */);
       this.data = data == null ? "" : String(data);
+      hideOwnFields(this);
     }
     _shallowClone() {
       return new _Comment(this.data);
@@ -525,6 +535,7 @@
   var DocumentFragment = class _DocumentFragment extends Node {
     constructor() {
       super(11 /* DocumentFragment */);
+      hideOwnFields(this);
     }
     _shallowClone() {
       return new _DocumentFragment();
@@ -628,6 +639,7 @@
     constructor(tag, ns) {
       super(tag || customElements.currentName() || "", ns);
       this.shadowRoot = null;
+      hideOwnFields(this);
       const target = customElements.takeUpgradeTarget();
       if (target) return target;
     }
@@ -1071,6 +1083,7 @@
     constructor() {
       super("template");
       this.content = new DocumentFragment();
+      hideOwnFields(this);
     }
     get innerHTML() {
       return serializeChildren(this.content);
@@ -1095,6 +1108,7 @@
       this.body = null;
       this.styleSheets = [];
       this.defaultView = defaultView || null;
+      hideOwnFields(this);
     }
     createElement(tag) {
       const name = String(tag).toLowerCase();
@@ -1137,6 +1151,32 @@
     createEvent() {
       return { initEvent() {
       } };
+    }
+    // jQuery's UMD factory feature-detects against `implementation.createHTMLDocument` during init; a missing
+    // implementation threw before the global was assigned, so later bundles saw "jQuery is not defined".
+    get implementation() {
+      return {
+        hasFeature: () => true,
+        createDocumentType: () => ({}),
+        createHTMLDocument: (title) => {
+          const d = new _Document();
+          const html = d.createElement("html");
+          const head = d.createElement("head");
+          const body = d.createElement("body");
+          html.appendChild(head);
+          html.appendChild(body);
+          d.appendChild(html);
+          d.documentElement = html;
+          d.head = head;
+          d.body = body;
+          if (title) {
+            const t = d.createElement("title");
+            t.textContent = title;
+            head.appendChild(t);
+          }
+          return d;
+        }
+      };
     }
     get ownerDocument() {
       return null;
@@ -1204,7 +1244,16 @@
   var navigator = {
     userAgent: "SimpleCrawler",
     platform: "",
-    language: "en"
+    language: "en",
+    geolocation: {
+      getCurrentPosition() {
+      },
+      watchPosition() {
+        return 0;
+      },
+      clearWatch() {
+      }
+    }
   };
 
   // browser/location.ts
@@ -1537,6 +1586,24 @@
       };
       this.takeRecords = () => [];
     };
+    global.IntersectionObserver = function() {
+      this.observe = () => {
+      };
+      this.unobserve = () => {
+      };
+      this.disconnect = () => {
+      };
+      this.takeRecords = () => [];
+    };
+    global.ResizeObserver = function() {
+      this.observe = () => {
+      };
+      this.unobserve = () => {
+      };
+      this.disconnect = () => {
+      };
+    };
+    global.structuredClone = global.structuredClone || ((value) => value == null ? value : JSON.parse(JSON.stringify(value)));
     global.URL = URL;
     global.URLSearchParams = URLSearchParams;
     global.Node = Node;

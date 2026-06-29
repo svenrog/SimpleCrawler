@@ -1,6 +1,18 @@
 import type { Node } from "./Node";
 import { NodeType } from "../types/NodeType";
 
+// Browser DOM nodes report no own enumerable keys — all state lives on the prototype. Bundles that
+// deep-walk a node (JSON.stringify, structural cloners) depend on that: with enumerable instance fields the
+// parentNode/childNodes back-reference is a cycle they recurse through forever. Each node constructor hides
+// the fields it just added; Object.keys reports only still-enumerable ones, so the inheritance chain seals
+// every field exactly once.
+export function hideOwnFields(node: object): void {
+    const keys = Object.keys(node);
+    for (let i = 0; i < keys.length; i++) {
+        Object.defineProperty(node, keys[i], { enumerable: false });
+    }
+}
+
 export function escapeAttr(v: unknown): string {
     return String(v).replace(/&/g, "&amp;").replace(/"/g, "&quot;");
 }

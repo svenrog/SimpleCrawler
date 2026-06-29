@@ -3,6 +3,7 @@ import { Element } from "./Element";
 import { DocumentFragment } from "./DocumentFragment";
 import { parseFragment } from "../html/parser";
 import { serializeChildren } from "../html/serializer";
+import { hideOwnFields } from "./utils";
 
 // <template> holds its parsed markup in an inert .content fragment rather than as live children, so
 // libraries that clone templates (Solid/Svelte compile to template().cloneNode(true)) read a real tree.
@@ -12,6 +13,7 @@ export class HTMLTemplateElement extends Element {
     constructor() {
         super("template");
         this.content = new DocumentFragment();
+        hideOwnFields(this);
     }
 
     get innerHTML(): string {

@@ -1,6 +1,7 @@
 import { Element } from "./Element";
 import { DocumentFragment } from "./DocumentFragment";
 import { customElements } from "./customElements";
+import { hideOwnFields } from "./utils";
 
 // The base bundles extend (`class X extends HTMLElement`). It has to be a real JS class — ClearScript
 // host types have no prototype, so the C#-bridge mode could only stub it. Here the constructor pulls its
@@ -11,6 +12,7 @@ export class HTMLElement extends Element {
 
     constructor(tag?: string, ns?: string) {
         super(tag || customElements.currentName() || "", ns);
+        hideOwnFields(this);
         const target = customElements.takeUpgradeTarget();
         if (target) return target;
     }
