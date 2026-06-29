@@ -1,5 +1,4 @@
 using Crawler.AngleSharp.Js.Abstractions;
-using Crawler.AngleSharp.Js.Dom;
 using Crawler.AngleSharp.Js.Errors;
 using Crawler.AngleSharp.Js.Models;
 using Jint;
@@ -31,15 +30,6 @@ internal sealed class JintJsEngine : IJsEngine
             options
                 .EnableModules(new JintModuleLoader(fetcher, baseUri, moduleCache))
                 .CatchClrExceptions();
-
-            // A browser's DOM node exposes no own enumerable properties, so Object.keys(el)/for..in/spread/
-            // JSON.stringify see nothing and a bundle's deep clone/merge/serialize walker stops at it. Jint's
-            // default ObjectWrapper instead reports every CLR getter (children, parentNode, ownerDocument, ...)
-            // as an own key, so such a walker follows the DOM's reference cycles forever — overflowing the
-            // stack and allocating without bound. Report no enumerable keys for our node wrappers to match the
-            // browser; direct member access (el.innerHTML) is unaffected.
-            options.Interop.ObjectWrapperReportedPropertyKeys = static (_, target) =>
-                target is JsNode ? Array.Empty<JsValue>() : null;
         });
     }
 

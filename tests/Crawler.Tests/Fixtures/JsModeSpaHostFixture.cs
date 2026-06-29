@@ -7,9 +7,9 @@ using Microsoft.AspNetCore.Builder;
 
 namespace Crawler.Tests.Fixtures;
 
-// Same five client-only SPA hosts as SpaHostFixture, but rendered through the pure-JS DOM (DomMode.Js)
-// instead of the AngleSharp Bridge. The Phase-5 guard that real frameworks hydrate against dom.js. Its own
-// port range keeps it from colliding with the Bridge-mode SpaHostFixture in the shared "Crawler" collection.
+// Same five client-only SPA hosts as SpaHostFixture, rendered through the pure-JS DOM (dom.js).
+// The Phase-5 guard that real frameworks hydrate against dom.js. Its own port range keeps it from
+// colliding with the SpaHostFixture in the shared "Crawler" collection.
 //
 // Sitemap discovery is OFF here on purpose: the sitemap.xml these hosts serve lists every default.json link,
 // so with it on the link-parity assertion would pass from the sitemap alone — even if nothing rendered. With
@@ -38,7 +38,7 @@ public sealed class JsModeSpaHostFixture : AbstractHostFixture
     }
 
     protected override JsRenderOptions CreateRenderOptions() =>
-        new() { DomMode = DomMode.Js };
+        new();
 
     protected override IEnumerable<WebApplication> CreateHosts() =>
         Frameworks.Select(framework => SpaWebApplicationFactory.Create(HostName(framework), framework));

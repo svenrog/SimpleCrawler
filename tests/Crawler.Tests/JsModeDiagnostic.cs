@@ -14,7 +14,7 @@ using System.Text;
 
 namespace Crawler.Tests;
 
-// TEMPORARY Phase-5 diagnostic: render one framework shell through DomMode.Js and dump the result + JS errors.
+// TEMPORARY Phase-5 diagnostic: render one framework shell through dom.js and dump the result + JS errors.
 public class JsModeDiagnostic
 {
     private sealed class CapturingLogger : ILogger
@@ -45,11 +45,9 @@ public class JsModeDiagnostic
     }
 
     [Theory]
-    [InlineData(JsEngine.Jint, DomMode.Js)]
-    [InlineData(JsEngine.Jint, DomMode.Bridge)]
-    [InlineData(JsEngine.V8, DomMode.Js)]
-    [InlineData(JsEngine.V8, DomMode.Bridge)]
-    public async Task VueBindingProbe(JsEngine engine, DomMode mode)
+    [InlineData(JsEngine.Jint)]
+    [InlineData(JsEngine.V8)]
+    public async Task VueBindingProbe(JsEngine engine)
     {
         if (engine == JsEngine.V8)
             Assert.SkipUnless(V8Support.IsAvailable, V8Support.UnavailableReason);
@@ -66,7 +64,7 @@ public class JsModeDiagnostic
             var key = engine == JsEngine.V8 ? "anglesharp-js-v8" : "anglesharp-js-jint";
             var factory = provider.GetRequiredKeyedService<IJsEngineFactory>(key);
             var logger = new CapturingLogger();
-            var renderer = new JsRenderer(factory, new JsRenderOptions { DomMode = mode }, logger);
+            var renderer = new JsRenderer(factory, new JsRenderOptions(), logger);
 
             using var client = new HttpClient();
             // Import vue's runtime-core in isolation and report what its createRenderer export (y) resolves to,
@@ -80,7 +78,7 @@ public class JsModeDiagnostic
             var rendered = Encoding.UTF8.GetString(result);
             var m = System.Text.RegularExpressions.Regex.Match(rendered, "data-probe=\"([^\"]*)\"");
             var sb = new StringBuilder();
-            sb.AppendLine($"=== vue/{engine}/{mode} binding probe ===");
+            sb.AppendLine($"=== vue/{engine} binding probe ===");
             sb.AppendLine("PROBE: " + m.Groups[1].Value);
             foreach (var msg in logger.Messages) sb.AppendLine("LOG: " + msg);
             throw new Exception(sb.ToString());
@@ -111,7 +109,7 @@ public class JsModeDiagnostic
             var key = engine == JsEngine.V8 ? "anglesharp-js-v8" : "anglesharp-js-jint";
             var factory = provider.GetRequiredKeyedService<IJsEngineFactory>(key);
             var logger = new CapturingLogger();
-            var renderer = new JsRenderer(factory, new JsRenderOptions { DomMode = DomMode.Js }, logger);
+            var renderer = new JsRenderer(factory, new JsRenderOptions(), logger);
 
             using var client = new HttpClient();
             var shellText = await client.GetStringAsync(host);
@@ -142,11 +140,11 @@ public class JsModeDiagnostic
     }
 
     [Theory]
-    [InlineData("vue", JsEngine.V8, DomMode.Js)]
-    [InlineData("vue", JsEngine.Jint, DomMode.Js)]
-    [InlineData("svelte", JsEngine.V8, DomMode.Js)]
-    [InlineData("svelte", JsEngine.Jint, DomMode.Js)]
-    public async Task Dump(string framework, JsEngine engine, DomMode mode)
+    [InlineData("vue", JsEngine.V8)]
+    [InlineData("vue", JsEngine.Jint)]
+    [InlineData("svelte", JsEngine.V8)]
+    [InlineData("svelte", JsEngine.Jint)]
+    public async Task Dump(string framework, JsEngine engine)
     {
         if (engine == JsEngine.V8)
             Assert.SkipUnless(V8Support.IsAvailable, V8Support.UnavailableReason);
@@ -168,7 +166,7 @@ public class JsModeDiagnostic
             var factory = provider.GetRequiredKeyedService<IJsEngineFactory>(key);
 
             var logger = new CapturingLogger();
-            var renderer = new JsRenderer(factory, new JsRenderOptions { DomMode = mode }, logger);
+            var renderer = new JsRenderer(factory, new JsRenderOptions(), logger);
 
             var handler = new LoggingHandler();
             using var client = new HttpClient(handler);
@@ -186,11 +184,11 @@ public class JsModeDiagnostic
             var rendered = Encoding.UTF8.GetString(result);
 
             var anchors = System.Text.RegularExpressions.Regex.Matches(rendered, "<a ").Count;
-            var path = $@"C:\Users\svene\AppData\Local\Temp\claude\D--Projects-CSharp-SimpleCrawler\f7f00c27-c292-4026-9f27-8044de815c29\scratchpad\render-{framework}-{engine}-{mode}.html";
+            var path = $@"C:\Users\svene\AppData\Local\Temp\claude\D--Projects-CSharp-SimpleCrawler\f7f00c27-c292-4026-9f27-8044de815c29\scratchpad\render-{framework}-{engine}.html";
             await File.WriteAllTextAsync(path, rendered);
 
             var sb = new StringBuilder();
-            sb.AppendLine($"=== {framework}/{engine}/{mode}: {rendered.Length} bytes, {anchors} anchors ===");
+            sb.AppendLine($"=== {framework}/{engine}: {rendered.Length} bytes, {anchors} anchors ===");
             foreach (var r in handler.Requests)
                 sb.AppendLine("HTTP: " + r);
             foreach (var m in logger.Messages)

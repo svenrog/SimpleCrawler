@@ -12,7 +12,7 @@ using System.Text;
 
 namespace Crawler.Tests;
 
-// Exercises the pure-JS DOM path (DomMode.Js) without a host: dom.js parses the shell, the inline
+// Exercises the pure-JS DOM path (dom.js) without a host: dom.js parses the shell, the inline
 // script mutates the JS DOM, and the tree is serialized back to HTML — no managed DOM wrappers involved.
 // Theory'd over both engines since the JS DOM is the single code path for Jint + V8.
 public class JsDomRendererTests
@@ -27,7 +27,7 @@ public class JsDomRendererTests
             services.AddAngleSharpJintCrawler(new CrawlerOptions());
         var provider = services.BuildServiceProvider();
         var factory = provider.GetRequiredKeyedService<IJsEngineFactory>(key);
-        return new JsRenderer(factory, new JsRenderOptions { DomMode = DomMode.Js }, NullLogger.Instance);
+        return new JsRenderer(factory, new JsRenderOptions(), NullLogger.Instance);
     }
 
     [Theory]
