@@ -12,7 +12,6 @@ internal static class RenderProfiler
         Environment.GetEnvironmentVariable("JSRENDER_PROFILE") is "1" or "true";
 
     private static readonly ConcurrentDictionary<string, Bucket> _buckets = new();
-    private static readonly IDisposable _noopRegion = new NoopRegion();
 
     static RenderProfiler()
     {
@@ -34,9 +33,6 @@ internal static class RenderProfiler
         Interlocked.Increment(ref entry.Count);
     }
 
-    // Scoped region timer: `using (RenderProfiler.Scope("phase.x")) { ... }` stops on exit.
-    public static IDisposable Scope(string bucket) => Enabled ? new Region(bucket) : _noopRegion;
-
     public static void Dump()
     {
         if (_buckets.IsEmpty)
@@ -50,28 +46,11 @@ internal static class RenderProfiler
         Console.WriteLine();
         Console.WriteLine("=== JS render profile (total ms across all pages, summed over threads) ===");
         Console.WriteLine($"{"bucket",-22} {"total ms",12} {"calls",10} {"us/call",12}");
-        foreach (var r in rows)
-            Console.WriteLine($"{r.Name,-22} {r.Ms,12:F1} {r.Count,10} {(r.Ms * 1000.0 / r.Count),12:F2}");
-        Console.WriteLine("=========================================================================");
-    }
-
-    private sealed class Region : IDisposable
-    {
-        private readonly string _bucket;
-        private readonly long _start;
-
-        public Region(string bucket)
+        foreach (var (Name, Ms, Count) in rows)
         {
-            _bucket = bucket;
-            _start = Stopwatch.GetTimestamp();
+            Console.WriteLine($"{Name,-22} {Ms,12:F1} {Count,10} {Ms * 1000.0 / Count,12:F2}");
         }
-
-        public void Dispose() => Stop(_bucket, _start);
-    }
-
-    private sealed class NoopRegion : IDisposable
-    {
-        public void Dispose() { }
+        Console.WriteLine("=========================================================================");
     }
 
     private sealed class Bucket

@@ -58,7 +58,8 @@ public sealed class JsRenderer
         if (_options.DomMode == DomMode.Js)
             return await RenderJsAsync(shell, pageUrl, client, cancellationToken);
 
-        using var totalTime = RenderProfiler.Scope("phase.total");
+        var totalTime = RenderProfiler.Start();
+
         var pageUri = new Uri(pageUrl);
         using var stream = new MemoryStream(shell, writable: false);
 
@@ -69,45 +70,60 @@ public sealed class JsRenderer
 
         IReadOnlyList<RegularScript> regularScripts;
         IReadOnlyList<ModuleScript> moduleEntries;
-        using (RenderProfiler.Scope("phase.collect"))
-            (regularScripts, moduleEntries) = await CollectScriptsAsync(document, pageUrl, client, _sources, cancellationToken);
+
+        var collectTime = RenderProfiler.Start();
+        (regularScripts, moduleEntries) = await CollectScriptsAsync(document, pageUrl, client, _sources, cancellationToken);
+        RenderProfiler.Stop("phase.collect", collectTime);
 
         // The markup had a <script>, but none were executable (e.g. JSON, importmap), so the DOM still
         // equals the shell: skip spinning up a JS engine (a fresh V8 isolate / Jint engine) and reserializing.
         if (regularScripts.Count == 0 && moduleEntries.Count == 0)
+        {
+            RenderProfiler.Stop("phase.total", totalTime);
             return shell;
+        }
 
         var fetcher = new HttpModuleFetcher(client, _sources, cancellationToken);
 
-        IJsEngine rawEngine;
-        using (RenderProfiler.Scope("phase.engineCreate"))
-            rawEngine = _engineFactory.Create(fetcher, pageUri);
+        IJsEngine baseEngine;
+        var createTime = RenderProfiler.Start();
+        baseEngine = _engineFactory.Create(fetcher, pageUri);
+        RenderProfiler.Stop("phase.engineCreate", createTime);
 
-        using var engine = RenderProfiler.Enabled ? new ProfilingJsEngine(rawEngine) : rawEngine;
+        using var engine = RenderProfiler.Enabled ? new ProfilingJsEngine(baseEngine) : baseEngine;
         var context = new DomContext(document, engine, pageUri, _options, _logger);
 
         if (_options.EnableFetch)
-            engine.EmbedHostObject("__http", new JsHttp(client, pageUri, _logger, cancellationToken));
-
-        using (RenderProfiler.Scope("phase.setupGlobals"))
-            SetupGlobals(engine, context, _options.EnableFetch);
-
-        using (RenderProfiler.Scope("phase.bundleExec"))
         {
-            foreach (var script in regularScripts)
-                RunRegular(engine, context, script, pageUrl);
-
-            foreach (var module in moduleEntries)
-                RunModule(engine, module, pageUrl);
+            engine.EmbedHostObject("__http", new JsHttp(client, pageUri, _logger, cancellationToken));
         }
 
-        using (RenderProfiler.Scope("phase.drain"))
-            Drain(engine, context, pageUri, client, pageUrl, cancellationToken);
+        var setupTime = RenderProfiler.Start();
+        SetupGlobals(engine, context, _options.EnableFetch);
+        RenderProfiler.Stop("phase.setupGlobals", setupTime);
+
+        var bundleExecutionTime = RenderProfiler.Start();
+        foreach (var script in regularScripts)
+        {
+            RunRegular(engine, context, script, pageUrl);
+        }
+
+        foreach (var module in moduleEntries)
+        {
+            RunModule(engine, module, pageUrl);
+        }
+        RenderProfiler.Stop("phase.bundleExec", bundleExecutionTime);
+
+        var drainTime = RenderProfiler.Start();
+        Drain(engine, context, pageUri, client, pageUrl, cancellationToken);
+        RenderProfiler.Stop("phase.drain", drainTime);
 
         byte[] result;
-        using (RenderProfiler.Scope("phase.serialize"))
-            result = Serialize(document.DocumentElement);
+        var serializeTime = RenderProfiler.Start();
+        result = Serialize(document.DocumentElement);
+        RenderProfiler.Stop("phase.serialize", serializeTime);
 
+        RenderProfiler.Stop("phase.total", totalTime);
         return result;
     }
 
@@ -130,63 +146,85 @@ public sealed class JsRenderer
     // tree is serialized back to HTML for the (still AngleSharp-backed, until Phase 7) static extractor.
     private async Task<byte[]> RenderJsAsync(byte[] shell, string pageUrl, HttpClient client, CancellationToken cancellationToken)
     {
-        using var totalTime = RenderProfiler.Scope("phase.total");
+        var totalTime = RenderProfiler.Start();
+
         var pageUri = new Uri(pageUrl);
         var html = _utf8NoBom.GetString(shell);
 
         var fetcher = new HttpModuleFetcher(client, _sources, cancellationToken);
 
         IJsEngine rawEngine;
-        using (RenderProfiler.Scope("phase.engineCreate"))
-            rawEngine = _engineFactory.Create(fetcher, pageUri);
+        var createTime = RenderProfiler.Start();
+        rawEngine = _engineFactory.Create(fetcher, pageUri);
+        RenderProfiler.Stop("phase.engineCreate", createTime);
 
         using var engine = RenderProfiler.Enabled ? new ProfilingJsEngine(rawEngine) : rawEngine;
 
-        using (RenderProfiler.Scope("phase.setupGlobals"))
-            RunPrelude(engine, JsPreludes.Dom);
+        var setupTime = RenderProfiler.Start();
+        RunPrelude(engine, JsPreludes.Dom);
+        RenderProfiler.Stop("phase.setupGlobals", setupTime);
 
         engine.CallGlobal("__crawlerSetLocation", pageUrl);
 
-        using (RenderProfiler.Scope("phase.parse"))
+        var parseTime = RenderProfiler.Start();
+        try
         {
-            try
-            {
-                engine.CallGlobal("__crawlerLoadHtml", html);
-            }
-            catch (JsException ex)
-            {
-                _logger.LogWarning("JS DOM parse error on '{url}': {message}\n{details}", pageUrl, ex.Message, ex.ErrorDetails);
-                return shell;
-            }
+            engine.CallGlobal("__crawlerLoadHtml", html);
         }
+        catch (JsException ex)
+        {
+            _logger.LogWarning("JS DOM parse error on '{url}': {message}\n{details}", pageUrl, ex.Message, ex.ErrorDetails);
+            return shell;
+        }
+        RenderProfiler.Stop("phase.parse", parseTime);
+
 
         IReadOnlyList<RegularScript> regularScripts;
         IReadOnlyList<ModuleScript> moduleEntries;
-        using (RenderProfiler.Scope("phase.collect"))
-            (regularScripts, moduleEntries) = await CollectScriptsFromJsAsync(engine, pageUrl, client, _sources, cancellationToken);
+        var collectTime = RenderProfiler.Start();
+        (regularScripts, moduleEntries) = await CollectScriptsFromJsAsync(engine, pageUrl, client, _sources, cancellationToken);
+        RenderProfiler.Stop("phase.collect", collectTime);
+
+        byte[] result;
+        long serializeTime;
 
         // The markup had a <script> tag but the parser surfaced nothing executable (e.g. JSON), so the
         // DOM still equals the shell: skip the bundle and just reserialize.
         if (regularScripts.Count == 0 && moduleEntries.Count == 0)
-            return SerializeJs(engine);
-
-        if (_options.EnableFetch)
-            engine.EmbedHostObject("__http", new JsHttp(client, pageUri, _logger, cancellationToken));
-
-        using (RenderProfiler.Scope("phase.bundleExec"))
         {
-            foreach (var script in regularScripts)
-                RunRegularJs(engine, script, pageUrl);
-
-            foreach (var module in moduleEntries)
-                RunModule(engine, module, pageUrl);
+            serializeTime = RenderProfiler.Start();
+            result = SerializeJs(engine);
+            RenderProfiler.Stop("phase.serialize", serializeTime);
+            RenderProfiler.Stop("phase.total", totalTime);
+            return result;
         }
 
-        using (RenderProfiler.Scope("phase.drain"))
-            DrainJs(engine);
+        if (_options.EnableFetch)
+        {
+            engine.EmbedHostObject("__http", new JsHttp(client, pageUri, _logger, cancellationToken));
+        }
 
-        using (RenderProfiler.Scope("phase.serialize"))
-            return SerializeJs(engine);
+        var bundleExecutionTime = RenderProfiler.Start();
+        foreach (var script in regularScripts)
+        {
+            RunRegularJs(engine, script, pageUrl);
+        }
+
+        foreach (var module in moduleEntries)
+        {
+            RunModule(engine, module, pageUrl);
+        }
+        RenderProfiler.Stop("phase.bundleExec", bundleExecutionTime);
+
+        var drainTime = RenderProfiler.Start();
+        DrainJs(engine);
+        RenderProfiler.Stop("phase.drain", drainTime);
+
+        serializeTime = RenderProfiler.Start();
+        result = SerializeJs(engine);
+        RenderProfiler.Stop("phase.serialize", serializeTime);
+        RenderProfiler.Stop("phase.total", totalTime);
+        return result;
     }
 
     private static async Task<(IReadOnlyList<RegularScript> Regular, IReadOnlyList<ModuleScript> Modules)> CollectScriptsFromJsAsync(IJsEngine engine, string pageUrl, HttpClient client, SourceCache sources, CancellationToken cancellationToken)
