@@ -1,4 +1,4 @@
-using Crawler.AngleSharp.Js.Models;
+using Crawler.Js.Models;
 using Crawler.TestHost.Infrastructure.Factories;
 using Crawler.TestHost.Infrastructure.Results;
 using Crawler.Tests.Assertions;
@@ -48,7 +48,7 @@ public sealed class ProbeHostFixture : AbstractHostFixture
     }
 
     protected override JsRenderOptions CreateRenderOptions() =>
-        new() { EnableFetch = true, EnableDomExpandos = true };
+        new() { EnableFetch = true };
 
     protected override IEnumerable<WebApplication> CreateHosts() =>
         Enum.GetValues<JsProbeCapability>().Select(CreateHost);

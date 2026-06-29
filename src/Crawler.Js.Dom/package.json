@@ -1,0 +1,16 @@
+{
+  "name": "crawler.js.dom",
+  "version": "0.0.1",
+  "private": true,
+  "description": "TypeScript frontend that compiles to the embedded dom.js prelude for the Crawler.Js backends",
+  "scripts": {
+    "build": "npm run build:dom && npm run build:fetch",
+    "build:dom": "esbuild index.ts --bundle --format=iife --platform=neutral --target=es2020 --outfile=../Crawler.Js/Rendering/Preludes/dom.js",
+    "build:fetch": "esbuild ./network/fetch.ts --bundle --format=iife --platform=neutral --target=es2020 --outfile=../Crawler.Js/Rendering/Preludes/fetch.js",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "esbuild": "^0.24.0",
+    "typescript": "^5.9.0"
+  }
+}

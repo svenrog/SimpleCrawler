@@ -79,7 +79,7 @@ public abstract class PlaywrightCrawler<TResult> : AbstractRobotsCrawler<IPage, 
     protected override async Task<IPage?> LoadResponse(string url, CancellationToken cancellationToken)
     {
         var page = await AcquirePage();
-        var response = await page.GotoAsync(url);
+        var response = await page.GotoAsync(url, new PageGotoOptions { WaitUntil = WaitUntilState.NetworkIdle });
 
         if (response == null)
         {
