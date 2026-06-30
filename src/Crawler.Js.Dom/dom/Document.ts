@@ -19,11 +19,35 @@ export class Document extends Node {
     body: Element | null = null;
     defaultView: any;
     styleSheets: any[] = [];
+    private _cookies = new Map<string, string>();
 
     constructor(defaultView?: any) {
         super(NodeType.Document);
         this.defaultView = defaultView || null;
         hideOwnFields(this);
+    }
+
+    // Browsers expose document.location as an alias of window.location; scripts (analytics, Clerk's CDN
+    // loader) read document.location.protocol/href, which threw on undefined when only window.location existed.
+    get location(): any {
+        return this.defaultView ? this.defaultView.location : null;
+    }
+
+    // A real document.cookie is always a string. Bundles probe it (document.cookie.includes(...)) and set it;
+    // we keep a name→value store, ignoring attributes (path/expires/domain) and expiry since rendering is a
+    // single synchronous pass.
+    get cookie(): string {
+        const out: string[] = [];
+        for (const [k, v] of this._cookies) out.push(`${k}=${v}`);
+        return out.join("; ");
+    }
+
+    set cookie(value: unknown) {
+        const pair = String(value ?? "").split(";")[0];
+        const eq = pair.indexOf("=");
+        if (eq < 0) return;
+        const name = pair.slice(0, eq).trim();
+        if (name) this._cookies.set(name, pair.slice(eq + 1).trim());
     }
 
     createElement(tag: string): Element {
@@ -111,6 +135,10 @@ export class Document extends Node {
                 return d;
             },
         };
+    }
+
+    get nodeName(): string {
+        return "#document";
     }
 
     get ownerDocument(): any {

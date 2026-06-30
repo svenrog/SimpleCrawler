@@ -172,6 +172,9 @@
       this.data = data == null ? "" : String(data);
       hideOwnFields(this);
     }
+    get nodeName() {
+      return "#text";
+    }
     get nodeValue() {
       return this.data;
     }
@@ -307,6 +310,9 @@
     s += serializeChildren(el);
     return s + "</" + tag + ">";
   }
+
+  // html/parserRef.ts
+  var parserRef = { parseFragment: null };
 
   // browser/Event.ts
   var Event = class {
@@ -722,9 +728,15 @@
     get innerHTML() {
       return this.cachedInnerHTML != null ? this.cachedInnerHTML : serializeChildren(this);
     }
+    // Parse into real child nodes (so cloneNode/lastChild/querySelector and the link collector see injected
+    // content — CMS rich-text and dangerouslySetInnerHTML blocks carry anchors), then keep the verbatim
+    // string as a serialization fast-path. Any later child mutation nulls the cache via appendChild et al.
     set innerHTML(v) {
       this.childNodes = [];
-      this.cachedInnerHTML = v == null ? "" : String(v);
+      const html = v == null ? "" : String(v);
+      const parse = parserRef.parseFragment;
+      if (parse) for (const node of parse(html)) this.appendChild(node);
+      this.cachedInnerHTML = html;
     }
     get textContent() {
       return textOf(this);
@@ -766,6 +778,15 @@
       this.data = data == null ? "" : String(data);
       hideOwnFields(this);
     }
+    get nodeName() {
+      return "#comment";
+    }
+    get nodeValue() {
+      return this.data;
+    }
+    set nodeValue(v) {
+      this.data = v == null ? "" : String(v);
+    }
     _shallowClone() {
       return new _Comment(this.data);
     }
@@ -776,6 +797,9 @@
     constructor() {
       super(11 /* DocumentFragment */);
       hideOwnFields(this);
+    }
+    get nodeName() {
+      return "#document-fragment";
     }
     querySelector(sel) {
       const r = querySelectorAll(this, sel);
@@ -1367,6 +1391,7 @@
     for (const k of kids) k.parentNode = null;
     return kids;
   }
+  parserRef.parseFragment = parseFragment;
 
   // dom/Range.ts
   var _zeroRect = { top: 0, left: 0, right: 0, bottom: 0, width: 0, height: 0, x: 0, y: 0 };
@@ -1467,8 +1492,29 @@
       this.head = null;
       this.body = null;
       this.styleSheets = [];
+      this._cookies = /* @__PURE__ */ new Map();
       this.defaultView = defaultView || null;
       hideOwnFields(this);
+    }
+    // Browsers expose document.location as an alias of window.location; scripts (analytics, Clerk's CDN
+    // loader) read document.location.protocol/href, which threw on undefined when only window.location existed.
+    get location() {
+      return this.defaultView ? this.defaultView.location : null;
+    }
+    // A real document.cookie is always a string. Bundles probe it (document.cookie.includes(...)) and set it;
+    // we keep a name→value store, ignoring attributes (path/expires/domain) and expiry since rendering is a
+    // single synchronous pass.
+    get cookie() {
+      const out = [];
+      for (const [k, v] of this._cookies) out.push(`${k}=${v}`);
+      return out.join("; ");
+    }
+    set cookie(value) {
+      const pair = String(value ?? "").split(";")[0];
+      const eq = pair.indexOf("=");
+      if (eq < 0) return;
+      const name = pair.slice(0, eq).trim();
+      if (name) this._cookies.set(name, pair.slice(eq + 1).trim());
     }
     createElement(tag) {
       const name = String(tag).toLowerCase();
@@ -1545,6 +1591,9 @@
           return d;
         }
       };
+    }
+    get nodeName() {
+      return "#document";
     }
     get ownerDocument() {
       return null;

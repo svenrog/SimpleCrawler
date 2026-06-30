@@ -5,6 +5,7 @@ import { createStyleDeclaration } from "../css/CSSStyleDeclaration";
 import { collectByTag, textOf, hideOwnFields } from "./utils";
 import { querySelectorAll } from "../selector/querySelector";
 import { serializeChildren, serializeNode } from "../html/serializer";
+import { parserRef } from "../html/parserRef";
 import { registerResource } from "./resourceLoader";
 import { viewportWidth, viewportHeight } from "../browser/viewport";
 
@@ -241,9 +242,15 @@ export class Element extends Node {
         return this.cachedInnerHTML != null ? this.cachedInnerHTML : serializeChildren(this);
     }
 
+    // Parse into real child nodes (so cloneNode/lastChild/querySelector and the link collector see injected
+    // content — CMS rich-text and dangerouslySetInnerHTML blocks carry anchors), then keep the verbatim
+    // string as a serialization fast-path. Any later child mutation nulls the cache via appendChild et al.
     set innerHTML(v: unknown) {
         this.childNodes = [];
-        this.cachedInnerHTML = v == null ? "" : String(v);
+        const html = v == null ? "" : String(v);
+        const parse = parserRef.parseFragment;
+        if (parse) for (const node of parse(html)) this.appendChild(node);
+        this.cachedInnerHTML = html;
     }
 
     get textContent(): string {

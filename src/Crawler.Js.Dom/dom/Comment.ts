@@ -11,6 +11,17 @@ export class Comment extends Node {
         hideOwnFields(this);
     }
 
+    get nodeName(): string {
+        return "#comment";
+    }
+
+    get nodeValue(): string {
+        return this.data;
+    }
+    set nodeValue(v: unknown) {
+        this.data = v == null ? "" : String(v);
+    }
+
     protected _shallowClone(): Node {
         return new Comment(this.data);
     }

@@ -10,6 +10,7 @@ import { NodeType } from "../types/NodeType";
 import { VOID_ELEMENTS, RAWTEXT_ELEMENTS } from "../constants";
 import { decodeEntities } from "./entities";
 import { createTagScanners, findRawTextClose } from "./tokenizer";
+import { parserRef } from "./parserRef";
 
 export function parseHTML(doc: Document, input: unknown): Element {
     const src = input == null ? "" : String(input);
@@ -173,3 +174,5 @@ export function parseFragment(html: unknown): Node[] {
     for (const k of kids) k.parentNode = null;
     return kids;
 }
+
+parserRef.parseFragment = parseFragment;

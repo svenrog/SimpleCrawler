@@ -77,6 +77,82 @@ public class JsDomRendererTests
         Assert.Contains("href=\"/inner\"", rendered);
     }
 
+    // innerHTML must materialise real child nodes, not just cache a string for serialisation: cloneNode,
+    // lastChild, querySelector and the link collector all walk childNodes, so a lazy setter hides
+    // innerHTML-injected anchors (and crashes jQuery's `cloneNode(true).lastChild.defaultValue` probe).
+    [Theory]
+    [InlineData(JsEngine.Jint)]
+    [InlineData(JsEngine.V8)]
+    public async Task JsMode_InnerHtmlPopulatesLiveDom(JsEngine engine)
+    {
+        if (engine == JsEngine.V8)
+            Assert.SkipUnless(V8Support.IsAvailable, V8Support.UnavailableReason);
+
+        const string html = """
+            <html><body><div id="r"></div>
+            <script>
+            var r = document.getElementById('r');
+            r.innerHTML = '<a href="/inner-a">a</a><span class="s">x</span>';
+            var anchors = r.querySelectorAll('a').length;
+            var lastName = r.lastChild.nodeName;
+            var clonedLast = r.cloneNode(true).lastChild.nodeName;
+            var out = document.createElement('a');
+            out.setAttribute('href', '/probe?anchors=' + anchors + '&last=' + lastName + '&clone=' + clonedLast);
+            document.body.appendChild(out);
+            </script>
+            </body></html>
+            """;
+
+        var renderer = CreateJsRenderer(engine);
+        var result = await renderer.RenderAsync(Encoding.UTF8.GetBytes(html), "http://localhost:5000/", new HttpClient(), CancellationToken.None);
+        var rendered = Encoding.UTF8.GetString(result);
+
+        Assert.Contains("href=\"/inner-a\"", rendered);
+        Assert.Contains("anchors=1", rendered);
+        Assert.Contains("last=SPAN", rendered);
+        Assert.Contains("clone=SPAN", rendered);
+    }
+
+    // document.cookie is always a string (bundles call document.cookie.includes(...)), document.location
+    // aliases window.location (analytics read document.location.protocol/href), and non-element nodes carry
+    // the standard nodeName (#text/#comment) that React hydration lowercases.
+    [Theory]
+    [InlineData(JsEngine.Jint)]
+    [InlineData(JsEngine.V8)]
+    public async Task JsMode_DocumentCookieLocationAndNodeNames(JsEngine engine)
+    {
+        if (engine == JsEngine.V8)
+            Assert.SkipUnless(V8Support.IsAvailable, V8Support.UnavailableReason);
+
+        const string html = """
+            <html><body>
+            <script>
+            var before = typeof document.cookie + ':' + document.cookie.includes('x=1');
+            document.cookie = 'x=1; path=/';
+            var after = document.cookie.includes('x=1');
+            var proto = document.location.protocol;
+            var hrefMatch = document.location.href === window.location.href;
+            var textName = document.createTextNode('t').nodeName;
+            var commentName = document.createComment('c').nodeName;
+            var out = document.createElement('a');
+            out.setAttribute('href', '/probe?before=' + before + '&after=' + after + '&proto=' + proto + '&href=' + hrefMatch + '&text=' + textName + '&comment=' + commentName);
+            document.body.appendChild(out);
+            </script>
+            </body></html>
+            """;
+
+        var renderer = CreateJsRenderer(engine);
+        var result = await renderer.RenderAsync(Encoding.UTF8.GetBytes(html), "https://example.test/page", new HttpClient(), CancellationToken.None);
+        var rendered = Encoding.UTF8.GetString(result);
+
+        Assert.Contains("before=string:false", rendered);
+        Assert.Contains("after=true", rendered);
+        Assert.Contains("proto=https:", rendered);
+        Assert.Contains("href=true", rendered);
+        Assert.Contains("text=#text", rendered);
+        Assert.Contains("comment=#comment", rendered);
+    }
+
     // customElements: a parsed <my-widget> is upgraded retroactively when the bundle defines it (the Astro
     // island path), and a createElement'd instance fires connectedCallback on attach. Both paths must
     // hydrate the anchor the connected callback injects.

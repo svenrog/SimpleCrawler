@@ -9,6 +9,10 @@ export class DocumentFragment extends Node {
         hideOwnFields(this);
     }
 
+    get nodeName(): string {
+        return "#document-fragment";
+    }
+
     querySelector(sel: string): Node | null {
         const r = querySelectorAll(this, sel);
         return r.length ? r[0] : null;
