@@ -67,6 +67,7 @@ public sealed class JsRenderer
         RenderProfiler.Stop("phase.setupGlobals", setupTime);
 
         engine.CallGlobal("__crawlerSetLocation", pageUrl);
+        engine.CallGlobal("__crawlerSetViewport", (int)_options.Viewport.Width, (int)_options.Viewport.Height);
 
         var parseTime = RenderProfiler.Start();
         try
@@ -111,7 +112,7 @@ public sealed class JsRenderer
         RenderProfiler.Stop("phase.bundleExec", bundleExecutionTime);
 
         var drainTime = RenderProfiler.Start();
-        DrainJs(engine);
+        await DrainJsAsync(engine, pageUri, client, pageUrl, cancellationToken);
         RenderProfiler.Stop("phase.drain", drainTime);
 
         return Finalize(engine, finalize, totalTime);
@@ -188,21 +189,93 @@ public sealed class JsRenderer
         }
     }
 
-    private void DrainJs(IJsEngine engine)
+    private async Task DrainJsAsync(IJsEngine engine, Uri pageUri, HttpClient client, string pageUrl, CancellationToken cancellationToken)
     {
-        // Mirrors the Bridge drain's "settle after idle turns": __crawlerPending reports the queue depth
-        // before __crawlerPump runs it, so a turn with no pending work counts as idle.
+        // Settle after a few idle turns: __crawlerPending reports the queue depth before __crawlerPump runs
+        // it, so a turn with no pending work counts as idle. Runtime-appended <script src>/<link> chunks are
+        // loaded at the top of each turn — before the timer pump — so a code-split route's chunk is installed
+        // and its load event fired before webpack's chunk-load timeout callback runs.
         var iterations = 0;
         var idle = 0;
         while (iterations++ < _options.MaxTaskDrainIterations && idle < _idleTurnsBeforeSettled)
         {
+            var loadedResource = await DrainResourcesAsync(engine, pageUri, client, pageUrl, cancellationToken);
+
             engine.RunMicrotasks();
             var pending = engine.Evaluate<int>("__crawlerPending()");
             engine.Evaluate<int>("__crawlerPump()");
             engine.RunMicrotasks();
-            idle = pending == 0 ? idle + 1 : 0;
+
+            var pendingResources = engine.Evaluate<int>("__crawlerPendingResources()");
+            idle = pending == 0 && pendingResources == 0 && !loadedResource ? idle + 1 : 0;
         }
     }
+
+    private async Task<bool> DrainResourcesAsync(IJsEngine engine, Uri pageUri, HttpClient client, string pageUrl, CancellationToken cancellationToken)
+    {
+        var json = engine.Evaluate<string>("__crawlerTakeResources()");
+        if (string.IsNullOrEmpty(json))
+            return false;
+
+        using var doc = JsonDocument.Parse(json);
+        var loaded = false;
+        foreach (var entry in doc.RootElement.EnumerateArray())
+        {
+            var id = entry.GetProperty("id").GetInt32();
+            var tag = entry.TryGetProperty("tag", out var tagProp) ? tagProp.GetString() : null;
+            var src = entry.TryGetProperty("src", out var srcProp) ? srcProp.GetString() : null;
+
+            await LoadResourceAsync(engine, id, tag, src, pageUri, client, pageUrl, cancellationToken);
+            loaded = true;
+        }
+
+        return loaded;
+    }
+
+    // A same-origin <script> is fetched and executed so a webpack chunk's module registrations run; a <link>
+    // is treated as loaded without fetching (a crawl needs no CSS). Cross-origin scripts (AppInsights/GTM and
+    // similar analytics SDKs) are left pending — running them is slow and yields no links, and nothing awaits
+    // their load. Every other case fires the node's load (or error) event to settle the awaiting import().
+    private async Task LoadResourceAsync(IJsEngine engine, int id, string? tag, string? src, Uri pageUri, HttpClient client, string pageUrl, CancellationToken cancellationToken)
+    {
+        if (!string.Equals(tag, "script", StringComparison.Ordinal))
+        {
+            FireResourceEvent(engine, id, "load");
+            return;
+        }
+
+        if (string.IsNullOrEmpty(src) || !Uri.TryCreate(pageUri, src, out var absolute))
+        {
+            FireResourceEvent(engine, id, "error");
+            return;
+        }
+
+        if (!string.Equals(absolute.Host, pageUri.Host, StringComparison.OrdinalIgnoreCase))
+            return;
+
+        var source = await FetchSourceAsync(client, _sources, absolute, cancellationToken);
+        if (source is null)
+        {
+            FireResourceEvent(engine, id, "error");
+            return;
+        }
+
+        try
+        {
+            engine.ExecuteCached(absolute.AbsoluteUri, source);
+        }
+        catch (JsException ex)
+        {
+            _logger.LogWarning("Chunk execution error on '{url}': {message}\n{details}", pageUrl, ex.Message, ex.ErrorDetails);
+            FireResourceEvent(engine, id, "error");
+            return;
+        }
+
+        FireResourceEvent(engine, id, "load");
+    }
+
+    private static void FireResourceEvent(IJsEngine engine, int id, string type)
+        => engine.CallGlobal("__crawlerFireResourceEvent", id, type);
 
     private static JsExtract CollectLinks(IJsEngine engine)
     {

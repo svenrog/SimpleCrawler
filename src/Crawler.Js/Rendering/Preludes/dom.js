@@ -220,10 +220,10 @@
     walk(el);
     return out;
     function walk(n) {
-      if (n.nodeType === 1 /* Element */ && matches(n)) out.push(n);
+      if (n.nodeType === 1 /* Element */ && matches2(n)) out.push(n);
       for (const c of n.childNodes) walk(c);
     }
-    function matches(n) {
+    function matches2(n) {
       const e = n;
       if (idM) return e.getAttribute("id") === idM[1];
       if (attrM) {
@@ -286,6 +286,216 @@
     if (VOID_ELEMENTS[tag]) return s;
     s += serializeChildren(el);
     return s + "</" + tag + ">";
+  }
+
+  // browser/Event.ts
+  var Event = class {
+    constructor(type, init) {
+      this.isTrusted = false;
+      this.defaultPrevented = false;
+      this.eventPhase = 0;
+      this.target = null;
+      this.currentTarget = null;
+      this._stoppedImmediate = false;
+      this.type = String(type);
+      this.bubbles = !!(init && init.bubbles);
+      this.cancelable = !!(init && init.cancelable);
+      this.timeStamp = Date.now();
+    }
+    preventDefault() {
+      if (this.cancelable) this.defaultPrevented = true;
+    }
+    stopPropagation() {
+    }
+    stopImmediatePropagation() {
+      this._stoppedImmediate = true;
+    }
+  };
+
+  // dom/resourceLoader.ts
+  var _counter = 0;
+  var _pending = [];
+  var _byId = /* @__PURE__ */ new Map();
+  var _seen = /* @__PURE__ */ new WeakSet();
+  function registerResource(node) {
+    const tag = node.localName;
+    if (tag !== "script" && tag !== "link") return;
+    if (tag === "script" && !node.getAttribute("src")) return;
+    if (_seen.has(node)) return;
+    _seen.add(node);
+    const id = ++_counter;
+    _pending.push({ id, node });
+    _byId.set(id, node);
+  }
+  function takeResources() {
+    if (!_pending.length) return "";
+    const batch = _pending.splice(0, _pending.length);
+    return JSON.stringify(batch.map((r) => ({ id: r.id, tag: r.node.localName, src: r.node.getAttribute("src") || "" })));
+  }
+  function pendingResourceCount() {
+    return _pending.length;
+  }
+  function fireResourceEvent(id, type) {
+    const node = _byId.get(id);
+    if (!node) return;
+    _byId.delete(id);
+    const event = new Event(type);
+    event.target = node;
+    const handler = type === "load" ? node.onload : node.onerror;
+    if (typeof handler === "function") {
+      try {
+        handler.call(node, event);
+      } catch {
+      }
+    }
+    if (typeof node.dispatchEvent === "function") {
+      try {
+        node.dispatchEvent(event);
+      } catch {
+      }
+    }
+  }
+
+  // browser/viewport.ts
+  var _width = 1920;
+  var _height = 1080;
+  function setViewport(width, height) {
+    const w = Number(width);
+    const h = Number(height);
+    if (w > 0) _width = Math.floor(w);
+    if (h > 0) _height = Math.floor(h);
+  }
+  function viewportWidth() {
+    return _width;
+  }
+  function viewportHeight() {
+    return _height;
+  }
+  function numeric(value) {
+    const m = /-?\d*\.?\d+/.exec(value);
+    return m ? parseFloat(m[0]) : NaN;
+  }
+  function resolutionDppx(value) {
+    const n = numeric(value);
+    if (isNaN(n)) return NaN;
+    if (/dpi/i.test(value)) return n / 96;
+    if (/dpcm/i.test(value)) return n / 37.795;
+    return n;
+  }
+  function matchFeature(name, value) {
+    switch (name) {
+      case "min-width":
+      case "min-device-width":
+        return _width >= numeric(value);
+      case "max-width":
+      case "max-device-width":
+        return _width <= numeric(value);
+      case "width":
+      case "device-width":
+        return _width === numeric(value);
+      case "min-height":
+      case "min-device-height":
+        return _height >= numeric(value);
+      case "max-height":
+      case "max-device-height":
+        return _height <= numeric(value);
+      case "height":
+      case "device-height":
+        return _height === numeric(value);
+      case "min-resolution":
+        return 1 >= resolutionDppx(value);
+      case "max-resolution":
+        return 1 <= resolutionDppx(value);
+      case "resolution":
+        return resolutionDppx(value) === 1;
+      case "orientation":
+        return value === "portrait" ? _height > _width : _width >= _height;
+      // An unmodelled feature must never veto a layout (the crawl must not hide content), so it matches.
+      default:
+        return true;
+    }
+  }
+  function matchClause(clause) {
+    const inner = clause.replace(/^\(/, "").replace(/\)$/, "");
+    const colon = inner.indexOf(":");
+    if (colon < 0) return true;
+    const name = inner.slice(0, colon).trim().toLowerCase();
+    const value = inner.slice(colon + 1).trim().toLowerCase();
+    return matchFeature(name, value);
+  }
+  function matchSingle(query) {
+    let q = query.trim().toLowerCase();
+    if (!q) return true;
+    let negate = false;
+    if (q.indexOf("not ") === 0) {
+      negate = true;
+      q = q.slice(4).trim();
+    }
+    const typeMatch = /^(all|screen|print|speech)\b/.exec(q);
+    if (typeMatch) {
+      const type = typeMatch[1];
+      q = q.slice(type.length).trim();
+      if (q.indexOf("and") === 0) q = q.slice(3).trim();
+      if (type === "print" || type === "speech") return negate;
+      if (!q) return !negate;
+    }
+    const clauses = q.split(/\band\b/).map((c) => c.trim()).filter((c) => c.length > 0);
+    const result = clauses.every((c) => matchClause(c));
+    return negate ? !result : result;
+  }
+  function matches(query) {
+    const list = String(query == null ? "" : query).split(",");
+    return list.some((q) => matchSingle(q));
+  }
+  function installViewport(global) {
+    const define = (name, get) => Object.defineProperty(global, name, { get, configurable: true });
+    define("innerWidth", () => _width);
+    define("innerHeight", () => _height);
+    define("outerWidth", () => _width);
+    define("outerHeight", () => _height);
+    global.devicePixelRatio = 1;
+    global.screen = {
+      get width() {
+        return _width;
+      },
+      get height() {
+        return _height;
+      },
+      get availWidth() {
+        return _width;
+      },
+      get availHeight() {
+        return _height;
+      },
+      colorDepth: 24,
+      pixelDepth: 24,
+      orientation: {
+        get type() {
+          return _width >= _height ? "landscape-primary" : "portrait-primary";
+        },
+        angle: 0,
+        addEventListener() {
+        },
+        removeEventListener() {
+        }
+      }
+    };
+    global.matchMedia = (query) => ({
+      matches: matches(query),
+      media: String(query == null ? "" : query),
+      onchange: null,
+      addListener() {
+      },
+      removeListener() {
+      },
+      addEventListener() {
+      },
+      removeEventListener() {
+      },
+      dispatchEvent() {
+        return false;
+      }
+    });
   }
 
   // dom/Element.ts
@@ -370,6 +580,15 @@
     getBoundingClientRect() {
       return { top: 0, left: 0, right: 0, bottom: 0, width: 0, height: 0, x: 0, y: 0 };
     }
+    // The viewport-sized box: jQuery's $(window).width() and many breakpoint helpers read the root element's
+    // clientWidth/Height rather than window.innerWidth. Only the root (html/body) reports the viewport; every
+    // other element is unlaid-out and reports 0, as in the always-zero getBoundingClientRect.
+    get clientWidth() {
+      return this.localName === "html" || this.localName === "body" ? viewportWidth() : 0;
+    }
+    get clientHeight() {
+      return this.localName === "html" || this.localName === "body" ? viewportHeight() : 0;
+    }
     contains(n) {
       let cur = n;
       while (cur) {
@@ -422,6 +641,7 @@
     _notifyConnected(node) {
       if (node.nodeType === 1 /* Element */) {
         const el = node;
+        registerResource(el);
         if (!el._connected && typeof el.connectedCallback === "function" && el.isConnected) {
           el._connected = true;
           el.connectedCallback();
@@ -843,6 +1063,44 @@
     }
   };
 
+  // dom/HTMLScriptElement.ts
+  var HTMLScriptElement = class extends HTMLElement {
+    constructor() {
+      super("script");
+    }
+    get src() {
+      return this.getAttribute("src") || "";
+    }
+    set src(value) {
+      this.setAttribute("src", value == null ? "" : String(value));
+    }
+    get type() {
+      return this.getAttribute("type") || "";
+    }
+    set type(value) {
+      this.setAttribute("type", value == null ? "" : String(value));
+    }
+  };
+
+  // dom/HTMLLinkElement.ts
+  var HTMLLinkElement = class extends HTMLElement {
+    constructor() {
+      super("link");
+    }
+    get href() {
+      return this.getAttribute("href") || "";
+    }
+    set href(value) {
+      this.setAttribute("href", value == null ? "" : String(value));
+    }
+    get rel() {
+      return this.getAttribute("rel") || "";
+    }
+    set rel(value) {
+      this.setAttribute("rel", value == null ? "" : String(value));
+    }
+  };
+
   // html/entities.ts
   var NAMED = {
     amp: "&",
@@ -1047,7 +1305,7 @@
         i = j;
         continue;
       }
-      const el = tag === "a" ? new HTMLAnchorElement() : new Element(tag);
+      const el = tag === "a" ? new HTMLAnchorElement() : tag === "script" ? new HTMLScriptElement() : tag === "link" ? new HTMLLinkElement() : new Element(tag);
       if (attrs) for (const key in attrs) el.setAttribute(key, attrs[key]);
       if (RAWTEXT_ELEMENTS[tag]) {
         const rawFrom = j;
@@ -1114,6 +1372,8 @@
       const name = String(tag).toLowerCase();
       if (name === "template") return new HTMLTemplateElement();
       if (name === "a") return new HTMLAnchorElement();
+      if (name === "script") return new HTMLScriptElement();
+      if (name === "link") return new HTMLLinkElement();
       const custom = customElements.tryCreate(name);
       return custom || new Element(name);
     }
@@ -1225,10 +1485,6 @@
   };
   var HTMLStyleElement = class extends HTMLElement {
   };
-  var HTMLScriptElement = class extends HTMLElement {
-  };
-  var HTMLLinkElement = class extends HTMLElement {
-  };
   var HTMLCanvasElement = class extends HTMLElement {
   };
   var HTMLUnknownElement = class extends HTMLElement {
@@ -1323,30 +1579,6 @@
     global.cancelAnimationFrame = () => {
     };
   }
-
-  // browser/Event.ts
-  var Event = class {
-    constructor(type, init) {
-      this.isTrusted = false;
-      this.defaultPrevented = false;
-      this.eventPhase = 0;
-      this.target = null;
-      this.currentTarget = null;
-      this._stoppedImmediate = false;
-      this.type = String(type);
-      this.bubbles = !!(init && init.bubbles);
-      this.cancelable = !!(init && init.cancelable);
-      this.timeStamp = Date.now();
-    }
-    preventDefault() {
-      if (this.cancelable) this.defaultPrevented = true;
-    }
-    stopPropagation() {
-    }
-    stopImmediatePropagation() {
-      this._stoppedImmediate = true;
-    }
-  };
 
   // browser/CustomEvent.ts
   var CustomEvent = class extends Event {
@@ -1567,18 +1799,8 @@
     global.removeEventListener = () => {
     };
     global.dispatchEvent = () => true;
-    global.matchMedia = () => ({
-      matches: false,
-      addListener() {
-      },
-      removeListener() {
-      },
-      addEventListener() {
-      },
-      removeEventListener() {
-      }
-    });
     global.getComputedStyle = () => ({ getPropertyValue: () => "" });
+    installViewport(global);
     global.MutationObserver = function() {
       this.observe = () => {
       };
@@ -1683,6 +1905,9 @@
     global.__crawlerSetLocation = (url) => {
       applyUrl(url);
     };
+    global.__crawlerSetViewport = (width, height) => {
+      setViewport(width, height);
+    };
     global.__crawlerLoadHtml = (html) => {
       parseHTML(doc, html);
     };
@@ -1690,6 +1915,11 @@
     global.__crawlerCollectLinks = () => JSON.stringify(collectLinks());
     global.__crawlerPending = () => pendingCount();
     global.__crawlerPump = () => pumpTasks();
+    global.__crawlerTakeResources = () => takeResources();
+    global.__crawlerPendingResources = () => pendingResourceCount();
+    global.__crawlerFireResourceEvent = (id, type) => {
+      fireResourceEvent(id, type);
+    };
     global.__crawlerSerialize = () => doc.documentElement ? serializeNode(doc.documentElement) : "";
   }
 

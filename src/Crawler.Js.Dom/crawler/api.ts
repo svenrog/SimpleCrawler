@@ -3,6 +3,8 @@ import { parseHTML } from "../html/parser";
 import { serializeNode } from "../html/serializer";
 import { applyUrl } from "../url/resolve";
 import { pumpTasks, pendingCount } from "../scheduler/taskQueue";
+import { takeResources, pendingResourceCount, fireResourceEvent } from "../dom/resourceLoader";
+import { setViewport } from "../browser/viewport";
 import type { ScriptDescriptor } from "../types/internal";
 import { NodeType } from "../types/NodeType";
 
@@ -62,10 +64,14 @@ function collectLinks(): { anchors: (string | null)[]; canonical: string | null;
 
 export function installCrawlerApi(global: any): void {
     global.__crawlerSetLocation = (url: string) => { applyUrl(url); };
+    global.__crawlerSetViewport = (width: number, height: number) => { setViewport(width, height); };
     global.__crawlerLoadHtml = (html: unknown) => { parseHTML(doc, html); };
     global.__crawlerCollectScripts = () => JSON.stringify(collectScripts());
     global.__crawlerCollectLinks = () => JSON.stringify(collectLinks());
     global.__crawlerPending = () => pendingCount();
     global.__crawlerPump = () => pumpTasks();
+    global.__crawlerTakeResources = () => takeResources();
+    global.__crawlerPendingResources = () => pendingResourceCount();
+    global.__crawlerFireResourceEvent = (id: number, type: string) => { fireResourceEvent(id, type); };
     global.__crawlerSerialize = () => doc.documentElement ? serializeNode(doc.documentElement) : "";
 }

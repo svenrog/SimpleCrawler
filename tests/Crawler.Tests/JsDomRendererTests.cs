@@ -8,6 +8,7 @@ using Crawler.Tests.Helpers;
 using Crawler.Tests.Models;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
+using System.Net;
 using System.Text;
 
 namespace Crawler.Tests;
@@ -17,7 +18,7 @@ namespace Crawler.Tests;
 // Theory'd over both engines since the JS DOM is the single code path for Jint + V8.
 public class JsDomRendererTests
 {
-    private static JsRenderer CreateJsRenderer(JsEngine engine)
+    private static JsRenderer CreateJsRenderer(JsEngine engine, JsRenderOptions? options = null)
     {
         var services = new ServiceCollection();
         var key = engine == JsEngine.V8 ? "js-v8" : "js-jint";
@@ -27,7 +28,7 @@ public class JsDomRendererTests
             services.AddJintCrawler(new CrawlerOptions());
         var provider = services.BuildServiceProvider();
         var factory = provider.GetRequiredKeyedService<IJsEngineFactory>(key);
-        return new JsRenderer(factory, new JsRenderOptions(), NullLogger.Instance);
+        return new JsRenderer(factory, options ?? new JsRenderOptions(), NullLogger.Instance);
     }
 
     [Theory]
@@ -283,5 +284,107 @@ public class JsDomRendererTests
         var rendered = Encoding.UTF8.GetString(result);
 
         Assert.Contains("href=\"/perf\"", rendered);
+    }
+
+    // Node load/error events on runtime-appended resources — the webpack lazy-chunk mechanism React Router
+    // code-splitting depends on. A same-origin <script src> is fetched and executed by the resource drain,
+    // then its load event fires (the bundle's own anchor proves execution, the onload handler's proves the
+    // event); a missing src fires error instead; an appended <link> fires load without a fetch. Regressed
+    // when the pure-JS DOM dropped the Bridge's resource drain, leaving SPAs stuck on "Loading chunk failed".
+    [Theory]
+    [InlineData(JsEngine.Jint)]
+    [InlineData(JsEngine.V8)]
+    public async Task JsMode_AppendedResourceNodes_FireLoadAndErrorEvents(JsEngine engine)
+    {
+        if (engine == JsEngine.V8)
+            Assert.SkipUnless(V8Support.IsAvailable, V8Support.UnavailableReason);
+
+        const string html = """
+            <html><body><div id="t"></div>
+            <script>
+            var d = document.getElementById('t');
+            var ok = document.createElement('script');
+            ok.src = '/chunk.js';
+            ok.onload = function () { var a = document.createElement('a'); a.setAttribute('href', '/loaded'); d.appendChild(a); };
+            ok.onerror = function () { var a = document.createElement('a'); a.setAttribute('href', '/notthis'); d.appendChild(a); };
+            document.head.appendChild(ok);
+            var bad = document.createElement('script');
+            bad.src = '/missing.js';
+            bad.onerror = function () { var a = document.createElement('a'); a.setAttribute('href', '/errored'); d.appendChild(a); };
+            document.head.appendChild(bad);
+            var css = document.createElement('link');
+            css.rel = 'stylesheet';
+            css.href = '/style.css';
+            css.addEventListener('load', function () { var a = document.createElement('a'); a.setAttribute('href', '/css'); d.appendChild(a); });
+            document.head.appendChild(css);
+            </script>
+            </body></html>
+            """;
+
+        var renderer = CreateJsRenderer(engine);
+        using var client = new HttpClient(new StubResourceHandler());
+        var result = await renderer.RenderAsync(Encoding.UTF8.GetBytes(html), "http://localhost:5000/", client, CancellationToken.None);
+        var rendered = Encoding.UTF8.GetString(result);
+
+        Assert.Contains("href=\"/executed\"", rendered);
+        Assert.Contains("href=\"/loaded\"", rendered);
+        Assert.Contains("href=\"/errored\"", rendered);
+        Assert.Contains("href=\"/css\"", rendered);
+        Assert.DoesNotContain("href=\"/notthis\"", rendered);
+    }
+
+    // Viewport: the JS DOM reports the configured screen size (default desktop 1920x1080) through
+    // window.innerWidth/screen/documentElement.clientWidth, and matchMedia evaluates width queries against it
+    // — so a responsive bundle takes its desktop branch. A mobile override flips every signal, proving both
+    // the media-query evaluator and the JsRenderOptions.Viewport plumbing. Was an always-false matchMedia stub.
+    [Theory]
+    [InlineData(JsEngine.Jint)]
+    [InlineData(JsEngine.V8)]
+    public async Task JsMode_SimulatesConfiguredViewport(JsEngine engine)
+    {
+        if (engine == JsEngine.V8)
+            Assert.SkipUnless(V8Support.IsAvailable, V8Support.UnavailableReason);
+
+        const string html = """
+            <html><body><div id="t"></div>
+            <script>
+            var d = document.getElementById('t');
+            var desktop = matchMedia('(min-width: 1024px)').matches && !matchMedia('(max-width: 768px)').matches;
+            var a = document.createElement('a');
+            a.setAttribute('href', '/w' + window.innerWidth + 'x' + window.innerHeight + '-screen' + screen.width + '-client' + document.documentElement.clientWidth + '-' + (desktop ? 'desktop' : 'mobile'));
+            d.appendChild(a);
+            </script>
+            </body></html>
+            """;
+
+        var desktop = await RenderViewport(engine, html, null);
+        Assert.Contains("href=\"/w1920x1080-screen1920-client1920-desktop\"", desktop);
+
+        var mobileOptions = new JsRenderOptions { Viewport = new Viewport { Width = 375, Height = 812 } };
+        var mobile = await RenderViewport(engine, html, mobileOptions);
+        Assert.Contains("href=\"/w375x812-screen375-client375-mobile\"", mobile);
+    }
+
+    private static async Task<string> RenderViewport(JsEngine engine, string html, JsRenderOptions? options)
+    {
+        var renderer = CreateJsRenderer(engine, options);
+        var result = await renderer.RenderAsync(Encoding.UTF8.GetBytes(html), "http://localhost:5000/", new HttpClient(), CancellationToken.None);
+        return Encoding.UTF8.GetString(result);
+    }
+
+    private sealed class StubResourceHandler : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            if (request.RequestUri!.AbsolutePath == "/chunk.js")
+            {
+                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent("var x=document.createElement('a');x.setAttribute('href','/executed');document.getElementById('t').appendChild(x);"),
+                });
+            }
+
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.NotFound));
+        }
     }
 }

@@ -1,9 +1,11 @@
 import { Element } from "./Element";
 import { HTMLElement } from "./HTMLElement";
 
-// Re-exported so the globals loop picks it up alongside the markers, but unlike them it is a real element:
-// `createElement("a")` and the parser instantiate it for href reflection.
+// Re-exported so the globals loop picks them up alongside the markers, but unlike them these are real
+// elements the parser/createElement instantiate for property reflection (anchor href, script src, link href).
 export { HTMLAnchorElement } from "./HTMLAnchorElement";
+export { HTMLScriptElement } from "./HTMLScriptElement";
+export { HTMLLinkElement } from "./HTMLLinkElement";
 
 // Marker interfaces for `instanceof` checks. Frameworks probe element types (React's getActiveElementDeep
 // does `node instanceof window.HTMLIFrameElement`, Vue references SVGElement) and a `instanceof undefined`
@@ -19,8 +21,6 @@ export class HTMLButtonElement extends HTMLElement { }
 export class HTMLImageElement extends HTMLElement { }
 export class HTMLFormElement extends HTMLElement { }
 export class HTMLStyleElement extends HTMLElement { }
-export class HTMLScriptElement extends HTMLElement { }
-export class HTMLLinkElement extends HTMLElement { }
 export class HTMLCanvasElement extends HTMLElement { }
 export class HTMLUnknownElement extends HTMLElement { }
 export class SVGElement extends Element { }

@@ -22,6 +22,7 @@ import { crypto } from "./crypto";
 import { MessageChannel, MessagePort } from "./MessageChannel";
 import { createStorage } from "./Storage";
 import { performance } from "./Performance";
+import { installViewport } from "./viewport";
 import { documentRef } from "../dom/documentRef";
 
 export const doc = new Document(globalThis as any);
@@ -40,12 +41,8 @@ export function installDOM(global: any): void {
     global.addEventListener = () => { };
     global.removeEventListener = () => { };
     global.dispatchEvent = () => true;
-    global.matchMedia = () => ({
-        matches: false,
-        addListener() { }, removeListener() { },
-        addEventListener() { }, removeEventListener() { },
-    });
     global.getComputedStyle = () => ({ getPropertyValue: () => "" });
+    installViewport(global);
     global.MutationObserver = function () {
         this.observe = () => { };
         this.disconnect = () => { };
