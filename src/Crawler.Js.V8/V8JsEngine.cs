@@ -15,7 +15,7 @@ internal sealed class V8JsEngine : IJsEngine
     private const int _stackTraceContextRadius = 48;
 
     private readonly V8RuntimePool _pool;
-    private readonly V8Runtime _runtime;
+    private readonly V8RuntimeLease _lease;
     private readonly V8ScriptEngine _engine;
     private readonly V8ModuleLoader _loader;
     private readonly V8StackTraceFormatter _stackTraceFormatter = new(_stackTraceContextRadius);
@@ -28,8 +28,8 @@ internal sealed class V8JsEngine : IJsEngine
         // EnableDynamicModuleImports: V8 rejects import() as "Not supported" otherwise (SPAs use it
         // for lazy routes). EnableTaskPromiseConversion: lets us await the entry's import() as a Task.
         _pool = pool;
-        _runtime = pool.Rent();
-        _engine = _runtime.CreateScriptEngine(V8ScriptEngineFlags.EnableDynamicModuleImports | V8ScriptEngineFlags.EnableTaskPromiseConversion);
+        _lease = pool.Rent();
+        _engine = _lease.Runtime.CreateScriptEngine(V8ScriptEngineFlags.EnableDynamicModuleImports | V8ScriptEngineFlags.EnableTaskPromiseConversion);
         _loader = new V8ModuleLoader(fetcher, baseUri);
         _engine.DocumentSettings.AccessFlags = DocumentAccessFlags.EnableAllLoading;
         _engine.DocumentSettings.Loader = _loader;
@@ -72,7 +72,9 @@ internal sealed class V8JsEngine : IJsEngine
     // Loading the entry via Execute creates a separate instance from the one the loader serves
     // when chunks circularly import it, duplicating module singletons. Seeding the cached loader
     // and importing keeps a single canonical instance; await drives V8's module evaluation.
-    public void EvaluateModule(string specifier, string source)
+    // cache is ignored: V8 keeps a per-engine module loader cache that is released with the context, so
+    // there is no cross-page accumulation to gate (unlike Jint's shared, crawl-lived module cache).
+    public void EvaluateModule(string specifier, string source, bool cache)
     {
         try
         {
@@ -140,6 +142,6 @@ internal sealed class V8JsEngine : IJsEngine
     public void Dispose()
     {
         _engine.Dispose();
-        _pool.Return(_runtime);
+        _pool.Return(_lease);
     }
 }

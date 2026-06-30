@@ -17,7 +17,7 @@ internal sealed class ProfilingJsEngine : IJsEngine
     public void EmbedFunction(string name, VFunc function) => Time("engine.EmbedFunction", () => _inner.EmbedFunction(name, function));
     public void Execute(string script) => Time("engine.Execute", () => _inner.Execute(script));
     public void ExecuteCached(string cacheKey, string script) => Time("engine.ExecuteCached", () => _inner.ExecuteCached(cacheKey, script));
-    public void EvaluateModule(string specifier, string source) => Time("engine.EvaluateModule", () => _inner.EvaluateModule(specifier, source));
+    public void EvaluateModule(string specifier, string source, bool cache) => Time("engine.EvaluateModule", () => _inner.EvaluateModule(specifier, source, cache));
     public T Evaluate<T>(string expression) => Time("engine.Evaluate", () => _inner.Evaluate<T>(expression));
     public object GetGlobalObject() => Time("engine.GetGlobalObject", () => _inner.GetGlobalObject());
     public object CreateArray(IReadOnlyList<object?> items) => Time("engine.CreateArray", () => _inner.CreateArray(items));

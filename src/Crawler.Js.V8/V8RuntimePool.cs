@@ -8,23 +8,60 @@ namespace Crawler.Js.V8;
 // compilation cache, so pooling runtimes amortizes isolate spin-up across pages. A runtime is
 // single-threaded, so a rented runtime is held exclusively until the page's engine is disposed; the
 // bag self-sizes to the crawl's peak concurrency.
+//
+// A V8 isolate never hands heap back to the OS and its compilation cache grows with every distinct
+// script it runs, so on a heterogeneous site a long-lived pooled isolate balloons unbounded. Each
+// runtime is therefore retired after a fixed number of pages and replaced with a fresh one, releasing
+// the accumulated heap and compilation cache while still amortizing spin-up over many pages.
 internal sealed class V8RuntimePool : IDisposable
 {
-    private readonly ConcurrentBag<V8Runtime> _runtimes = [];
+    private const int _maxUsesPerRuntime = 50;
 
-    public V8Runtime Rent()
+    private static readonly TimeSpan _heapSampleInterval = TimeSpan.FromMilliseconds(250);
+
+    private readonly ConcurrentBag<V8RuntimeLease> _leases = [];
+    private readonly nuint _maxHeapSizeBytes;
+
+    public V8RuntimePool(int maxHeapSizeMb = 0)
     {
-        return _runtimes.TryTake(out var runtime) ? runtime : new V8Runtime();
+        _maxHeapSizeBytes = maxHeapSizeMb > 0 ? (nuint)maxHeapSizeMb * 1024 * 1024 : 0;
     }
 
-    public void Return(V8Runtime runtime)
+    public V8RuntimeLease Rent()
     {
-        _runtimes.Add(runtime);
+        return _leases.TryTake(out var lease) ? lease : new V8RuntimeLease(CreateRuntime());
+    }
+
+    // A soft, sampled heap cap: ClearScript interrupts and throws a catchable error once the isolate
+    // crosses MaxHeapSize, so a runaway page is aborted (and caught per-page) instead of taking the
+    // process down — unlike V8RuntimeConstraints, whose hard limit raises a fatal OOM.
+    private V8Runtime CreateRuntime()
+    {
+        var runtime = new V8Runtime();
+        if (_maxHeapSizeBytes > 0)
+        {
+            runtime.MaxHeapSize = _maxHeapSizeBytes;
+            runtime.HeapSizeSampleInterval = _heapSampleInterval;
+        }
+
+        return runtime;
+    }
+
+    public void Return(V8RuntimeLease lease)
+    {
+        // The lease is owned exclusively by one engine between Rent and Return, so Uses is single-threaded.
+        if (++lease.Uses >= _maxUsesPerRuntime)
+        {
+            lease.Runtime.Dispose();
+            return;
+        }
+
+        _leases.Add(lease);
     }
 
     public void Dispose()
     {
-        while (_runtimes.TryTake(out var runtime))
-            runtime.Dispose();
+        while (_leases.TryTake(out var lease))
+            lease.Runtime.Dispose();
     }
 }

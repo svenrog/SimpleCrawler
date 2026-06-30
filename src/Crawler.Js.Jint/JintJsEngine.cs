@@ -74,11 +74,13 @@ internal sealed class JintJsEngine : IJsEngine
         }
     }
 
-    public void EvaluateModule(string specifier, string source)
+    public void EvaluateModule(string specifier, string source, bool cache)
     {
         try
         {
-            var prepared = _moduleCache.GetOrPrepare(specifier, source);
+            // An inline module's specifier is the page URL — unique per page, so caching its parsed form
+            // would retain one AST per crawled page; only stable-URL modules go through the shared cache.
+            var prepared = cache ? _moduleCache.GetOrPrepare(specifier, source) : Engine.PrepareModule(source, specifier);
             _engine.Modules.Add(specifier, builder => builder.AddModule(in prepared));
             _engine.Modules.Import(specifier);
         }

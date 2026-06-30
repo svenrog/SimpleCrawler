@@ -165,7 +165,7 @@ public sealed class JsRenderer
                     continue;
 
                 if (isModule)
-                    modules.Add(new ModuleScript(absolute.ToString(), source));
+                    modules.Add(new ModuleScript(absolute.ToString(), source, External: true));
                 else
                     regular.Add(new RegularScript(source, absolute.ToString(), External: true));
             }
@@ -175,7 +175,7 @@ public sealed class JsRenderer
                     continue;
 
                 if (isModule)
-                    modules.Add(new ModuleScript(pageUrl, text));
+                    modules.Add(new ModuleScript(pageUrl, text, External: false));
                 else
                     regular.Add(new RegularScript(text, pageUrl, External: false));
             }
@@ -380,7 +380,7 @@ public sealed class JsRenderer
     {
         try
         {
-            engine.EvaluateModule(module.Specifier, module.Source);
+            engine.EvaluateModule(module.Specifier, module.Source, module.External);
         }
         catch (JsException ex)
         {
