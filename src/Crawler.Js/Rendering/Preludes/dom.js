@@ -1780,18 +1780,6 @@
     global.window = global;
     global.self = global;
     global.navigator = navigator;
-    global.console = global.console || {
-      log() {
-      },
-      warn() {
-      },
-      error() {
-      },
-      info() {
-      },
-      debug() {
-      }
-    };
     global.location = createLocation();
     global.history = createHistory();
     global.addEventListener = () => {
@@ -1850,6 +1838,156 @@
     global.localStorage = createStorage();
     global.sessionStorage = createStorage();
     installTimerGlobals(global);
+  }
+
+  // console/constants.ts
+  var LEVEL_TRACE = 0;
+  var LEVEL_DEBUG = 1;
+  var LEVEL_INFO = 2;
+  var LEVEL_WARN = 3;
+  var LEVEL_ERROR = 4;
+
+  // console/utils.ts
+  function formatArgs(args) {
+    if (args.length === 0) return "";
+    if (args.length === 1) return stringify(args[0]);
+    const fmt = stringify(args[0]);
+    if (fmt.indexOf("%") < 0) return args.map(stringify).join(" ");
+    let out = "";
+    let argIdx = 1;
+    let i = 0;
+    while (i < fmt.length) {
+      if (fmt[i] === "%" && i + 1 < fmt.length && argIdx < args.length) {
+        const spec = fmt[i + 1];
+        if (spec === "s" || spec === "o" || spec === "O") {
+          out += stringify(args[argIdx++]);
+          i += 2;
+          continue;
+        }
+        if (spec === "d" || spec === "i") {
+          out += toInt(args[argIdx++]);
+          i += 2;
+          continue;
+        }
+        if (spec === "f") {
+          out += toFloat(args[argIdx++]);
+          i += 2;
+          continue;
+        }
+        if (spec === "%") {
+          out += "%";
+          i += 2;
+          continue;
+        }
+      }
+      out += fmt[i++];
+    }
+    while (argIdx < args.length) out += " " + stringify(args[argIdx++]);
+    return out;
+  }
+  function stringify(value) {
+    if (value === null) return "null";
+    if (value === void 0) return "undefined";
+    const type = typeof value;
+    if (type === "string") return value;
+    if (type === "number" || type === "boolean" || type === "bigint") return String(value);
+    if (type === "function" || type === "symbol") return String(value);
+    try {
+      return JSON.stringify(value) ?? String(value);
+    } catch {
+      return String(value);
+    }
+  }
+  function toInt(value) {
+    const n = Number(value);
+    return Number.isFinite(n) ? Math.trunc(n) : 0;
+  }
+  function toFloat(value) {
+    const n = Number(value);
+    return Number.isFinite(n) ? n : 0;
+  }
+
+  // console/api.ts
+  function installConsole(global) {
+    let minLevel = Number.POSITIVE_INFINITY;
+    const timers = /* @__PURE__ */ new Map();
+    const counters = /* @__PURE__ */ new Map();
+    let groupDepth = 0;
+    const emit = (level, build) => {
+      if (level < minLevel) return;
+      const log = global.__crawlerLog;
+      if (typeof log !== "function") return;
+      const indent = groupDepth > 0 ? " ".repeat(groupDepth * 2) : "";
+      log(level, indent + build());
+    };
+    const label = (args) => args.length > 0 ? stringify(args[0]) : "default";
+    global.console = {
+      log: (...args) => emit(LEVEL_INFO, () => formatArgs(args)),
+      info: (...args) => emit(LEVEL_INFO, () => formatArgs(args)),
+      debug: (...args) => emit(LEVEL_DEBUG, () => formatArgs(args)),
+      warn: (...args) => emit(LEVEL_WARN, () => formatArgs(args)),
+      error: (...args) => emit(LEVEL_ERROR, () => formatArgs(args)),
+      trace: (...args) => emit(LEVEL_TRACE, () => formatArgs(args)),
+      dir: (...args) => emit(LEVEL_DEBUG, () => formatArgs(args)),
+      dirxml: (...args) => emit(LEVEL_DEBUG, () => formatArgs(args)),
+      assert: (...args) => {
+        if (args.length > 0 && args[0]) return;
+        emit(LEVEL_ERROR, () => args.length > 1 ? "Assertion failed: " + formatArgs(args.slice(1)) : "Assertion failed");
+      },
+      group: (...args) => {
+        emit(LEVEL_DEBUG, () => "\u25B6 " + (args.length > 0 ? formatArgs(args) : ""));
+        groupDepth++;
+      },
+      groupCollapsed: (...args) => {
+        emit(LEVEL_DEBUG, () => "\u25B6 " + (args.length > 0 ? formatArgs(args) : ""));
+        groupDepth++;
+      },
+      groupEnd: () => {
+        if (groupDepth > 0) groupDepth--;
+      },
+      count: (...args) => {
+        const key = label(args);
+        const value = (counters.get(key) ?? 0) + 1;
+        counters.set(key, value);
+        emit(LEVEL_DEBUG, () => `${key}: ${value}`);
+      },
+      countReset: (...args) => {
+        const key = label(args);
+        if (!counters.has(key)) emit(LEVEL_WARN, () => `Count for '${key}' does not exist`);
+        else counters.set(key, 0);
+      },
+      time: (...args) => {
+        const key = label(args);
+        if (timers.has(key)) emit(LEVEL_WARN, () => `Timer '${key}' already exists`);
+        else timers.set(key, Date.now());
+      },
+      timeLog: (...args) => {
+        const key = label(args);
+        const start = timers.get(key);
+        if (start === void 0) {
+          emit(LEVEL_WARN, () => `Timer '${key}' does not exist`);
+          return;
+        }
+        const extra = args.length > 1 ? " " + formatArgs(args.slice(1)) : "";
+        emit(LEVEL_DEBUG, () => `${key}: ${Date.now() - start}ms${extra}`);
+      },
+      timeEnd: (...args) => {
+        const key = label(args);
+        const start = timers.get(key);
+        if (start === void 0) {
+          emit(LEVEL_WARN, () => `Timer '${key}' does not exist`);
+          return;
+        }
+        timers.delete(key);
+        emit(LEVEL_DEBUG, () => `${key}: ${Date.now() - start}ms - timer ended`);
+      },
+      table: (...args) => emit(LEVEL_DEBUG, () => args.length > 0 ? stringify(args[0]) : "(empty table)"),
+      clear: () => {
+      }
+    };
+    global.__crawlerSetLogLevel = (level) => {
+      minLevel = level;
+    };
   }
 
   // crawler/api.ts
@@ -1925,5 +2063,6 @@
 
   // index.ts
   installDOM(globalThis);
+  installConsole(globalThis);
   installCrawlerApi(globalThis);
 })();

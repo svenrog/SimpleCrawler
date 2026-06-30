@@ -7,6 +7,7 @@ using Crawler.Core;
 using Crawler.Tests.Helpers;
 using Crawler.Tests.Models;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using System.Net;
 using System.Text;
@@ -18,7 +19,7 @@ namespace Crawler.Tests;
 // Theory'd over both engines since the JS DOM is the single code path for Jint + V8.
 public class JsDomRendererTests
 {
-    private static JsRenderer CreateJsRenderer(JsEngine engine, JsRenderOptions? options = null)
+    private static JsRenderer CreateJsRenderer(JsEngine engine, JsRenderOptions? options = null, ILogger? logger = null)
     {
         var services = new ServiceCollection();
         var key = engine == JsEngine.V8 ? "js-v8" : "js-jint";
@@ -28,7 +29,7 @@ public class JsDomRendererTests
             services.AddJintCrawler(new CrawlerOptions());
         var provider = services.BuildServiceProvider();
         var factory = provider.GetRequiredKeyedService<IJsEngineFactory>(key);
-        return new JsRenderer(factory, options ?? new JsRenderOptions(), NullLogger.Instance);
+        return new JsRenderer(factory, options ?? new JsRenderOptions(), logger ?? NullLogger.Instance);
     }
 
     [Theory]
@@ -370,6 +371,54 @@ public class JsDomRendererTests
         var renderer = CreateJsRenderer(engine, options);
         var result = await renderer.RenderAsync(Encoding.UTF8.GetBytes(html), "http://localhost:5000/", new HttpClient(), CancellationToken.None);
         return Encoding.UTF8.GetString(result);
+    }
+
+    // console: the bundle's console.* calls reach the host ILogger only when JsRenderOptions.ScriptLogging
+    // opts in, formatting (incl. %-substitution) happens JS-side, and the configured level acts as a floor —
+    // console.debug is dropped under an Information floor while console.error gets through. Regressed when the
+    // big JS refactor removed LoggingJsConsole, leaving ScriptLogging dead and console a no-op.
+    [Theory]
+    [InlineData(JsEngine.Jint)]
+    [InlineData(JsEngine.V8)]
+    public async Task JsMode_ConsoleRoutesToLogger_GatedByScriptLogging(JsEngine engine)
+    {
+        if (engine == JsEngine.V8)
+            Assert.SkipUnless(V8Support.IsAvailable, V8Support.UnavailableReason);
+
+        const string html = """
+            <html><body><div id="t"></div>
+            <script>
+            console.debug('debug %s', 'noise');
+            console.log('hello %s number %d', 'world', 42);
+            console.error('boom');
+            </script>
+            </body></html>
+            """;
+
+        var enabled = new CapturingLogger();
+        await CreateJsRenderer(engine, new JsRenderOptions { ScriptLogging = LogLevel.Information }, enabled)
+            .RenderAsync(Encoding.UTF8.GetBytes(html), "http://localhost:5000/", new HttpClient(), CancellationToken.None);
+
+        Assert.Contains((LogLevel.Information, "hello world number 42"), enabled.Entries);
+        Assert.Contains((LogLevel.Error, "boom"), enabled.Entries);
+        Assert.DoesNotContain(enabled.Entries, e => e.Level == LogLevel.Debug);
+
+        var suppressed = new CapturingLogger();
+        await CreateJsRenderer(engine, new JsRenderOptions(), suppressed)
+            .RenderAsync(Encoding.UTF8.GetBytes(html), "http://localhost:5000/", new HttpClient(), CancellationToken.None);
+
+        Assert.Empty(suppressed.Entries);
+    }
+
+    private sealed class CapturingLogger : ILogger
+    {
+        public List<(LogLevel Level, string Message)> Entries { get; } = [];
+
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+        public bool IsEnabled(LogLevel logLevel) => true;
+
+        public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
+            => Entries.Add((logLevel, formatter(state, exception)));
     }
 
     private sealed class StubResourceHandler : HttpMessageHandler

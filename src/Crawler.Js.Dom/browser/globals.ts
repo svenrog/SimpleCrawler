@@ -33,9 +33,6 @@ export function installDOM(global: any): void {
     global.window = global;
     global.self = global;
     global.navigator = navigator;
-    global.console = global.console || {
-        log() { }, warn() { }, error() { }, info() { }, debug() { },
-    };
     global.location = createLocation();
     global.history = createHistory();
     global.addEventListener = () => { };

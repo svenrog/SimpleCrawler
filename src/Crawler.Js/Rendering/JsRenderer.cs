@@ -64,10 +64,10 @@ public sealed class JsRenderer
 
         var setupTime = RenderProfiler.Start();
         RunPrelude(engine, JsPreludes.Dom);
-        RenderProfiler.Stop("phase.setupGlobals", setupTime);
-
         engine.CallGlobal("__crawlerSetLocation", pageUrl);
         engine.CallGlobal("__crawlerSetViewport", (int)_options.Viewport.Width, (int)_options.Viewport.Height);
+        ConfigureScriptLogging(engine);
+        RenderProfiler.Stop("phase.setupGlobals", setupTime);
 
         var parseTime = RenderProfiler.Start();
         try
@@ -306,6 +306,49 @@ public sealed class JsRenderer
     }
 
     private static void RunPrelude(IJsEngine engine, in PreludeEntry prelude) => engine.ExecuteCached(prelude.Key, prelude.Source);
+
+    // The bundle's console.* calls reach the logger only when ScriptLogging opts in: the JS console stays a
+    // no-op until __crawlerSetLogLevel raises it off Infinity, so unset means no embedding and no formatting
+    // cost. The level numbers match LogLevel's, so the floor round-trips and __crawlerLog casts straight back.
+    private void ConfigureScriptLogging(IJsEngine engine)
+    {
+        if (_options.ScriptLogging is not { } level)
+            return;
+
+        engine.EmbedFunction("__crawlerLog", LogFromScript);
+        engine.CallGlobal("__crawlerSetLogLevel", (int)level);
+    }
+
+    private object? LogFromScript(params object?[] args)
+    {
+        var level = args.Length > 0 ? ToLogLevel(args[0]) : LogLevel.Information;
+        if (!_logger.IsEnabled(level))
+            return null;
+
+        var message = args.Length > 1 ? args[1]?.ToString() ?? string.Empty : string.Empty;
+        _logger.Log(level, "{Message}", message);
+        return null;
+    }
+
+    private static LogLevel ToLogLevel(object? value)
+    {
+        var number = value switch
+        {
+            int i => i,
+            long l => (int)l,
+            double d => (int)d,
+            _ => int.TryParse(value?.ToString(), out var parsed) ? parsed : (int)LogLevel.Information,
+        };
+
+        return number switch
+        {
+            <= 0 => LogLevel.Trace,
+            1 => LogLevel.Debug,
+            2 => LogLevel.Information,
+            3 => LogLevel.Warning,
+            _ => LogLevel.Error,
+        };
+    }
 
     private void RunModule(IJsEngine engine, ModuleScript module, string pageUrl)
     {
