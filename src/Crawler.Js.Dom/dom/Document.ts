@@ -19,6 +19,9 @@ export class Document extends Node {
     body: Element | null = null;
     defaultView: any;
     styleSheets: any[] = [];
+    // The <script> currently executing, set by the host around each classic script. Next's webpack
+    // auto-public-path asserts it `instanceof HTMLScriptElement` and reads its src; outside execution it's null.
+    currentScript: Element | null = null;
     private _cookies = new Map<string, string>();
 
     constructor(defaultView?: any) {

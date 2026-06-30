@@ -176,6 +176,7 @@ public sealed class JsRenderer
 
     private void RunRegularJs(IJsEngine engine, RegularScript script, string pageUrl)
     {
+        SetCurrentScript(engine, script.External ? script.Src : "");
         try
         {
             if (script.External)
@@ -187,7 +188,17 @@ public sealed class JsRenderer
         {
             _logger.LogWarning("Bundle execution error on '{url}': {message}\n{details}", pageUrl, ex.Message, ex.ErrorDetails);
         }
+        finally
+        {
+            SetCurrentScript(engine, null);
+        }
     }
+
+    // A classic <script> exposes itself as document.currentScript only while it runs synchronously; webpack's
+    // auto-public-path (and Next's instanceof-HTMLScriptElement invariant over it) reads that during chunk
+    // evaluation, so it must be set around each execution and cleared after — exactly as a browser does.
+    private static void SetCurrentScript(IJsEngine engine, string? src)
+        => engine.CallGlobal("__crawlerSetCurrentScript", src);
 
     private async Task DrainJsAsync(IJsEngine engine, Uri pageUri, HttpClient client, string pageUrl, CancellationToken cancellationToken)
     {
@@ -260,6 +271,7 @@ public sealed class JsRenderer
             return;
         }
 
+        SetCurrentScript(engine, absolute.AbsoluteUri);
         try
         {
             engine.ExecuteCached(absolute.AbsoluteUri, source);
@@ -269,6 +281,10 @@ public sealed class JsRenderer
             _logger.LogWarning("Chunk execution error on '{url}': {message}\n{details}", pageUrl, ex.Message, ex.ErrorDetails);
             FireResourceEvent(engine, id, "error");
             return;
+        }
+        finally
+        {
+            SetCurrentScript(engine, null);
         }
 
         FireResourceEvent(engine, id, "load");

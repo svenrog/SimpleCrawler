@@ -1597,6 +1597,9 @@
       this.head = null;
       this.body = null;
       this.styleSheets = [];
+      // The <script> currently executing, set by the host around each classic script. Next's webpack
+      // auto-public-path asserts it `instanceof HTMLScriptElement` and reads its src; outside execution it's null.
+      this.currentScript = null;
       this._cookies = /* @__PURE__ */ new Map();
       this.defaultView = defaultView || null;
       hideOwnFields(this);
@@ -2302,6 +2305,16 @@
   }
 
   // crawler/api.ts
+  function setCurrentScript(src) {
+    if (src == null) {
+      doc.currentScript = null;
+      return;
+    }
+    const script = new HTMLScriptElement();
+    const s = String(src);
+    if (s) script.src = s;
+    doc.currentScript = script;
+  }
   function collectScripts() {
     const out = [];
     if (!doc.documentElement) return out;
@@ -2356,6 +2369,9 @@
     };
     global.__crawlerSetViewport = (width, height) => {
       setViewport(width, height);
+    };
+    global.__crawlerSetCurrentScript = (src) => {
+      setCurrentScript(src);
     };
     global.__crawlerLoadHtml = (html) => {
       parseHTML(doc, html);

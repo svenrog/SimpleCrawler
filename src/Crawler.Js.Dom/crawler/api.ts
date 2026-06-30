@@ -5,8 +5,24 @@ import { applyUrl } from "../url/resolve";
 import { pumpTasks, pendingCount } from "../scheduler/taskQueue";
 import { takeResources, pendingResourceCount, fireResourceEvent } from "../dom/resourceLoader";
 import { setViewport } from "../browser/viewport";
+import { HTMLScriptElement } from "../dom/HTMLScriptElement";
 import type { ScriptDescriptor } from "../types/internal";
 import { NodeType } from "../types/NodeType";
+
+// The host sets document.currentScript around each classic script execution (and clears it after) so
+// webpack's auto-public-path — which reads document.currentScript.src and, under Next, asserts the value is
+// `instanceof HTMLScriptElement` — sees a real script element instead of undefined. A fresh JS instance is
+// required: only a genuine HTMLScriptElement satisfies the instanceof check on both engines.
+function setCurrentScript(src: unknown): void {
+    if (src == null) {
+        doc.currentScript = null;
+        return;
+    }
+    const script = new HTMLScriptElement();
+    const s = String(src);
+    if (s) script.src = s;
+    doc.currentScript = script as any;
+}
 
 function collectScripts(): ScriptDescriptor[] {
     const out: ScriptDescriptor[] = [];
@@ -65,6 +81,7 @@ function collectLinks(): { anchors: (string | null)[]; canonical: string | null;
 export function installCrawlerApi(global: any): void {
     global.__crawlerSetLocation = (url: string) => { applyUrl(url); };
     global.__crawlerSetViewport = (width: number, height: number) => { setViewport(width, height); };
+    global.__crawlerSetCurrentScript = (src: unknown) => { setCurrentScript(src); };
     global.__crawlerLoadHtml = (html: unknown) => { parseHTML(doc, html); };
     global.__crawlerCollectScripts = () => JSON.stringify(collectScripts());
     global.__crawlerCollectLinks = () => JSON.stringify(collectLinks());

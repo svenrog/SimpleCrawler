@@ -20,7 +20,6 @@ internal sealed class V8JsEngine : IJsEngine
     private readonly V8ModuleLoader _loader;
     private readonly V8StackTraceFormatter _stackTraceFormatter = new(_stackTraceContextRadius);
     private ScriptObject? _arrayFactory;
-    private ScriptObject? _scriptElementFactory;
 
     public V8JsEngine(IModuleFetcher fetcher, Uri baseUri, V8RuntimePool pool)
     {
@@ -114,16 +113,6 @@ internal sealed class V8JsEngine : IJsEngine
         _arrayFactory ??= (ScriptObject)_engine.Evaluate("(function(){return Array.prototype.slice.call(arguments);})");
         var args = items as object?[] ?? [.. items];
         return _arrayFactory.InvokeAsFunction(args);
-    }
-
-    // Next's auto-public-path asserts document.currentScript is `instanceof HTMLScriptElement` and reads
-    // its src; a host wrapper can't satisfy instanceof, so hand back a real JS instance of the (JS-defined)
-    // HTMLScriptElement class. Returns the native ScriptObject so the prototype chain survives the round-trip.
-    public object CreateScriptElement(string src)
-    {
-        _scriptElementFactory ??= (ScriptObject)_engine.Evaluate(
-            "(function(u){var s=new HTMLScriptElement();s.src=u;s.getAttribute=function(n){return n==='src'?u:null;};return s;})");
-        return _scriptElementFactory.InvokeAsFunction(src);
     }
 
     public void InvokeCallback(object callback)

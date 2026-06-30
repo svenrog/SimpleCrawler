@@ -14,7 +14,6 @@ internal sealed class JintJsEngine : IJsEngine
     private readonly Engine _engine;
     private readonly JintModuleCache _moduleCache;
     private readonly JintScriptCache _scriptCache;
-    private JsValue? _scriptElementFactory;
 
     public JintJsEngine(IModuleFetcher fetcher, Uri baseUri, JintModuleCache moduleCache, JintScriptCache scriptCache)
     {
@@ -106,16 +105,6 @@ internal sealed class JintJsEngine : IJsEngine
     {
         var array = items as object?[] ?? [.. items];
         return JsValue.FromObject(_engine, array);
-    }
-
-    // Next's auto-public-path asserts document.currentScript is `instanceof HTMLScriptElement` and reads
-    // its src; a host wrapper can't satisfy instanceof, so hand back a real JS instance of the (JS-defined)
-    // HTMLScriptElement class. Returns the native JsValue so the prototype chain survives the round-trip.
-    public object CreateScriptElement(string src)
-    {
-        _scriptElementFactory ??= _engine.Evaluate(
-            "(function(u){var s=new HTMLScriptElement();s.src=u;s.getAttribute=function(n){return n==='src'?u:null;};return s;})");
-        return _engine.Invoke(_scriptElementFactory, src);
     }
 
     public void InvokeCallback(object callback)

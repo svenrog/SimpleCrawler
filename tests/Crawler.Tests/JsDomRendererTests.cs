@@ -558,6 +558,65 @@ public class JsDomRendererTests
         }
     }
 
+    // document.currentScript must be the executing <script> while a classic script runs (so webpack's
+    // auto-public-path, and Next's `instanceof HTMLScriptElement` invariant over it, sees a real script
+    // element instead of undefined) and back to null once it returns. The drained chunk reads it during its
+    // own execution and reports its src — the exact path that threw Next's InvariantError on norengros.no.
+    [Theory]
+    [InlineData(JsEngine.Jint)]
+    [InlineData(JsEngine.V8)]
+    public async Task JsMode_CurrentScript_IsExecutingScript_ThenNull(JsEngine engine)
+    {
+        if (engine == JsEngine.V8)
+            Assert.SkipUnless(V8Support.IsAvailable, V8Support.UnavailableReason);
+
+        const string html = """
+            <html><body><div id="t"></div>
+            <script>
+            var ics = document.currentScript;
+            var d = document.getElementById('t');
+            var a = document.createElement('a');
+            a.setAttribute('href', '/inline-' + (ics instanceof HTMLScriptElement) + '-src' + ics.src);
+            d.appendChild(a);
+            var chunk = document.createElement('script');
+            chunk.src = '/cs-chunk.js';
+            document.head.appendChild(chunk);
+            </script>
+            </body></html>
+            """;
+
+        var renderer = CreateJsRenderer(engine);
+        using var client = new HttpClient(new CurrentScriptHandler());
+        var result = await renderer.RenderAsync(Encoding.UTF8.GetBytes(html), "http://localhost:5000/", client, CancellationToken.None);
+        var rendered = Encoding.UTF8.GetString(result);
+
+        Assert.Contains("href=\"/inline-true-src\"", rendered);
+        Assert.Contains("href=\"/chunk-true-/cs-chunk.js-after-null\"", rendered);
+    }
+
+    private sealed class CurrentScriptHandler : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            if (request.RequestUri!.AbsolutePath == "/cs-chunk.js")
+            {
+                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent(
+                        "var cs=document.currentScript;" +
+                        "var ok=(cs instanceof HTMLScriptElement)&&/cs-chunk\\.js$/.test(cs.src);" +
+                        "setTimeout(function(){" +
+                        "var after=document.currentScript===null?'null':'set';" +
+                        "var a=document.createElement('a');" +
+                        "a.setAttribute('href','/chunk-'+ok+'-'+cs.src.replace(/^https?:\\/\\/[^/]+/,'')+'-after-'+after);" +
+                        "document.getElementById('t').appendChild(a);},0);"),
+                });
+            }
+
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.NotFound));
+        }
+    }
+
     // Lazy-mount-on-visible blocks (e.g. AntD skeletons) stay placeholders until an IntersectionObserver
     // reports them intersecting; the headless render has no scroll, so observe() must fire isIntersecting once.
     // The injected content goes through createRange().createContextualFragment() — the script-injection path
