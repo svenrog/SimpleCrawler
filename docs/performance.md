@@ -12,7 +12,7 @@ Lower is better. Relative guidance, not guarantees.
 | V8 + AngleSharp        | 218 ms | 27 MB\*       |                          |
 | V8 + HtmlAgilityPack   | 112 ms | 20 MB\*       | fastest, ~6.4× baseline  |
 
-\* V8 allocations understate real memory, the isolate's heap is native, off the .NET GC. Jint figures are complete.
+\* V8 allocations understate real memory, the heap is native, off the .NET GC.
 
 Static backends parse the same page in low tens of ms / ~30 MB, no scripting. Prefer static when links are in the server HTML.
 Drop to JS (V8 + HtmlAgilityPack, or Jint + HtmlAgilityPack for AOT) when not.

@@ -2,20 +2,22 @@
 
 This section describes configuration in detail, when running the CLI isn't enough.
 
-- [CrawlerOptions](./crawler-options.md), options that control crawling behaviour.
-- [JavaScript crawlers](./js-tier.md) — Jint vs V8, HTML parser, `JsRenderOptions`.
-- [Performance](./performance.md) — measured numbers.
+- [`CrawlerOptions`](./crawler-options.md): shared options.
+- [JavaScript crawlers](./javascript-crawlers.md): Jint vs V8, HTML parsers, `JsRenderOptions`.
+- [Performance](./performance.md): comparison of crawler performance.
 
 ## Pipeline
 
-`Crawler.Core` is a two-stage fetch→parse pipeline driven by one `CrawlerOptions`. A backend only implements
-`LoadResponse()` (load a page) and `ExtractPageData()` (pull links); everything else — concurrency, robots,
-sitemap, visited-set, link resolution — is shared. Swapping backend = one DI call.
+`Crawler.Core` is a two-stage fetch → parse pipeline. A backend only implements
+`LoadResponse()` (load a page) and `ExtractPageData()` (extract links); everything else is shared. Swapping backend is one DI call.
 
-<p align="center"><img src="./pipeline.svg" alt="Shared CrawlerOptions drives a fetch→parse pipeline that feeds a pluggable Static / JS / Headless backend; discovered links loop back to discovery." width="800"></p>
-
-Fetch is I/O-bound, parse is CPU-bound — splitting them lets you run many fetches while capping parses near
-core count. See [`ParseConcurrency`](./crawler-options.md#parseconcurrency).
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="./pipeline-dark.svg">
+    <img src="./pipeline.svg" alt="Shared CrawlerOptions drives a fetch→parse pipeline that feeds a pluggable Static / JS / Headless backend; discovered links loop back t
+o discovery." width="800">
+  </picture>
+</p>
 
 ## Tiers
 
@@ -27,21 +29,14 @@ Trade fidelity for cost. Start at the cheapest tier that returns the links you n
 | **JS**       | yes     | no      | ~5–30× | client-only SPA builds links at runtime, standard APIs  |
 | **Headless** | yes     | yes     | ~50–100× | needs a real browser (RSC streaming, canvas, workers) |
 
-\* Per-page, relative to a static parse. Measured numbers: [performance](./performance.md).
+\* Per-page, relative to a static parse. Measured numbers found under [performance](./performance.md).
 
-**Static** (`HtmlAgilityPack`, `AngleSharp`) — one HTTP request + HTML parse, no scripts. HtmlAgilityPack:
-default, fast, forgiving of bad markup, lowest allocations. AngleSharp: spec-compliant WHATWG, slightly
-heavier. Misses anything injected by client JS.
+**Static** (`HtmlAgilityPack`, `AngleSharp`) crawlers do one HTTP request, then a HTML parse, they run no scripts and miss anything injected by client JS.
 
-**JS** (`Crawler.Js`) — fetches the shell, builds an in-process DOM (`dom.js`), runs scripts in Jint or V8,
-extracts links. Renders real React/Preact/Solid/Svelte/Vue/jQuery without a browser. It's a DOM shim, not a
-browser: RSC streaming, service workers, canvas/WebGL are out of scope — use headless for those. Two-part
+**JS** (`Crawler.Js`) crawlers fetches the shell, builds an in-process DOM (`dom.js`), runs scripts in Jint or V8, extracts links. Renders real markup without a browser. Two-part
 choice (engine + parser): [JS tier](./js-tier.md).
 
-**Headless** (`Playwright`, `Puppeteer`) — real Chromium, max fidelity, max cost. Fallback when the JS shim
-can't render a site. Both honour
-[`BlockNonEssentialResources`](./crawler-options.md#blocknonessentialresources). Needs a browser binary;
-unfriendly to AOT.
+**Headless** (`Playwright`, `Puppeteer`) crawlers run a real browser with everything in it. This is for sites that use advanced features like: RSC streaming, service workers, canvas/WebGL that the JavaScript crawlers don't support.
 
 ## Wiring
 
@@ -70,11 +65,10 @@ var crawler = services.BuildServiceProvider().GetRequiredService<DefaultHtmlAgil
 var result = await crawler.Start("https://example.com/");         // result.Urls = discovered set
 ```
 
-`AddAngleSharpCrawler` → `DefaultAngleSharpCrawler`, same shape.
 
 ### JS (engine + parser)
 
-Register one engine and at most one `IHtmlParser` (renderer takes the first; none = `dom.js`'s own tokenizer).
+Register one engine and at most one `IHtmlParser` (if no parser is configured `dom.js`'s own tokenizer is used).
 
 ```csharp
 using Crawler.Js.V8;                 // engine: or Crawler.Js.Jint
@@ -90,9 +84,6 @@ var crawler = services.BuildServiceProvider().GetRequiredService<DefaultV8Crawle
 var result = await crawler.Start("https://example.com/");
 ```
 
-`AddV8Crawler`↔`AddJintCrawler`, `AddHtmlAgilityPackHtmlParser`↔`AddAngleSharpHtmlParser`. Resolve
-`DefaultV8Crawler`/`DefaultJintCrawler`.
-
 ### Headless
 
 ```csharp
@@ -104,5 +95,3 @@ services.AddPlaywrightCrawler(options);   // no HttpClient hook; configure via b
 var crawler = services.BuildServiceProvider().GetRequiredService<DefaultPlaywrightCrawler>();
 var result = await crawler.Start("https://example.com/");
 ```
-
-`AddPuppeteerCrawler` → `DefaultPuppeteerCrawler`.

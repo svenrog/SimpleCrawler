@@ -16,8 +16,8 @@ This project stemmed from the need to crawl a single domain in preparation of lo
 | ---------- | ------- | ------- |
 | [HtmlAgilityPack](https://html-agility-pack.net/) | :heavy_check_mark: | :x: |
 | [AngleSharp](https://anglesharp.github.io/) | :heavy_check_mark: | :x: |
-| [Jint](https://github.com/sebastienros/jint) | :heavy_check_mark: | :grey_exclamation:[^1] |
-| [Clearscript.V8](https://github.com/ClearFoundry/ClearScript) | :heavy_check_mark: | :grey_exclamation:[^1] |
+| [Jint](https://github.com/sebastienros/jint) | :heavy_check_mark: | :grey_exclamation: |
+| [Clearscript.V8](https://github.com/ClearFoundry/ClearScript) | :heavy_check_mark: | :grey_exclamation: |
 | [Playwright](https://playwright.dev/) | :heavy_check_mark: | :heavy_check_mark: |
 | [Puppeteer Sharp](https://www.puppeteersharp.com/) | :heavy_check_mark: | :heavy_check_mark: |
 | [Selenium WebDriver](https://www.selenium.dev/) | :skull: | :skull: |
@@ -52,23 +52,25 @@ Wiring a backend into your own project [`docs/`](./docs/configuration.md):
 
 The Anglesharp maintainers claims the library handles JavaScript with AngleSharp.Js. In reality it only does so on an experimental level, complex libraries like React do not work.
 
-## Jint and V8
+### Jint and V8
 
 Since AngleSharp or any other library lacked the ability to render simpler JavaScript sites we added the `Crawler.Js` project that provides a rendering engine. There are 2 engine implementations, `ClearScript.V8` and `Jint`.
 
-Both are tested against the major client-side frameworks and libraries below. The framework bundles are real client-only [Astro](https://astro.build/) islands.
+Both are tested against the major client-side frameworks and libraries below. The framework bundles are real client-only [Astro](https://astro.build/) islands. The test do not cover the full featureset, but a list of real sites have been used for battle testing.
 
-| Framework / library | Jint | ClearScript.V8 |
-| ---------- | ------- | ------- |
-| [React](https://react.dev/) | :heavy_check_mark: | :heavy_check_mark: |
-| [Preact](https://preactjs.com/) | :heavy_check_mark: | :heavy_check_mark: |
-| [Solid](https://www.solidjs.com/) | :heavy_check_mark: | :heavy_check_mark: |
-| [Svelte](https://svelte.dev/) | :heavy_check_mark: | :heavy_check_mark: |
-| [Vue](https://vuejs.org/) | :x:[^2] | :heavy_check_mark: |
-| [jQuery](https://jquery.com/) | :heavy_check_mark:[^3] | :heavy_check_mark:[^3] |
+- [React](https://react.dev/) 
+- [Preact](https://preactjs.com/)
+- [Solid](https://www.solidjs.com/)
+- [Svelte](https://svelte.dev/)
+- [Vue](https://vuejs.org/) (Jint can't run [Vue](./docs/javascript-crawlers.md))
 
-[^2]: Vue's `createRenderer` import resolves to a non-callable binding under Jint's ES-module evaluation, so the bundle aborts before mounting. Renders correctly on V8.
-[^3]: Covers jQuery's UMD init / feature-detection surface (`createDocumentFragment`, `implementation.createHTMLDocument`, reflected `script.async`/`defer`/`type`) that real bundles touch on load, rather than the full library.
+#### Frameworks and technologies
+
+Other frameworks encountered during testing.
+
+- [jQuery](https://jquery.com/)
+- [React Router](https://reactrouter.com/)
+- [NextJs](https://nextjs.org/) (streaming is not supported)
 
 ### Selenium WebDriver
 
