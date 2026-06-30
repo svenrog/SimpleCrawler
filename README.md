@@ -36,6 +36,15 @@ Full list of possible options can be found [here](./src/SimpleCrawler/Options.cs
 
 Adjusting which implementation is used can be done by referencing another implementation project and switching service collection extension [here](./src/SimpleCrawler/Extensions/ServiceCollectionExtensions.cs).
 
+## Configuration :gear:
+
+Wiring a backend into your own project [`docs/`](./docs/configuration.md):
+
+- [Overview](./docs/configuration.md): Static/JS/Headless tiers, DI.
+- [`CrawlerOptions`](./docs/crawler-options.md): shared options.
+- [JavaScript crawlers](./docs/javascript-crawlers.md): Jint vs V8, HTML parsers, `JsRenderOptions`.
+- [Performance](./docs/performance.md): comparison of crawler performance.
+
 
 ## Notes on implementations
 
@@ -45,7 +54,7 @@ The Anglesharp maintainers claims the library handles JavaScript with AngleSharp
 
 ## Jint and V8
 
-Since AngleSharp or any other library lacked the ability to render simpler Javascript sites we added the `Crawler.Js` project that provides a rendering engine. There are 2 engine implementations, `ClearScript.V8` and `Jint`.
+Since AngleSharp or any other library lacked the ability to render simpler JavaScript sites we added the `Crawler.Js` project that provides a rendering engine. There are 2 engine implementations, `ClearScript.V8` and `Jint`.
 
 Both are tested against the major client-side frameworks and libraries below. The framework bundles are real client-only [Astro](https://astro.build/) islands.
 
