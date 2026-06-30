@@ -1,7 +1,10 @@
 using Crawler.Core;
 using Crawler.Js.Abstractions;
+using Crawler.Js.AngleSharp;
+using Crawler.Js.HtmlAgilityPack;
 using Crawler.Js.Jint;
 using Crawler.Js.Models;
+using Crawler.Js.Parsing;
 using Crawler.Js.Rendering;
 using Crawler.Js.V8;
 using Crawler.Tests.Helpers;
@@ -19,7 +22,7 @@ namespace Crawler.Tests;
 // Theory'd over both engines since the JS DOM is the single code path for Jint + V8.
 public class JsDomRendererTests
 {
-    private static JsRenderer CreateJsRenderer(JsEngine engine, JsRenderOptions? options = null, ILogger? logger = null)
+    private static JsRenderer CreateJsRenderer(JsEngine engine, JsRenderOptions? options = null, ILogger? logger = null, IHtmlParser? htmlParser = null)
     {
         var services = new ServiceCollection();
         var key = engine == JsEngine.V8 ? "js-v8" : "js-jint";
@@ -29,7 +32,7 @@ public class JsDomRendererTests
             services.AddJintCrawler(new CrawlerOptions());
         var provider = services.BuildServiceProvider();
         var factory = provider.GetRequiredKeyedService<IJsEngineFactory>(key);
-        return new JsRenderer(factory, options ?? new JsRenderOptions(), logger ?? NullLogger.Instance);
+        return new JsRenderer(factory, options ?? new JsRenderOptions(), htmlParser, logger ?? NullLogger.Instance);
     }
 
     [Theory]
@@ -687,5 +690,46 @@ public class JsDomRendererTests
         var rendered = Encoding.UTF8.GetString(result);
 
         Assert.Contains("href=\"/ok-3-true-true-true\"", rendered);
+    }
+
+    // A native parser (AngleSharp/HAP) feeds the initial DOM via __crawlerLoadTree; the parsed anchors,
+    // canonical/robots head tags, and the inline-script mutation must all match the JS tokenizer path, so a
+    // crawl extracts the same links regardless of which parser is registered.
+    [Theory]
+    [InlineData(JsEngine.Jint)]
+    [InlineData(JsEngine.V8)]
+    public async Task JsMode_NativeParser_ProducesSameDomAsJsParser(JsEngine engine)
+    {
+        if (engine == JsEngine.V8)
+            Assert.SkipUnless(V8Support.IsAvailable, V8Support.UnavailableReason);
+
+        const string html = """
+            <!doctype html><html><head><link rel="canonical" href="/canon" /><meta name="robots" content="noindex" /></head>
+            <body>
+            <a href="/one">1</a><a href="/two">2</a><a href="/three">3</a>
+            <div id="t"></div>
+            <script>var a=document.createElement('a');a.setAttribute('href','/injected');document.getElementById('t').appendChild(a);</script>
+            </body></html>
+            """;
+
+        var js = await RenderHtml(engine, html, null);
+        var angleSharp = await RenderHtml(engine, html, new AngleSharpHtmlParser());
+        var hap = await RenderHtml(engine, html, new HtmlAgilityPackHtmlParser());
+
+        foreach (var renderer in new[] { js, angleSharp, hap })
+        {
+            Assert.Contains("href=\"/one\"", renderer);
+            Assert.Contains("href=\"/two\"", renderer);
+            Assert.Contains("href=\"/three\"", renderer);
+            Assert.Contains("href=\"/injected\"", renderer);
+            Assert.Contains("href=\"/canon\"", renderer);
+        }
+    }
+
+    private static async Task<string> RenderHtml(JsEngine engine, string html, IHtmlParser? parser)
+    {
+        var renderer = CreateJsRenderer(engine, htmlParser: parser);
+        var result = await renderer.RenderAsync(Encoding.UTF8.GetBytes(html), "http://localhost:5000/", new HttpClient(), CancellationToken.None);
+        return Encoding.UTF8.GetString(result);
     }
 }
