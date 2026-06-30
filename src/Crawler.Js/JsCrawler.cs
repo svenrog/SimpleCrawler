@@ -1,5 +1,6 @@
 using Crawler.Js.Abstractions;
 using Crawler.Js.Models;
+using Crawler.Js.Parsing;
 using Crawler.Js.Rendering;
 using Crawler.Core;
 using Crawler.Core.Helpers;
@@ -17,11 +18,11 @@ public abstract class JsCrawler<TResult> : AbstractRobotsCrawler<JsExtract, TRes
     private readonly JsRenderer _renderer;
     private readonly ILogger _logger;
 
-    protected JsCrawler(HttpClient client, IJsEngineFactory engineFactory, IRobotClient robotClient, IOptions<CrawlerOptions> options, IOptions<JsRenderOptions> renderOptions, ILogger logger)
+    protected JsCrawler(HttpClient client, IJsEngineFactory engineFactory, IRobotClient robotClient, IOptions<CrawlerOptions> options, IOptions<JsRenderOptions> renderOptions, IEnumerable<IHtmlParser> parsers, ILogger logger)
         : base(robotClient, options, logger)
     {
         _client = client;
-        _renderer = new JsRenderer(engineFactory, renderOptions.Value, logger);
+        _renderer = new JsRenderer(engineFactory, renderOptions.Value, parsers.FirstOrDefault(), logger);
         _logger = logger;
     }
 

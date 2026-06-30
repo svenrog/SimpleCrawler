@@ -12,6 +12,26 @@ import { decodeEntities } from "./entities";
 import { createTagScanners, findRawTextClose } from "./tokenizer";
 import { parserRef } from "./parserRef";
 
+// The element-class selection the string parser uses: known tag → reflected subclass, else a plain Element.
+// Shared with the tree builder so a C#-parsed tree instantiates the same node types as the tokenizer path
+// (deliberately not document.createElement, which would consult customElements during initial parse).
+export function createLocalElement(tag: string): Element {
+    return tag === "a" ? new HTMLAnchorElement()
+        : tag === "script" ? new HTMLScriptElement()
+            : tag === "link" ? new HTMLLinkElement()
+                : new Element(tag);
+}
+
+// Attaches a finished root tree to the document. Shared so the string parser and the tree builder produce the
+// same documentElement/head/body wiring.
+export function wireDocument(doc: Document, root: Element, head: Element | null, body: Element | null): void {
+    doc.documentElement = root;
+    doc.head = head;
+    doc.body = body;
+    root.parentNode = doc;
+    doc.childNodes = [root];
+}
+
 export function parseHTML(doc: Document, input: unknown): Element {
     const src = input == null ? "" : String(input);
     const len = src.length;
@@ -135,10 +155,7 @@ export function parseHTML(doc: Document, input: unknown): Element {
             continue;
         }
 
-        const el = tag === "a" ? new HTMLAnchorElement()
-            : tag === "script" ? new HTMLScriptElement()
-                : tag === "link" ? new HTMLLinkElement()
-                    : new Element(tag);
+        const el = createLocalElement(tag);
         if (attrs) for (const key in attrs) el.setAttribute(key, attrs[key]);
 
         if (RAWTEXT_ELEMENTS[tag]) {
@@ -157,11 +174,7 @@ export function parseHTML(doc: Document, input: unknown): Element {
         i = j;
     }
 
-    doc.documentElement = root;
-    doc.head = head;
-    doc.body = body;
-    root.parentNode = doc;
-    doc.childNodes = [root];
+    wireDocument(doc, root, head, body);
     return root;
 }
 

@@ -1,5 +1,6 @@
 import { doc } from "../browser/globals";
 import { parseHTML } from "../html/parser";
+import { buildDocumentFromTree } from "../html/treeBuilder";
 import { serializeNode } from "../html/serializer";
 import { applyUrl } from "../url/resolve";
 import { pumpTasks, pendingCount } from "../scheduler/taskQueue";
@@ -83,6 +84,7 @@ export function installCrawlerApi(global: any): void {
     global.__crawlerSetViewport = (width: number, height: number) => { setViewport(width, height); };
     global.__crawlerSetCurrentScript = (src: unknown) => { setCurrentScript(src); };
     global.__crawlerLoadHtml = (html: unknown) => { parseHTML(doc, html); };
+    global.__crawlerLoadTree = (json: unknown) => { buildDocumentFromTree(doc, String(json)); };
     global.__crawlerCollectScripts = () => JSON.stringify(collectScripts());
     global.__crawlerCollectLinks = () => JSON.stringify(collectLinks());
     global.__crawlerPending = () => pendingCount();

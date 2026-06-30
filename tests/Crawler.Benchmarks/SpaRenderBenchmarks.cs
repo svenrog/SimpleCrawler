@@ -1,9 +1,9 @@
 using BenchmarkDotNet.Attributes;
 using Crawler.Core;
+using Crawler.Js.AngleSharp;
+using Crawler.Js.HtmlAgilityPack;
 using Crawler.Js.Jint;
 using Crawler.Js.V8;
-using Crawler.Playwright;
-using Crawler.Puppeteer;
 using Crawler.TestHost.Infrastructure.Factories;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.DependencyInjection;
@@ -14,8 +14,8 @@ namespace Crawler.Benchmarks;
 
 // Exercises the real JS render path: every route returns the same client-only SPA shell, so a crawler
 // only discovers the link set after rendering it and then re-runs the engine once per discovered link.
-// Only crawlers that execute JS are included — a static crawler sees the empty shell and follows nothing,
-// so it would crawl a single page and isn't comparable. Headless (Playwright/Puppeteer) is the ceiling.
+// Each (engine x HTML parser) pair is its own benchmark so the native pre-parse backends (AngleSharp / HAP
+// feeding the tree to dom.js via __crawlerLoadTree) can be compared against dom.js's own JS tokenizer.
 [MemoryDiagnoser]
 [ShortRunJob]
 public class SpaRenderBenchmarks
@@ -26,68 +26,75 @@ public class SpaRenderBenchmarks
 
     private WebApplication _host;
     private CancellationTokenSource _tokenSource;
-    private ServiceProvider _serviceProvider;
+    private readonly List<ServiceProvider> _providers = new();
 
-    private DefaultJintCrawler _angleSharpJintCrawler;
-    private DefaultV8Crawler _angleSharpV8Crawler;
-    private DefaultPlaywrightCrawler _playwrightCrawler;
-    private DefaultPuppeteerCrawler _puppeteerCrawler;
+    private DefaultJintCrawler _jintJsParser;
+    private DefaultJintCrawler _jintAngleSharp;
+    private DefaultJintCrawler _jintHtmlAgilityPack;
+    private DefaultV8Crawler _v8JsParser;
+    private DefaultV8Crawler _v8AngleSharp;
+    private DefaultV8Crawler _v8HtmlAgilityPack;
 
     [GlobalSetup]
     public void Setup()
     {
-        var services = new ServiceCollection();
-        var options = new CrawlerOptions
-        {
-            CrawlDelay = 0,
-            Concurrency = 8,
-            RespectMetaRobots = false,
-            RespectRobotsTxt = false,
-        };
+        _jintJsParser = ResolveJint(null);
+        _jintAngleSharp = ResolveJint(s => s.AddAngleSharpHtmlParser());
+        _jintHtmlAgilityPack = ResolveJint(s => s.AddHtmlAgilityPackHtmlParser());
+        _v8JsParser = ResolveV8(null);
+        _v8AngleSharp = ResolveV8(s => s.AddAngleSharpHtmlParser());
+        _v8HtmlAgilityPack = ResolveV8(s => s.AddHtmlAgilityPackHtmlParser());
 
-        services.AddJintCrawler(options);
-        services.AddV8Crawler(options);
-        services.AddPlaywrightCrawler(options);
-        services.AddPuppeteerCrawler(options);
-        services.AddSingleton<ILogger>(NullLogger.Instance);
-        services.AddScoped<CancellationTokenSource>();
-
-        _serviceProvider = services.BuildServiceProvider();
-
-        _angleSharpJintCrawler = _serviceProvider.GetRequiredService<DefaultJintCrawler>();
-        _angleSharpV8Crawler = _serviceProvider.GetRequiredService<DefaultV8Crawler>();
-        _playwrightCrawler = _serviceProvider.GetRequiredService<DefaultPlaywrightCrawler>();
-        _puppeteerCrawler = _serviceProvider.GetService<DefaultPuppeteerCrawler>();
-
-        _tokenSource = _serviceProvider.GetRequiredService<CancellationTokenSource>();
-
+        _tokenSource = new CancellationTokenSource();
         _host = SpaWebApplicationFactory.Create(_entry, _framework);
         _host.StartAsync(_tokenSource.Token);
     }
 
+    // One IHtmlParser is registered per provider so the renderer's parsers.FirstOrDefault() selects it; a null
+    // parser action leaves the set empty and the renderer falls back to dom.js's __crawlerLoadHtml tokenizer.
+    private DefaultJintCrawler ResolveJint(Action<IServiceCollection> parser)
+        => Build(s => s.AddJintCrawler(_options), parser).GetRequiredService<DefaultJintCrawler>();
+
+    private DefaultV8Crawler ResolveV8(Action<IServiceCollection> parser)
+        => Build(s => s.AddV8Crawler(_options), parser).GetRequiredService<DefaultV8Crawler>();
+
+    private ServiceProvider Build(Action<IServiceCollection> engine, Action<IServiceCollection> parser)
+    {
+        var services = new ServiceCollection();
+        engine(services);
+        parser?.Invoke(services);
+        services.AddSingleton<ILogger>(NullLogger.Instance);
+
+        var provider = services.BuildServiceProvider();
+        _providers.Add(provider);
+        return provider;
+    }
+
+    private static readonly CrawlerOptions _options = new()
+    {
+        CrawlDelay = 0,
+        Concurrency = 8,
+        RespectMetaRobots = false,
+        RespectRobotsTxt = false,
+    };
+
     [Benchmark(Baseline = true)]
-    public async Task AngleSharpJintCrawl()
-    {
-        await _angleSharpJintCrawler.Start(_entry, _tokenSource.Token);
-    }
+    public Task JintJsParser() => _jintJsParser.Start(_entry, _tokenSource.Token);
 
     [Benchmark]
-    public async Task AngleSharpV8Crawl()
-    {
-        await _angleSharpV8Crawler.Start(_entry, _tokenSource.Token);
-    }
+    public Task JintAngleSharp() => _jintAngleSharp.Start(_entry, _tokenSource.Token);
 
     [Benchmark]
-    public async Task PlaywrightCrawl()
-    {
-        await _playwrightCrawler.Start(_entry, _tokenSource.Token);
-    }
+    public Task JintHtmlAgilityPack() => _jintHtmlAgilityPack.Start(_entry, _tokenSource.Token);
 
     [Benchmark]
-    public async Task PuppeteerCrawl()
-    {
-        await _puppeteerCrawler.Start(_entry, _tokenSource.Token);
-    }
+    public Task V8JsParser() => _v8JsParser.Start(_entry, _tokenSource.Token);
+
+    [Benchmark]
+    public Task V8AngleSharp() => _v8AngleSharp.Start(_entry, _tokenSource.Token);
+
+    [Benchmark]
+    public Task V8HtmlAgilityPack() => _v8HtmlAgilityPack.Start(_entry, _tokenSource.Token);
 
     [GlobalCleanup]
     public async Task Cleanup()
@@ -95,8 +102,13 @@ public class SpaRenderBenchmarks
         await _tokenSource.CancelAsync();
         await _host.DisposeAsync();
 
-        await _serviceProvider.DisposeAsync();
-        _serviceProvider = null;
+        foreach (var provider in _providers)
+        {
+            await provider.DisposeAsync();
+        }
+
+        _providers.Clear();
+        _tokenSource.Dispose();
         _tokenSource = null;
     }
 }

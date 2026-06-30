@@ -2,6 +2,7 @@ using Crawler.Js.Abstractions;
 using Crawler.Js.Errors;
 using Crawler.Js.Models;
 using Crawler.Js.Network;
+using Crawler.Js.Parsing;
 using Crawler.Js.Services;
 using Microsoft.Extensions.Logging;
 using System.Text;
@@ -18,13 +19,15 @@ public sealed class JsRenderer
 
     private readonly IJsEngineFactory _engineFactory;
     private readonly JsRenderOptions _options;
+    private readonly IHtmlParser? _htmlParser;
     private readonly ILogger _logger;
     private readonly SourceCache _sources = new();
 
-    public JsRenderer(IJsEngineFactory engineFactory, JsRenderOptions options, ILogger logger)
+    public JsRenderer(IJsEngineFactory engineFactory, JsRenderOptions options, IHtmlParser? htmlParser, ILogger logger)
     {
         _engineFactory = engineFactory;
         _options = options;
+        _htmlParser = htmlParser;
         _logger = logger;
     }
 
@@ -72,7 +75,14 @@ public sealed class JsRenderer
         var parseTime = RenderProfiler.Start();
         try
         {
-            engine.CallGlobal("__crawlerLoadHtml", html);
+            if (_htmlParser is not null)
+            {
+                engine.CallGlobal("__crawlerLoadTree", _htmlParser.Parse(html).ToJson());
+            }
+            else
+            {
+                engine.CallGlobal("__crawlerLoadHtml", html);
+            }
         }
         catch (JsException ex)
         {

@@ -1354,6 +1354,16 @@
   }
 
   // html/parser.ts
+  function createLocalElement(tag) {
+    return tag === "a" ? new HTMLAnchorElement() : tag === "script" ? new HTMLScriptElement() : tag === "link" ? new HTMLLinkElement() : new Element(tag);
+  }
+  function wireDocument(doc2, root, head, body) {
+    doc2.documentElement = root;
+    doc2.head = head;
+    doc2.body = body;
+    root.parentNode = doc2;
+    doc2.childNodes = [root];
+  }
   function parseHTML(doc2, input) {
     const src = input == null ? "" : String(input);
     const len = src.length;
@@ -1483,7 +1493,7 @@
         i = j;
         continue;
       }
-      const el = tag === "a" ? new HTMLAnchorElement() : tag === "script" ? new HTMLScriptElement() : tag === "link" ? new HTMLLinkElement() : new Element(tag);
+      const el = createLocalElement(tag);
       if (attrs) for (const key in attrs) el.setAttribute(key, attrs[key]);
       if (RAWTEXT_ELEMENTS[tag]) {
         const rawFrom = j;
@@ -1499,11 +1509,7 @@
       if (!VOID_ELEMENTS[tag] && !selfClosed) open.push(el);
       i = j;
     }
-    doc2.documentElement = root;
-    doc2.head = head;
-    doc2.body = body;
-    root.parentNode = doc2;
-    doc2.childNodes = [root];
+    wireDocument(doc2, root, head, body);
     return root;
   }
   function parseFragment(html) {
@@ -2323,6 +2329,40 @@
     };
   }
 
+  // html/treeBuilder.ts
+  function buildDocumentFromTree(doc2, json) {
+    const nodes = JSON.parse(json);
+    const created = new Array(nodes.length);
+    for (let i = 0; i < nodes.length; i++) {
+      const n = nodes[i];
+      let node;
+      if (n.k === 0) {
+        node = createLocalElement(n.t);
+        const a = n.a;
+        if (a) for (let j = 0; j < a.length; j++) node.setAttribute(a[j][0], a[j][1]);
+      } else {
+        const data = n.d == null ? "" : String(n.d);
+        node = n.k === 1 ? new Text(data) : new Comment(data);
+      }
+      created[i] = node;
+      const p = n.p;
+      if (p >= 0) created[p].appendChild(node);
+    }
+    if (nodes.length === 0) return;
+    const root = created[0];
+    let head = null;
+    let body = null;
+    const kids = root.childNodes;
+    for (let i = 0; i < kids.length; i++) {
+      const k = kids[i];
+      if (k.nodeType !== 1) continue;
+      const tag = k.localName;
+      if (head === null && tag === "head") head = k;
+      else if (body === null && tag === "body") body = k;
+    }
+    wireDocument(doc2, root, head, body);
+  }
+
   // crawler/api.ts
   function setCurrentScript(src) {
     if (src == null) {
@@ -2394,6 +2434,9 @@
     };
     global.__crawlerLoadHtml = (html) => {
       parseHTML(doc, html);
+    };
+    global.__crawlerLoadTree = (json) => {
+      buildDocumentFromTree(doc, String(json));
     };
     global.__crawlerCollectScripts = () => JSON.stringify(collectScripts());
     global.__crawlerCollectLinks = () => JSON.stringify(collectLinks());

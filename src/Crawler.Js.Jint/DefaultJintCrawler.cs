@@ -1,5 +1,6 @@
 using Crawler.Js.Abstractions;
 using Crawler.Js.Models;
+using Crawler.Js.Parsing;
 using Crawler.Core;
 using Crawler.Core.Models;
 using Crawler.Core.Robots;
@@ -13,8 +14,8 @@ public sealed class DefaultJintCrawler : JsCrawler<ScrapeResult>
 {
     internal const string EngineKey = "js-jint";
 
-    public DefaultJintCrawler(HttpClient client, [FromKeyedServices(EngineKey)] IJsEngineFactory engineFactory, IRobotClient robotClient, IOptions<CrawlerOptions> options, IOptions<JsRenderOptions> renderOptions, ILogger<DefaultJintCrawler> logger)
-        : base(client, engineFactory, robotClient, options, renderOptions, logger)
+    public DefaultJintCrawler(HttpClient client, [FromKeyedServices(EngineKey)] IJsEngineFactory engineFactory, IRobotClient robotClient, IOptions<CrawlerOptions> options, IOptions<JsRenderOptions> renderOptions, IEnumerable<IHtmlParser> parsers, ILogger<DefaultJintCrawler> logger)
+        : base(client, engineFactory, robotClient, options, renderOptions, parsers, logger)
     {
     }
 
