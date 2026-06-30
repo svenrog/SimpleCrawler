@@ -1,9 +1,11 @@
 ﻿using Crawler.AngleSharp;
 using Crawler.Core.Models;
 using Crawler.HtmlAgilityPack;
-using Crawler.Tests.Assertions;
+using Crawler.Js.Jint;
+using Crawler.Js.V8;
 using Crawler.Playwright;
 using Crawler.Puppeteer;
+using Crawler.Tests.Assertions;
 using Crawler.Tests.Fixtures;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -37,6 +39,24 @@ public class StaticCrawlerTests : IClassFixture<StaticHostFixture>
 
         var secondResult = await subject.Start(StaticHostFixture.HostName, _context.CancellationSource.Token);
         AssertResult(secondResult);
+    }
+
+    [Fact]
+    public async Task V8Crawler_Can_Crawl()
+    {
+        var subject = _context.ServiceProvider.GetRequiredService<DefaultV8Crawler>();
+        var result = await subject.Start(StaticHostFixture.HostName, _context.CancellationSource.Token);
+
+        AssertResult(result);
+    }
+
+    [Fact]
+    public async Task JintCrawler_Can_Crawl()
+    {
+        var subject = _context.ServiceProvider.GetRequiredService<DefaultJintCrawler>();
+        var result = await subject.Start(StaticHostFixture.HostName, _context.CancellationSource.Token);
+
+        AssertResult(result);
     }
 
     [Fact]
