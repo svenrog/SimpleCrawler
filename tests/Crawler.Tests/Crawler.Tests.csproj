@@ -24,6 +24,8 @@
   <ItemGroup>
     <ProjectReference Include="..\Crawler.TestHost\Crawler.TestHost.csproj" />
     <ProjectReference Include="..\Crawler.Tests.Common\Crawler.Tests.Common.csproj" />
+    <ProjectReference Include="..\..\src\Crawler.Js.AngleSharp\Crawler.Js.AngleSharp.csproj" />
+    <ProjectReference Include="..\..\src\Crawler.Js.HtmlAgilityPack\Crawler.Js.HtmlAgilityPack.csproj" />
   </ItemGroup>
 
   <ItemGroup>
