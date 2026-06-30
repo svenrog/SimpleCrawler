@@ -1,6 +1,6 @@
 # Configuration
 
-This section describes configuration in detail, when running the CLI isn't enough.
+This section describes configuration in detail.
 
 - [`CrawlerOptions`](./crawler-options.md): shared options.
 - [JavaScript crawlers](./javascript-crawlers.md): Jint vs V8, HTML parsers, `JsRenderOptions`.
