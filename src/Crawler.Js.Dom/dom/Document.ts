@@ -61,6 +61,10 @@ export class Document extends Node {
         return out as unknown as Element[];
     }
 
+    get scripts(): Element[] {
+        return this.getElementsByTagName("script");
+    }
+
     querySelector(sel: string): Element | null {
         const r = querySelectorAll(this, sel);
         return r.length ? (r[0] as Element) : null;

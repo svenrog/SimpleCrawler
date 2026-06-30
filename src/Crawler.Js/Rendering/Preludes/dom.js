@@ -140,6 +140,26 @@
       if (deep) for (const c of this.childNodes) clone.appendChild(c.cloneNode(true));
       return clone;
     }
+    isEqualNode(other) {
+      if (!other || other.nodeType !== this.nodeType) return false;
+      const a = this;
+      const b = other;
+      if (this.nodeType === 1 /* Element */) {
+        if (a.nodeName !== b.nodeName || a.namespaceURI !== b.namespaceURI) return false;
+        const names = a.getAttributeNames();
+        if (names.length !== b.getAttributeNames().length) return false;
+        for (const name of names) if (a.getAttribute(name) !== b.getAttribute(name)) return false;
+      } else if (this.nodeType === 3 /* Text */ || this.nodeType === 8 /* Comment */) {
+        if (a.nodeValue !== b.nodeValue) return false;
+      }
+      if (this.childNodes.length !== other.childNodes.length) return false;
+      for (let i = 0; i < this.childNodes.length; i++)
+        if (!this.childNodes[i].isEqualNode(other.childNodes[i])) return false;
+      return true;
+    }
+    isSameNode(other) {
+      return other === this;
+    }
   };
   function asNode(value) {
     return value instanceof Node ? value : documentRef.current.createTextNode(value);
@@ -345,13 +365,15 @@
     if (typeof handler === "function") {
       try {
         handler.call(node, event);
-      } catch {
+      } catch (e) {
+        globalThis.console.error("RESERR-handler", e && (e.stack || e.message || e));
       }
     }
     if (typeof node.dispatchEvent === "function") {
       try {
         node.dispatchEvent(event);
-      } catch {
+      } catch (e) {
+        globalThis.console.error("RESERR-dispatch", e && (e.stack || e.message || e));
       }
     }
   }
@@ -553,7 +575,8 @@
       for (let i = 0; i < snapshot.length; i++) {
         try {
           snapshot[i](event);
-        } catch {
+        } catch (e) {
+          globalThis.console.error("DISPERR", e && (e.stack || e.message || e));
         }
         if (event._stoppedImmediate) break;
       }
@@ -842,7 +865,8 @@
       this._upgradeTarget = el;
       try {
         new ctor();
-      } catch {
+      } catch (e) {
+        globalThis.console.error("CEERR", e && (e.stack || e.message || e));
       } finally {
         this._upgradeTarget = null;
       }
@@ -1397,6 +1421,9 @@
       if (this.documentElement) collectByTag(this.documentElement, String(tag).toLowerCase(), out);
       return out;
     }
+    get scripts() {
+      return this.getElementsByTagName("script");
+    }
     querySelector(sel) {
       const r = querySelectorAll(this, sel);
       return r.length ? r[0] : null;
@@ -1562,7 +1589,11 @@
     for (const fn of batch) {
       try {
         fn();
-      } catch {
+      } catch (e) {
+        try {
+          globalThis.console.error("TASKERR", e && (e.stack || e.message || e));
+        } catch {
+        }
       }
     }
     return tasks.length;
