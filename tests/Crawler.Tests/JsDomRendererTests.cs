@@ -1,9 +1,9 @@
+using Crawler.Core;
 using Crawler.Js.Abstractions;
 using Crawler.Js.Jint;
 using Crawler.Js.Models;
 using Crawler.Js.Rendering;
 using Crawler.Js.V8;
-using Crawler.Core;
 using Crawler.Tests.Helpers;
 using Crawler.Tests.Models;
 using Microsoft.Extensions.DependencyInjection;
@@ -155,7 +155,7 @@ public class JsDomRendererTests
 
     // Swiper (and most DOM widget libs) probe classList.add/remove/toggle/contains, element.matches/closest
     // and the reflected `dir` property during init; a missing one threw straight into the SPA error boundary
-    // (öob.se rendered "Something went wrong" with zero anchors). dir reflects "" when unset, matches/closest
+    // dir reflects "" when unset, matches/closest
     // understand class selectors, and classList mutates the live class attribute.
     [Theory]
     [InlineData(JsEngine.Jint)]
@@ -561,7 +561,7 @@ public class JsDomRendererTests
     // document.currentScript must be the executing <script> while a classic script runs (so webpack's
     // auto-public-path, and Next's `instanceof HTMLScriptElement` invariant over it, sees a real script
     // element instead of undefined) and back to null once it returns. The drained chunk reads it during its
-    // own execution and reports its src — the exact path that threw Next's InvariantError on norengros.no.
+    // own execution and reports its src — the exact path that threw Next's InvariantError.
     [Theory]
     [InlineData(JsEngine.Jint)]
     [InlineData(JsEngine.V8)]
@@ -652,5 +652,40 @@ public class JsDomRendererTests
 
         Assert.Contains("href=\"/lazy-loaded\"", rendered);
         Assert.Contains("class=\"block\"", rendered);
+    }
+
+    // CharacterData/DocumentType globals: consent/IAB polyfills eagerly
+    // build [Element.prototype, CharacterData.prototype, DocumentType.prototype] to patch EventTarget onto
+    // every node base — a missing global threw ReferenceError straight into the SPA error boundary. Text/Comment
+    // also extend CharacterData for real, so instanceof and any prototype patch reach them; DocumentType exists
+    // as a patchable global even though the parser emits no doctype node.
+    [Theory]
+    [InlineData(JsEngine.Jint)]
+    [InlineData(JsEngine.V8)]
+    public async Task JsMode_CharacterDataAndDocumentTypeGlobalsAreDefined(JsEngine engine)
+    {
+        if (engine == JsEngine.V8)
+            Assert.SkipUnless(V8Support.IsAvailable, V8Support.UnavailableReason);
+
+        const string html = """
+            <html><body><div id="t"></div>
+            <script>
+            var bases = [Element.prototype, CharacterData.prototype, DocumentType.prototype];
+            CharacterData.prototype.__crawlMark = 'cd';
+            var textIsCd = document.createTextNode('x') instanceof CharacterData;
+            var commentIsCd = document.createComment('y') instanceof CharacterData;
+            var inherited = document.createTextNode('x').__crawlMark === 'cd';
+            var a = document.createElement('a');
+            a.setAttribute('href', '/ok-' + bases.length + '-' + textIsCd + '-' + commentIsCd + '-' + inherited);
+            document.getElementById('t').appendChild(a);
+            </script>
+            </body></html>
+            """;
+
+        var renderer = CreateJsRenderer(engine);
+        var result = await renderer.RenderAsync(Encoding.UTF8.GetBytes(html), "http://localhost:5000/", new HttpClient(), CancellationToken.None);
+        var rendered = Encoding.UTF8.GetString(result);
+
+        Assert.Contains("href=\"/ok-3-true-true-true\"", rendered);
     }
 }

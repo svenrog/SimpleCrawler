@@ -1,7 +1,7 @@
 // Stores a cyclic expando on a DOM node (React 18 stashes fibers there) and assigns a freshly created
 // element's onload handler (webpack's chunk loader does `script.onload = fn`). Guards the expando side table
 // and onload/onerror living on the base JsElement (exposing them on the derived wrapper threw
-// MissingMemberException on V8, breaking dynamic chunk loading on nille.no).
+// MissingMemberException on V8, breaking dynamic chunk loading).
 (function () {
     var probe = document.createElement('div');
     var cyclic = {}; cyclic.self = cyclic;

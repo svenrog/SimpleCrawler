@@ -165,21 +165,28 @@
     return value instanceof Node ? value : documentRef.current.createTextNode(value);
   }
 
-  // dom/Text.ts
-  var Text = class _Text extends Node {
-    constructor(data) {
-      super(3 /* Text */);
+  // dom/CharacterData.ts
+  var CharacterData = class extends Node {
+    constructor(type, data) {
+      super(type);
       this.data = data == null ? "" : String(data);
-      hideOwnFields(this);
-    }
-    get nodeName() {
-      return "#text";
     }
     get nodeValue() {
       return this.data;
     }
     set nodeValue(v) {
       this.data = v == null ? "" : String(v);
+    }
+  };
+
+  // dom/Text.ts
+  var Text = class _Text extends CharacterData {
+    constructor(data) {
+      super(3 /* Text */, data);
+      hideOwnFields(this);
+    }
+    get nodeName() {
+      return "#text";
     }
     get textContent() {
       return this.data;
@@ -877,23 +884,33 @@
   };
 
   // dom/Comment.ts
-  var Comment = class _Comment extends Node {
+  var Comment = class _Comment extends CharacterData {
     constructor(data) {
-      super(8 /* Comment */);
-      this.data = data == null ? "" : String(data);
+      super(8 /* Comment */, data);
       hideOwnFields(this);
     }
     get nodeName() {
       return "#comment";
     }
-    get nodeValue() {
-      return this.data;
-    }
-    set nodeValue(v) {
-      this.data = v == null ? "" : String(v);
-    }
     _shallowClone() {
       return new _Comment(this.data);
+    }
+  };
+
+  // dom/DocumentType.ts
+  var DocumentType = class _DocumentType extends Node {
+    constructor(name, publicId = "", systemId = "") {
+      super(10 /* DocumentType */);
+      this.name = name;
+      this.publicId = publicId;
+      this.systemId = systemId;
+      hideOwnFields(this);
+    }
+    get nodeName() {
+      return this.name;
+    }
+    _shallowClone() {
+      return new _DocumentType(this.name, this.publicId, this.systemId);
     }
   };
 
@@ -1679,7 +1696,7 @@
     get implementation() {
       return {
         hasFeature: () => true,
-        createDocumentType: () => ({}),
+        createDocumentType: (name, publicId, systemId) => new DocumentType(name, publicId ?? "", systemId ?? ""),
         createHTMLDocument: (title) => {
           const d = new _Document();
           const html = d.createElement("html");
@@ -2132,7 +2149,9 @@
     global.URLSearchParams = URLSearchParams;
     global.Node = Node;
     global.Element = Element;
+    global.CharacterData = CharacterData;
     global.Document = Document;
+    global.DocumentType = DocumentType;
     global.Text = Text;
     global.Comment = Comment;
     global.DocumentFragment = DocumentFragment;

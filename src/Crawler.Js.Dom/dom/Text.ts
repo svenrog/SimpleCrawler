@@ -1,25 +1,16 @@
 import { Node } from "./Node";
+import { CharacterData } from "./CharacterData";
 import { NodeType } from "../types/NodeType";
 import { hideOwnFields } from "./utils";
 
-export class Text extends Node {
-    data: string;
-
+export class Text extends CharacterData {
     constructor(data: unknown) {
-        super(NodeType.Text);
-        this.data = data == null ? "" : String(data);
+        super(NodeType.Text, data);
         hideOwnFields(this);
     }
 
     get nodeName(): string {
         return "#text";
-    }
-
-    get nodeValue(): string {
-        return this.data;
-    }
-    set nodeValue(v: unknown) {
-        this.data = v == null ? "" : String(v);
     }
 
     get textContent(): string {

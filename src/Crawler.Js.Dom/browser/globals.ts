@@ -1,8 +1,10 @@
 import { Document } from "../dom/Document";
 import { Node } from "../dom/Node";
 import { Element } from "../dom/Element";
+import { CharacterData } from "../dom/CharacterData";
 import { Text } from "../dom/Text";
 import { Comment } from "../dom/Comment";
+import { DocumentType } from "../dom/DocumentType";
 import { DocumentFragment } from "../dom/DocumentFragment";
 import { HTMLElement } from "../dom/HTMLElement";
 import { HTMLTemplateElement } from "../dom/HTMLTemplateElement";
@@ -68,7 +70,9 @@ export function installDOM(global: any): void {
     global.URLSearchParams = URLSearchParams;
     global.Node = Node;
     global.Element = Element;
+    global.CharacterData = CharacterData;
     global.Document = Document;
+    global.DocumentType = DocumentType;
     global.Text = Text;
     global.Comment = Comment;
     global.DocumentFragment = DocumentFragment;

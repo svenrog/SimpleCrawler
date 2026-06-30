@@ -1,6 +1,6 @@
 // Assigns each link through the anchor `href` *property* on a freshly created anchor (a router/helmet does
 // this) and reads the reflected protocol/host/pathname back. Guards the setter that ran `new Uri("")` on the
-// element's own empty href and threw "Invalid URI: The URI is empty." (prep.öob.se).
+// element's own empty href and threw "Invalid URI: The URI is empty."
 (function () {
     var links = window.__links__;
     var app = document.getElementById('app');

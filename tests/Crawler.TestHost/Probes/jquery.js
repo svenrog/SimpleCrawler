@@ -1,8 +1,7 @@
 // Mimics jQuery's UMD: a load-time IIFE runs feature detection against the DOM, then assigns window.jQuery;
 // a later "webpack external" reads the global to render. Guards the surface jQuery touches during init
 // (createDocumentFragment, implementation.createHTMLDocument, loosely reflected script async/defer/type) —
-// missing any of it threw before the assignment, so later bundles failed with "jQuery is not defined"
-// (ewheels.se).
+// missing any of it threw before the assignment, so later bundles failed with "jQuery is not defined".
 (function (global, factory) {
     global.jQuery = global.$ = factory(global);
 })(window, function (window) {

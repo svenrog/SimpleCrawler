@@ -1,6 +1,6 @@
 // Renders only if a DOM node reports no own enumerable keys (the browser invariant a deep-walking bundle
 // relies on), then runs a real JSON.stringify over it. Guards the Jint StackOverflow where node-wrapper CLR
-// getters were reported as enumerable own keys and a walker followed the DOM's cycles forever (ewheels.se).
+// getters were reported as enumerable own keys and a walker followed the DOM's cycles forever.
 // The guard returns before JSON.stringify on regression, so it fails as an empty crawl. Jint-only: V8's
 // host-object enumeration exposes keys and never matched this invariant, yet it never overflowed.
 (function () {

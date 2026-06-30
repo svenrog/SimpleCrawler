@@ -3,6 +3,7 @@ import { NodeType } from "../types/NodeType";
 import { Element } from "./Element";
 import { Text } from "./Text";
 import { Comment } from "./Comment";
+import { DocumentType } from "./DocumentType";
 import { DocumentFragment } from "./DocumentFragment";
 import { Range } from "./Range";
 import { HTMLTemplateElement } from "./HTMLTemplateElement";
@@ -118,7 +119,8 @@ export class Document extends Node {
     get implementation(): any {
         return {
             hasFeature: () => true,
-            createDocumentType: () => ({}),
+            createDocumentType: (name: string, publicId?: string, systemId?: string) =>
+                new DocumentType(name, publicId ?? "", systemId ?? ""),
             createHTMLDocument: (title?: string) => {
                 const d = new Document();
                 const html = d.createElement("html");

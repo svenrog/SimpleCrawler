@@ -1,6 +1,6 @@
 // Renders from inside a setTimeout callback whose callee binds a destructuring parameter with a default that
 // reads outer scope. Guards Jint deferred callbacks running through the engine's evaluation context (the raw
-// marshalled Func delegate threw a bare NullReferenceException on the default; blanked nille.no).
+// marshalled Func delegate threw a bare NullReferenceException on the default).
 (function () {
     var data = window.__links__;
     function render({ items = data } = {}) {

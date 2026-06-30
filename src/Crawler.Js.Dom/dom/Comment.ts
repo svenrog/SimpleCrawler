@@ -1,25 +1,16 @@
 import { Node } from "./Node";
+import { CharacterData } from "./CharacterData";
 import { NodeType } from "../types/NodeType";
 import { hideOwnFields } from "./utils";
 
-export class Comment extends Node {
-    data: string;
-
+export class Comment extends CharacterData {
     constructor(data: unknown) {
-        super(NodeType.Comment);
-        this.data = data == null ? "" : String(data);
+        super(NodeType.Comment, data);
         hideOwnFields(this);
     }
 
     get nodeName(): string {
         return "#comment";
-    }
-
-    get nodeValue(): string {
-        return this.data;
-    }
-    set nodeValue(v: unknown) {
-        this.data = v == null ? "" : String(v);
     }
 
     protected _shallowClone(): Node {
