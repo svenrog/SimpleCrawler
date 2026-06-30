@@ -365,15 +365,13 @@
     if (typeof handler === "function") {
       try {
         handler.call(node, event);
-      } catch (e) {
-        globalThis.console.error("RESERR-handler", e && (e.stack || e.message || e));
+      } catch {
       }
     }
     if (typeof node.dispatchEvent === "function") {
       try {
         node.dispatchEvent(event);
-      } catch (e) {
-        globalThis.console.error("RESERR-dispatch", e && (e.stack || e.message || e));
+      } catch {
       }
     }
   }
@@ -575,8 +573,7 @@
       for (let i = 0; i < snapshot.length; i++) {
         try {
           snapshot[i](event);
-        } catch (e) {
-          globalThis.console.error("DISPERR", e && (e.stack || e.message || e));
+        } catch {
         }
         if (event._stoppedImmediate) break;
       }
@@ -780,6 +777,18 @@
       super(11 /* DocumentFragment */);
       hideOwnFields(this);
     }
+    querySelector(sel) {
+      const r = querySelectorAll(this, sel);
+      return r.length ? r[0] : null;
+    }
+    querySelectorAll(sel) {
+      return querySelectorAll(this, sel);
+    }
+    getElementsByTagName(tag) {
+      const out = [];
+      collectByTag(this, String(tag).toLowerCase(), out);
+      return out;
+    }
     _shallowClone() {
       return new _DocumentFragment();
     }
@@ -865,8 +874,7 @@
       this._upgradeTarget = el;
       try {
         new ctor();
-      } catch (e) {
-        globalThis.console.error("CEERR", e && (e.stack || e.message || e));
+      } catch {
       } finally {
         this._upgradeTarget = null;
       }
@@ -1360,6 +1368,76 @@
     return kids;
   }
 
+  // dom/Range.ts
+  var _zeroRect = { top: 0, left: 0, right: 0, bottom: 0, width: 0, height: 0, x: 0, y: 0 };
+  var Range = class _Range {
+    constructor() {
+      this.startContainer = null;
+      this.endContainer = null;
+      this.startOffset = 0;
+      this.endOffset = 0;
+      this.collapsed = true;
+      this.commonAncestorContainer = null;
+    }
+    setStart(node, offset) {
+      this.startContainer = node;
+      this.startOffset = offset;
+    }
+    setEnd(node, offset) {
+      this.endContainer = node;
+      this.endOffset = offset;
+    }
+    setStartBefore(node) {
+      this.startContainer = node;
+    }
+    setStartAfter(node) {
+      this.startContainer = node;
+    }
+    setEndBefore(node) {
+      this.endContainer = node;
+    }
+    setEndAfter(node) {
+      this.endContainer = node;
+    }
+    selectNode(node) {
+      this.startContainer = this.endContainer = this.commonAncestorContainer = node;
+    }
+    selectNodeContents(node) {
+      this.startContainer = this.endContainer = this.commonAncestorContainer = node;
+    }
+    collapse() {
+    }
+    cloneRange() {
+      return new _Range();
+    }
+    detach() {
+    }
+    insertNode(node) {
+      if (this.startContainer && typeof this.startContainer.appendChild === "function") this.startContainer.appendChild(node);
+    }
+    deleteContents() {
+    }
+    cloneContents() {
+      return new DocumentFragment();
+    }
+    extractContents() {
+      return new DocumentFragment();
+    }
+    surroundContents() {
+    }
+    getBoundingClientRect() {
+      return _zeroRect;
+    }
+    getClientRects() {
+      return [];
+    }
+    createContextualFragment(html) {
+      const fragment = new DocumentFragment();
+      for (const node of parseFragment(html)) fragment.appendChild(node);
+      return fragment;
+    }
+  };
+
   // dom/HTMLTemplateElement.ts
   var HTMLTemplateElement = class _HTMLTemplateElement extends Element {
     constructor() {
@@ -1412,6 +1490,9 @@
     }
     createDocumentFragment() {
       return new DocumentFragment();
+    }
+    createRange() {
+      return new Range();
     }
     getElementById(id) {
       return walkFind(this.documentElement, (e) => e.getAttribute("id") === id);
@@ -1589,11 +1670,7 @@
     for (const fn of batch) {
       try {
         fn();
-      } catch (e) {
-        try {
-          globalThis.console.error("TASKERR", e && (e.stack || e.message || e));
-        } catch {
-        }
+      } catch {
       }
     }
     return tasks.length;
@@ -1803,6 +1880,48 @@
   };
   var performance = new Performance();
 
+  // browser/IntersectionObserver.ts
+  var IntersectionObserver = class {
+    constructor(callback) {
+      this._pending = [];
+      this._scheduled = false;
+      this._callback = typeof callback === "function" ? callback : () => {
+      };
+    }
+    observe(target) {
+      const rect = target && typeof target.getBoundingClientRect === "function" ? target.getBoundingClientRect() : { top: 0, left: 0, right: 0, bottom: 0, width: 0, height: 0, x: 0, y: 0 };
+      this._pending.push({
+        target,
+        isIntersecting: true,
+        intersectionRatio: 1,
+        boundingClientRect: rect,
+        intersectionRect: rect,
+        rootBounds: rect,
+        time: 0
+      });
+      if (!this._scheduled) {
+        this._scheduled = true;
+        enqueue(() => this._flush());
+      }
+    }
+    unobserve() {
+    }
+    disconnect() {
+      this._pending = [];
+      this._scheduled = false;
+    }
+    takeRecords() {
+      return [];
+    }
+    _flush() {
+      this._scheduled = false;
+      if (!this._pending.length) return;
+      const entries = this._pending;
+      this._pending = [];
+      this._callback(entries, this);
+    }
+  };
+
   // browser/globals.ts
   var doc = new Document(globalThis);
   documentRef.current = doc;
@@ -1819,6 +1938,21 @@
     };
     global.dispatchEvent = () => true;
     global.getComputedStyle = () => ({ getPropertyValue: () => "" });
+    global.getSelection = () => ({
+      rangeCount: 0,
+      type: "None",
+      isCollapsed: true,
+      addRange() {
+      },
+      removeAllRanges() {
+      },
+      getRangeAt() {
+        return null;
+      },
+      toString() {
+        return "";
+      }
+    });
     installViewport(global);
     global.MutationObserver = function() {
       this.observe = () => {
@@ -1827,15 +1961,7 @@
       };
       this.takeRecords = () => [];
     };
-    global.IntersectionObserver = function() {
-      this.observe = () => {
-      };
-      this.unobserve = () => {
-      };
-      this.disconnect = () => {
-      };
-      this.takeRecords = () => [];
-    };
+    global.IntersectionObserver = IntersectionObserver;
     global.ResizeObserver = function() {
       this.observe = () => {
       };

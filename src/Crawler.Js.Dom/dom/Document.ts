@@ -4,6 +4,7 @@ import { Element } from "./Element";
 import { Text } from "./Text";
 import { Comment } from "./Comment";
 import { DocumentFragment } from "./DocumentFragment";
+import { Range } from "./Range";
 import { HTMLTemplateElement } from "./HTMLTemplateElement";
 import { HTMLAnchorElement } from "./HTMLAnchorElement";
 import { HTMLScriptElement } from "./HTMLScriptElement";
@@ -49,6 +50,10 @@ export class Document extends Node {
 
     createDocumentFragment(): DocumentFragment {
         return new DocumentFragment();
+    }
+
+    createRange(): Range {
+        return new Range();
     }
 
     getElementById(id: string): Element | null {

@@ -436,4 +436,41 @@ public class JsDomRendererTests
             return Task.FromResult(new HttpResponseMessage(HttpStatusCode.NotFound));
         }
     }
+
+    // Lazy-mount-on-visible blocks (e.g. AntD skeletons) stay placeholders until an IntersectionObserver
+    // reports them intersecting; the headless render has no scroll, so observe() must fire isIntersecting once.
+    // The injected content goes through createRange().createContextualFragment() — the script-injection path
+    // real bundles use — so this also guards Range and DocumentFragment.querySelectorAll.
+    [Theory]
+    [InlineData(JsEngine.Jint)]
+    [InlineData(JsEngine.V8)]
+    public async Task JsMode_IntersectionObserver_MountsLazyContentViaContextualFragment(JsEngine engine)
+    {
+        if (engine == JsEngine.V8)
+            Assert.SkipUnless(V8Support.IsAvailable, V8Support.UnavailableReason);
+
+        const string html = """
+            <!doctype html><html><head><title>t</title></head>
+            <body><div id="slot"></div>
+            <script>
+                var slot = document.getElementById('slot');
+                var io = new IntersectionObserver(function (entries) {
+                    for (var i = 0; i < entries.length; i++) {
+                        if (!entries[i].isIntersecting) continue;
+                        var frag = document.createRange().createContextualFragment('<a href="/lazy-loaded">go</a><span class="block">x</span>');
+                        if (frag.querySelectorAll('a').length) entries[i].target.appendChild(frag);
+                    }
+                });
+                io.observe(slot);
+            </script>
+            </body></html>
+            """;
+
+        var renderer = CreateJsRenderer(engine);
+        var result = await renderer.RenderAsync(Encoding.UTF8.GetBytes(html), "http://localhost:5000/", new HttpClient(), CancellationToken.None);
+        var rendered = Encoding.UTF8.GetString(result);
+
+        Assert.Contains("href=\"/lazy-loaded\"", rendered);
+        Assert.Contains("class=\"block\"", rendered);
+    }
 }
