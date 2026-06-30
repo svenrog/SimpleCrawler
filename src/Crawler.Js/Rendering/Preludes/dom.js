@@ -238,24 +238,74 @@
     const el = root.documentElement || root;
     const out = [];
     const s = String(sel).trim();
-    const idM = s.match(/^#([\w-]+)$/);
-    const attrM = s.match(/^(\w+)?\[([\w-]+)(?:[~|]?=["']?([^"'\]]*)["']?)?\]$/);
     walk(el);
     return out;
     function walk(n) {
-      if (n.nodeType === 1 /* Element */ && matches2(n)) out.push(n);
+      if (n.nodeType === 1 /* Element */ && matchesSelector(n, s)) out.push(n);
       for (const c of n.childNodes) walk(c);
     }
-    function matches2(n) {
-      const e = n;
-      if (idM) return e.getAttribute("id") === idM[1];
-      if (attrM) {
-        if (attrM[1] && e.localName !== attrM[1].toLowerCase()) return false;
-        if (!e.hasAttribute(attrM[2])) return false;
-        if (attrM[3] != null && attrM[3] !== "") return e.getAttribute(attrM[2]) === attrM[3];
-        return true;
+  }
+  function matchesSelector(el, selector) {
+    const s = String(selector).trim();
+    if (!s) return false;
+    for (const part of s.split(",")) {
+      const compound = rightmostCompound(part);
+      if (compound && matchesCompound(el, compound)) return true;
+    }
+    return false;
+  }
+  function rightmostCompound(part) {
+    const tokens = part.trim().split(/\s*[>+~]\s*|\s+/);
+    return tokens[tokens.length - 1];
+  }
+  function matchesCompound(el, compound) {
+    const re = /[#.]?[\w-]+|\[[^\]]*\]|\*/g;
+    let m;
+    while (m = re.exec(compound)) {
+      const tok = m[0];
+      const c = tok[0];
+      if (tok === "*") continue;
+      if (c === "#") {
+        if (el.getAttribute("id") !== tok.slice(1)) return false;
+      } else if (c === ".") {
+        if (!hasClass(el, tok.slice(1))) return false;
+      } else if (c === "[") {
+        if (!matchesAttr(el, tok)) return false;
+      } else if (el.localName !== tok.toLowerCase()) {
+        return false;
       }
-      return e.localName === s.toLowerCase();
+    }
+    return true;
+  }
+  function hasClass(el, name) {
+    const cls = el.getAttribute("class");
+    if (!cls) return false;
+    return cls.split(/\s+/).indexOf(name) >= 0;
+  }
+  function matchesAttr(el, token) {
+    const m = token.match(/^\[([\w-]+)(?:([~|^$*]?=)["']?([^"'\]]*)["']?)?\]$/);
+    if (!m) return false;
+    const name = m[1];
+    if (!el.hasAttribute(name)) return false;
+    const op = m[2];
+    if (!op) return true;
+    const expected = m[3] ?? "";
+    const actual = el.getAttribute(name) ?? "";
+    switch (op) {
+      case "=":
+        return actual === expected;
+      case "~=":
+        return actual.split(/\s+/).indexOf(expected) >= 0;
+      case "|=":
+        return actual === expected || actual.startsWith(expected + "-");
+      case "^=":
+        return expected !== "" && actual.startsWith(expected);
+      case "$=":
+        return expected !== "" && actual.endsWith(expected);
+      case "*=":
+        return expected !== "" && actual.indexOf(expected) >= 0;
+      default:
+        return true;
     }
   }
 
@@ -600,7 +650,15 @@
     querySelectorAll(sel) {
       return querySelectorAll(this, sel);
     }
-    closest() {
+    matches(sel) {
+      return matchesSelector(this, sel);
+    }
+    closest(sel) {
+      let cur = this;
+      while (cur) {
+        if (cur.nodeType === 1 /* Element */ && matchesSelector(cur, sel)) return cur;
+        cur = cur.parentNode;
+      }
       return null;
     }
     getBoundingClientRect() {
@@ -721,6 +779,53 @@
     }
     set className(v) {
       this.attrs.set("class", String(v));
+    }
+    get dir() {
+      return this.attrs.get("dir") || "";
+    }
+    set dir(v) {
+      this.attrs.set("dir", String(v));
+    }
+    get classList() {
+      const read = () => (this.attrs.get("class") || "").split(/\s+/).filter(Boolean);
+      const write = (tokens) => {
+        this.attrs.set("class", tokens.join(" "));
+      };
+      return {
+        add: (...names) => {
+          const t = read();
+          for (const n of names) if (t.indexOf(n) < 0) t.push(n);
+          write(t);
+        },
+        remove: (...names) => {
+          write(read().filter((x) => names.indexOf(x) < 0));
+        },
+        toggle: (name, force) => {
+          const has = read().indexOf(name) >= 0;
+          const next = force === void 0 ? !has : force;
+          if (next && !has) write([...read(), name]);
+          else if (!next && has) write(read().filter((x) => x !== name));
+          return next;
+        },
+        replace: (oldName, newName) => {
+          const t = read();
+          const i = t.indexOf(oldName);
+          if (i < 0) return false;
+          t[i] = newName;
+          write(t);
+          return true;
+        },
+        contains: (name) => read().indexOf(name) >= 0,
+        item: (i) => read()[i] ?? null,
+        forEach: (cb) => read().forEach(cb),
+        get length() {
+          return read().length;
+        },
+        get value() {
+          return read().join(" ");
+        },
+        toString: () => read().join(" ")
+      };
     }
     get children() {
       return this.childNodes.filter((n) => n.nodeType === 1 /* Element */);

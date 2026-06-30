@@ -153,6 +153,51 @@ public class JsDomRendererTests
         Assert.Contains("comment=#comment", rendered);
     }
 
+    // Swiper (and most DOM widget libs) probe classList.add/remove/toggle/contains, element.matches/closest
+    // and the reflected `dir` property during init; a missing one threw straight into the SPA error boundary
+    // (öob.se rendered "Something went wrong" with zero anchors). dir reflects "" when unset, matches/closest
+    // understand class selectors, and classList mutates the live class attribute.
+    [Theory]
+    [InlineData(JsEngine.Jint)]
+    [InlineData(JsEngine.V8)]
+    public async Task JsMode_ClassListMatchesClosestAndDir(JsEngine engine)
+    {
+        if (engine == JsEngine.V8)
+            Assert.SkipUnless(V8Support.IsAvailable, V8Support.UnavailableReason);
+
+        const string html = """
+            <html><body>
+            <div id="wrap" class="outer"><button id="btn" class="a b">x</button></div>
+            <script>
+            var wrap = document.getElementById('wrap');
+            var btn = document.getElementById('btn');
+            var dir = typeof wrap.dir + ':' + (wrap.dir === '');
+            btn.classList.add('c');
+            btn.classList.remove('a');
+            var toggled = btn.classList.toggle('d') + '/' + btn.classList.toggle('b');
+            var cls = btn.getAttribute('class');
+            var has = btn.classList.contains('c');
+            var selfMatch = btn.matches('.c') + '/' + btn.matches('button.c') + '/' + btn.matches('.a');
+            var closestId = btn.closest('.outer').id;
+            var out = document.createElement('a');
+            out.setAttribute('href', '/probe?dir=' + dir + '&cls=' + cls + '&toggled=' + toggled + '&has=' + has + '&match=' + selfMatch + '&closest=' + closestId);
+            document.body.appendChild(out);
+            </script>
+            </body></html>
+            """;
+
+        var renderer = CreateJsRenderer(engine);
+        var result = await renderer.RenderAsync(Encoding.UTF8.GetBytes(html), "https://example.test/", new HttpClient(), CancellationToken.None);
+        var rendered = Encoding.UTF8.GetString(result);
+
+        Assert.Contains("dir=string:true", rendered);
+        Assert.Contains("cls=c d", rendered);
+        Assert.Contains("toggled=true/false", rendered);
+        Assert.Contains("has=true", rendered);
+        Assert.Contains("match=true/true/false", rendered);
+        Assert.Contains("closest=wrap", rendered);
+    }
+
     // customElements: a parsed <my-widget> is upgraded retroactively when the bundle defines it (the Astro
     // island path), and a createElement'd instance fires connectedCallback on attach. Both paths must
     // hydrate the anchor the connected callback injects.
