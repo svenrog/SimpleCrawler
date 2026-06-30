@@ -7,7 +7,9 @@ using Crawler.Core;
 using Crawler.Tests.Helpers;
 using Crawler.Tests.Models;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using System.Net;
 using System.Text;
 
 namespace Crawler.Tests;
@@ -17,7 +19,7 @@ namespace Crawler.Tests;
 // Theory'd over both engines since the JS DOM is the single code path for Jint + V8.
 public class JsDomRendererTests
 {
-    private static JsRenderer CreateJsRenderer(JsEngine engine)
+    private static JsRenderer CreateJsRenderer(JsEngine engine, JsRenderOptions? options = null, ILogger? logger = null)
     {
         var services = new ServiceCollection();
         var key = engine == JsEngine.V8 ? "js-v8" : "js-jint";
@@ -27,7 +29,7 @@ public class JsDomRendererTests
             services.AddJintCrawler(new CrawlerOptions());
         var provider = services.BuildServiceProvider();
         var factory = provider.GetRequiredKeyedService<IJsEngineFactory>(key);
-        return new JsRenderer(factory, new JsRenderOptions(), NullLogger.Instance);
+        return new JsRenderer(factory, options ?? new JsRenderOptions(), logger ?? NullLogger.Instance);
     }
 
     [Theory]
@@ -73,6 +75,127 @@ public class JsDomRendererTests
         var rendered = Encoding.UTF8.GetString(result);
 
         Assert.Contains("href=\"/inner\"", rendered);
+    }
+
+    // innerHTML must materialise real child nodes, not just cache a string for serialisation: cloneNode,
+    // lastChild, querySelector and the link collector all walk childNodes, so a lazy setter hides
+    // innerHTML-injected anchors (and crashes jQuery's `cloneNode(true).lastChild.defaultValue` probe).
+    [Theory]
+    [InlineData(JsEngine.Jint)]
+    [InlineData(JsEngine.V8)]
+    public async Task JsMode_InnerHtmlPopulatesLiveDom(JsEngine engine)
+    {
+        if (engine == JsEngine.V8)
+            Assert.SkipUnless(V8Support.IsAvailable, V8Support.UnavailableReason);
+
+        const string html = """
+            <html><body><div id="r"></div>
+            <script>
+            var r = document.getElementById('r');
+            r.innerHTML = '<a href="/inner-a">a</a><span class="s">x</span>';
+            var anchors = r.querySelectorAll('a').length;
+            var lastName = r.lastChild.nodeName;
+            var clonedLast = r.cloneNode(true).lastChild.nodeName;
+            var out = document.createElement('a');
+            out.setAttribute('href', '/probe?anchors=' + anchors + '&last=' + lastName + '&clone=' + clonedLast);
+            document.body.appendChild(out);
+            </script>
+            </body></html>
+            """;
+
+        var renderer = CreateJsRenderer(engine);
+        var result = await renderer.RenderAsync(Encoding.UTF8.GetBytes(html), "http://localhost:5000/", new HttpClient(), CancellationToken.None);
+        var rendered = Encoding.UTF8.GetString(result);
+
+        Assert.Contains("href=\"/inner-a\"", rendered);
+        Assert.Contains("anchors=1", rendered);
+        Assert.Contains("last=SPAN", rendered);
+        Assert.Contains("clone=SPAN", rendered);
+    }
+
+    // document.cookie is always a string (bundles call document.cookie.includes(...)), document.location
+    // aliases window.location (analytics read document.location.protocol/href), and non-element nodes carry
+    // the standard nodeName (#text/#comment) that React hydration lowercases.
+    [Theory]
+    [InlineData(JsEngine.Jint)]
+    [InlineData(JsEngine.V8)]
+    public async Task JsMode_DocumentCookieLocationAndNodeNames(JsEngine engine)
+    {
+        if (engine == JsEngine.V8)
+            Assert.SkipUnless(V8Support.IsAvailable, V8Support.UnavailableReason);
+
+        const string html = """
+            <html><body>
+            <script>
+            var before = typeof document.cookie + ':' + document.cookie.includes('x=1');
+            document.cookie = 'x=1; path=/';
+            var after = document.cookie.includes('x=1');
+            var proto = document.location.protocol;
+            var hrefMatch = document.location.href === window.location.href;
+            var textName = document.createTextNode('t').nodeName;
+            var commentName = document.createComment('c').nodeName;
+            var out = document.createElement('a');
+            out.setAttribute('href', '/probe?before=' + before + '&after=' + after + '&proto=' + proto + '&href=' + hrefMatch + '&text=' + textName + '&comment=' + commentName);
+            document.body.appendChild(out);
+            </script>
+            </body></html>
+            """;
+
+        var renderer = CreateJsRenderer(engine);
+        var result = await renderer.RenderAsync(Encoding.UTF8.GetBytes(html), "https://example.test/page", new HttpClient(), CancellationToken.None);
+        var rendered = Encoding.UTF8.GetString(result);
+
+        Assert.Contains("before=string:false", rendered);
+        Assert.Contains("after=true", rendered);
+        Assert.Contains("proto=https:", rendered);
+        Assert.Contains("href=true", rendered);
+        Assert.Contains("text=#text", rendered);
+        Assert.Contains("comment=#comment", rendered);
+    }
+
+    // Swiper (and most DOM widget libs) probe classList.add/remove/toggle/contains, element.matches/closest
+    // and the reflected `dir` property during init; a missing one threw straight into the SPA error boundary
+    // (öob.se rendered "Something went wrong" with zero anchors). dir reflects "" when unset, matches/closest
+    // understand class selectors, and classList mutates the live class attribute.
+    [Theory]
+    [InlineData(JsEngine.Jint)]
+    [InlineData(JsEngine.V8)]
+    public async Task JsMode_ClassListMatchesClosestAndDir(JsEngine engine)
+    {
+        if (engine == JsEngine.V8)
+            Assert.SkipUnless(V8Support.IsAvailable, V8Support.UnavailableReason);
+
+        const string html = """
+            <html><body>
+            <div id="wrap" class="outer"><button id="btn" class="a b">x</button></div>
+            <script>
+            var wrap = document.getElementById('wrap');
+            var btn = document.getElementById('btn');
+            var dir = typeof wrap.dir + ':' + (wrap.dir === '');
+            btn.classList.add('c');
+            btn.classList.remove('a');
+            var toggled = btn.classList.toggle('d') + '/' + btn.classList.toggle('b');
+            var cls = btn.getAttribute('class');
+            var has = btn.classList.contains('c');
+            var selfMatch = btn.matches('.c') + '/' + btn.matches('button.c') + '/' + btn.matches('.a');
+            var closestId = btn.closest('.outer').id;
+            var out = document.createElement('a');
+            out.setAttribute('href', '/probe?dir=' + dir + '&cls=' + cls + '&toggled=' + toggled + '&has=' + has + '&match=' + selfMatch + '&closest=' + closestId);
+            document.body.appendChild(out);
+            </script>
+            </body></html>
+            """;
+
+        var renderer = CreateJsRenderer(engine);
+        var result = await renderer.RenderAsync(Encoding.UTF8.GetBytes(html), "https://example.test/", new HttpClient(), CancellationToken.None);
+        var rendered = Encoding.UTF8.GetString(result);
+
+        Assert.Contains("dir=string:true", rendered);
+        Assert.Contains("cls=c d", rendered);
+        Assert.Contains("toggled=true/false", rendered);
+        Assert.Contains("has=true", rendered);
+        Assert.Contains("match=true/true/false", rendered);
+        Assert.Contains("closest=wrap", rendered);
     }
 
     // customElements: a parsed <my-widget> is upgraded retroactively when the bundle defines it (the Astro
@@ -283,5 +406,251 @@ public class JsDomRendererTests
         var rendered = Encoding.UTF8.GetString(result);
 
         Assert.Contains("href=\"/perf\"", rendered);
+    }
+
+    // Node load/error events on runtime-appended resources — the webpack lazy-chunk mechanism React Router
+    // code-splitting depends on. A same-origin <script src> is fetched and executed by the resource drain,
+    // then its load event fires (the bundle's own anchor proves execution, the onload handler's proves the
+    // event); a missing src fires error instead; an appended <link> fires load without a fetch. Regressed
+    // when the pure-JS DOM dropped the Bridge's resource drain, leaving SPAs stuck on "Loading chunk failed".
+    [Theory]
+    [InlineData(JsEngine.Jint)]
+    [InlineData(JsEngine.V8)]
+    public async Task JsMode_AppendedResourceNodes_FireLoadAndErrorEvents(JsEngine engine)
+    {
+        if (engine == JsEngine.V8)
+            Assert.SkipUnless(V8Support.IsAvailable, V8Support.UnavailableReason);
+
+        const string html = """
+            <html><body><div id="t"></div>
+            <script>
+            var d = document.getElementById('t');
+            var ok = document.createElement('script');
+            ok.src = '/chunk.js';
+            ok.onload = function () { var a = document.createElement('a'); a.setAttribute('href', '/loaded'); d.appendChild(a); };
+            ok.onerror = function () { var a = document.createElement('a'); a.setAttribute('href', '/notthis'); d.appendChild(a); };
+            document.head.appendChild(ok);
+            var bad = document.createElement('script');
+            bad.src = '/missing.js';
+            bad.onerror = function () { var a = document.createElement('a'); a.setAttribute('href', '/errored'); d.appendChild(a); };
+            document.head.appendChild(bad);
+            var css = document.createElement('link');
+            css.rel = 'stylesheet';
+            css.href = '/style.css';
+            css.addEventListener('load', function () { var a = document.createElement('a'); a.setAttribute('href', '/css'); d.appendChild(a); });
+            document.head.appendChild(css);
+            </script>
+            </body></html>
+            """;
+
+        var renderer = CreateJsRenderer(engine);
+        using var client = new HttpClient(new StubResourceHandler());
+        var result = await renderer.RenderAsync(Encoding.UTF8.GetBytes(html), "http://localhost:5000/", client, CancellationToken.None);
+        var rendered = Encoding.UTF8.GetString(result);
+
+        Assert.Contains("href=\"/executed\"", rendered);
+        Assert.Contains("href=\"/loaded\"", rendered);
+        Assert.Contains("href=\"/errored\"", rendered);
+        Assert.Contains("href=\"/css\"", rendered);
+        Assert.DoesNotContain("href=\"/notthis\"", rendered);
+    }
+
+    // Viewport: the JS DOM reports the configured screen size (default desktop 1920x1080) through
+    // window.innerWidth/screen/documentElement.clientWidth, and matchMedia evaluates width queries against it
+    // — so a responsive bundle takes its desktop branch. A mobile override flips every signal, proving both
+    // the media-query evaluator and the JsRenderOptions.Viewport plumbing. Was an always-false matchMedia stub.
+    [Theory]
+    [InlineData(JsEngine.Jint)]
+    [InlineData(JsEngine.V8)]
+    public async Task JsMode_SimulatesConfiguredViewport(JsEngine engine)
+    {
+        if (engine == JsEngine.V8)
+            Assert.SkipUnless(V8Support.IsAvailable, V8Support.UnavailableReason);
+
+        const string html = """
+            <html><body><div id="t"></div>
+            <script>
+            var d = document.getElementById('t');
+            var desktop = matchMedia('(min-width: 1024px)').matches && !matchMedia('(max-width: 768px)').matches;
+            var a = document.createElement('a');
+            a.setAttribute('href', '/w' + window.innerWidth + 'x' + window.innerHeight + '-screen' + screen.width + '-client' + document.documentElement.clientWidth + '-' + (desktop ? 'desktop' : 'mobile'));
+            d.appendChild(a);
+            </script>
+            </body></html>
+            """;
+
+        var desktop = await RenderViewport(engine, html, null);
+        Assert.Contains("href=\"/w1920x1080-screen1920-client1920-desktop\"", desktop);
+
+        var mobileOptions = new JsRenderOptions { Viewport = new Viewport { Width = 375, Height = 812 } };
+        var mobile = await RenderViewport(engine, html, mobileOptions);
+        Assert.Contains("href=\"/w375x812-screen375-client375-mobile\"", mobile);
+    }
+
+    private static async Task<string> RenderViewport(JsEngine engine, string html, JsRenderOptions? options)
+    {
+        var renderer = CreateJsRenderer(engine, options);
+        var result = await renderer.RenderAsync(Encoding.UTF8.GetBytes(html), "http://localhost:5000/", new HttpClient(), CancellationToken.None);
+        return Encoding.UTF8.GetString(result);
+    }
+
+    // console: the bundle's console.* calls reach the host ILogger only when JsRenderOptions.ScriptLogging
+    // opts in, formatting (incl. %-substitution) happens JS-side, and the configured level acts as a floor —
+    // console.debug is dropped under an Information floor while console.error gets through. Regressed when the
+    // big JS refactor removed LoggingJsConsole, leaving ScriptLogging dead and console a no-op.
+    [Theory]
+    [InlineData(JsEngine.Jint)]
+    [InlineData(JsEngine.V8)]
+    public async Task JsMode_ConsoleRoutesToLogger_GatedByScriptLogging(JsEngine engine)
+    {
+        if (engine == JsEngine.V8)
+            Assert.SkipUnless(V8Support.IsAvailable, V8Support.UnavailableReason);
+
+        const string html = """
+            <html><body><div id="t"></div>
+            <script>
+            console.debug('debug %s', 'noise');
+            console.log('hello %s number %d', 'world', 42);
+            console.error('boom');
+            </script>
+            </body></html>
+            """;
+
+        var enabled = new CapturingLogger();
+        await CreateJsRenderer(engine, new JsRenderOptions { ScriptLogging = LogLevel.Information }, enabled)
+            .RenderAsync(Encoding.UTF8.GetBytes(html), "http://localhost:5000/", new HttpClient(), CancellationToken.None);
+
+        Assert.Contains((LogLevel.Information, "hello world number 42"), enabled.Entries);
+        Assert.Contains((LogLevel.Error, "boom"), enabled.Entries);
+        Assert.DoesNotContain(enabled.Entries, e => e.Level == LogLevel.Debug);
+
+        var suppressed = new CapturingLogger();
+        await CreateJsRenderer(engine, new JsRenderOptions(), suppressed)
+            .RenderAsync(Encoding.UTF8.GetBytes(html), "http://localhost:5000/", new HttpClient(), CancellationToken.None);
+
+        Assert.Empty(suppressed.Entries);
+    }
+
+    private sealed class CapturingLogger : ILogger
+    {
+        public List<(LogLevel Level, string Message)> Entries { get; } = [];
+
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+        public bool IsEnabled(LogLevel logLevel) => true;
+
+        public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
+            => Entries.Add((logLevel, formatter(state, exception)));
+    }
+
+    private sealed class StubResourceHandler : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            if (request.RequestUri!.AbsolutePath == "/chunk.js")
+            {
+                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent("var x=document.createElement('a');x.setAttribute('href','/executed');document.getElementById('t').appendChild(x);"),
+                });
+            }
+
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.NotFound));
+        }
+    }
+
+    // document.currentScript must be the executing <script> while a classic script runs (so webpack's
+    // auto-public-path, and Next's `instanceof HTMLScriptElement` invariant over it, sees a real script
+    // element instead of undefined) and back to null once it returns. The drained chunk reads it during its
+    // own execution and reports its src — the exact path that threw Next's InvariantError on norengros.no.
+    [Theory]
+    [InlineData(JsEngine.Jint)]
+    [InlineData(JsEngine.V8)]
+    public async Task JsMode_CurrentScript_IsExecutingScript_ThenNull(JsEngine engine)
+    {
+        if (engine == JsEngine.V8)
+            Assert.SkipUnless(V8Support.IsAvailable, V8Support.UnavailableReason);
+
+        const string html = """
+            <html><body><div id="t"></div>
+            <script>
+            var ics = document.currentScript;
+            var d = document.getElementById('t');
+            var a = document.createElement('a');
+            a.setAttribute('href', '/inline-' + (ics instanceof HTMLScriptElement) + '-src' + ics.src);
+            d.appendChild(a);
+            var chunk = document.createElement('script');
+            chunk.src = '/cs-chunk.js';
+            document.head.appendChild(chunk);
+            </script>
+            </body></html>
+            """;
+
+        var renderer = CreateJsRenderer(engine);
+        using var client = new HttpClient(new CurrentScriptHandler());
+        var result = await renderer.RenderAsync(Encoding.UTF8.GetBytes(html), "http://localhost:5000/", client, CancellationToken.None);
+        var rendered = Encoding.UTF8.GetString(result);
+
+        Assert.Contains("href=\"/inline-true-src\"", rendered);
+        Assert.Contains("href=\"/chunk-true-/cs-chunk.js-after-null\"", rendered);
+    }
+
+    private sealed class CurrentScriptHandler : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            if (request.RequestUri!.AbsolutePath == "/cs-chunk.js")
+            {
+                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent(
+                        "var cs=document.currentScript;" +
+                        "var ok=(cs instanceof HTMLScriptElement)&&/cs-chunk\\.js$/.test(cs.src);" +
+                        "setTimeout(function(){" +
+                        "var after=document.currentScript===null?'null':'set';" +
+                        "var a=document.createElement('a');" +
+                        "a.setAttribute('href','/chunk-'+ok+'-'+cs.src.replace(/^https?:\\/\\/[^/]+/,'')+'-after-'+after);" +
+                        "document.getElementById('t').appendChild(a);},0);"),
+                });
+            }
+
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.NotFound));
+        }
+    }
+
+    // Lazy-mount-on-visible blocks (e.g. AntD skeletons) stay placeholders until an IntersectionObserver
+    // reports them intersecting; the headless render has no scroll, so observe() must fire isIntersecting once.
+    // The injected content goes through createRange().createContextualFragment() — the script-injection path
+    // real bundles use — so this also guards Range and DocumentFragment.querySelectorAll.
+    [Theory]
+    [InlineData(JsEngine.Jint)]
+    [InlineData(JsEngine.V8)]
+    public async Task JsMode_IntersectionObserver_MountsLazyContentViaContextualFragment(JsEngine engine)
+    {
+        if (engine == JsEngine.V8)
+            Assert.SkipUnless(V8Support.IsAvailable, V8Support.UnavailableReason);
+
+        const string html = """
+            <!doctype html><html><head><title>t</title></head>
+            <body><div id="slot"></div>
+            <script>
+                var slot = document.getElementById('slot');
+                var io = new IntersectionObserver(function (entries) {
+                    for (var i = 0; i < entries.length; i++) {
+                        if (!entries[i].isIntersecting) continue;
+                        var frag = document.createRange().createContextualFragment('<a href="/lazy-loaded">go</a><span class="block">x</span>');
+                        if (frag.querySelectorAll('a').length) entries[i].target.appendChild(frag);
+                    }
+                });
+                io.observe(slot);
+            </script>
+            </body></html>
+            """;
+
+        var renderer = CreateJsRenderer(engine);
+        var result = await renderer.RenderAsync(Encoding.UTF8.GetBytes(html), "http://localhost:5000/", new HttpClient(), CancellationToken.None);
+        var rendered = Encoding.UTF8.GetString(result);
+
+        Assert.Contains("href=\"/lazy-loaded\"", rendered);
+        Assert.Contains("class=\"block\"", rendered);
     }
 }

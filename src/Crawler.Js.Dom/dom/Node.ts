@@ -112,6 +112,31 @@ export abstract class Node {
         return clone;
     }
 
+    isEqualNode(other: Node | null): boolean {
+        if (!other || other.nodeType !== this.nodeType) return false;
+
+        const a = this as any;
+        const b = other as any;
+        if (this.nodeType === NodeType.Element) {
+            if (a.nodeName !== b.nodeName || a.namespaceURI !== b.namespaceURI) return false;
+            const names = a.getAttributeNames();
+            if (names.length !== b.getAttributeNames().length) return false;
+            for (const name of names) if (a.getAttribute(name) !== b.getAttribute(name)) return false;
+        } else if (this.nodeType === NodeType.Text || this.nodeType === NodeType.Comment) {
+            if (a.nodeValue !== b.nodeValue) return false;
+        }
+
+        if (this.childNodes.length !== other.childNodes.length) return false;
+        for (let i = 0; i < this.childNodes.length; i++)
+            if (!this.childNodes[i].isEqualNode(other.childNodes[i])) return false;
+
+        return true;
+    }
+
+    isSameNode(other: Node | null): boolean {
+        return other === this;
+    }
+
     protected abstract _shallowClone(): Node;
 }
 

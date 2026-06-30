@@ -140,6 +140,26 @@
       if (deep) for (const c of this.childNodes) clone.appendChild(c.cloneNode(true));
       return clone;
     }
+    isEqualNode(other) {
+      if (!other || other.nodeType !== this.nodeType) return false;
+      const a = this;
+      const b = other;
+      if (this.nodeType === 1 /* Element */) {
+        if (a.nodeName !== b.nodeName || a.namespaceURI !== b.namespaceURI) return false;
+        const names = a.getAttributeNames();
+        if (names.length !== b.getAttributeNames().length) return false;
+        for (const name of names) if (a.getAttribute(name) !== b.getAttribute(name)) return false;
+      } else if (this.nodeType === 3 /* Text */ || this.nodeType === 8 /* Comment */) {
+        if (a.nodeValue !== b.nodeValue) return false;
+      }
+      if (this.childNodes.length !== other.childNodes.length) return false;
+      for (let i = 0; i < this.childNodes.length; i++)
+        if (!this.childNodes[i].isEqualNode(other.childNodes[i])) return false;
+      return true;
+    }
+    isSameNode(other) {
+      return other === this;
+    }
   };
   function asNode(value) {
     return value instanceof Node ? value : documentRef.current.createTextNode(value);
@@ -151,6 +171,9 @@
       super(3 /* Text */);
       this.data = data == null ? "" : String(data);
       hideOwnFields(this);
+    }
+    get nodeName() {
+      return "#text";
     }
     get nodeValue() {
       return this.data;
@@ -215,24 +238,74 @@
     const el = root.documentElement || root;
     const out = [];
     const s = String(sel).trim();
-    const idM = s.match(/^#([\w-]+)$/);
-    const attrM = s.match(/^(\w+)?\[([\w-]+)(?:[~|]?=["']?([^"'\]]*)["']?)?\]$/);
     walk(el);
     return out;
     function walk(n) {
-      if (n.nodeType === 1 /* Element */ && matches(n)) out.push(n);
+      if (n.nodeType === 1 /* Element */ && matchesSelector(n, s)) out.push(n);
       for (const c of n.childNodes) walk(c);
     }
-    function matches(n) {
-      const e = n;
-      if (idM) return e.getAttribute("id") === idM[1];
-      if (attrM) {
-        if (attrM[1] && e.localName !== attrM[1].toLowerCase()) return false;
-        if (!e.hasAttribute(attrM[2])) return false;
-        if (attrM[3] != null && attrM[3] !== "") return e.getAttribute(attrM[2]) === attrM[3];
-        return true;
+  }
+  function matchesSelector(el, selector) {
+    const s = String(selector).trim();
+    if (!s) return false;
+    for (const part of s.split(",")) {
+      const compound = rightmostCompound(part);
+      if (compound && matchesCompound(el, compound)) return true;
+    }
+    return false;
+  }
+  function rightmostCompound(part) {
+    const tokens = part.trim().split(/\s*[>+~]\s*|\s+/);
+    return tokens[tokens.length - 1];
+  }
+  function matchesCompound(el, compound) {
+    const re = /[#.]?[\w-]+|\[[^\]]*\]|\*/g;
+    let m;
+    while (m = re.exec(compound)) {
+      const tok = m[0];
+      const c = tok[0];
+      if (tok === "*") continue;
+      if (c === "#") {
+        if (el.getAttribute("id") !== tok.slice(1)) return false;
+      } else if (c === ".") {
+        if (!hasClass(el, tok.slice(1))) return false;
+      } else if (c === "[") {
+        if (!matchesAttr(el, tok)) return false;
+      } else if (el.localName !== tok.toLowerCase()) {
+        return false;
       }
-      return e.localName === s.toLowerCase();
+    }
+    return true;
+  }
+  function hasClass(el, name) {
+    const cls = el.getAttribute("class");
+    if (!cls) return false;
+    return cls.split(/\s+/).indexOf(name) >= 0;
+  }
+  function matchesAttr(el, token) {
+    const m = token.match(/^\[([\w-]+)(?:([~|^$*]?=)["']?([^"'\]]*)["']?)?\]$/);
+    if (!m) return false;
+    const name = m[1];
+    if (!el.hasAttribute(name)) return false;
+    const op = m[2];
+    if (!op) return true;
+    const expected = m[3] ?? "";
+    const actual = el.getAttribute(name) ?? "";
+    switch (op) {
+      case "=":
+        return actual === expected;
+      case "~=":
+        return actual.split(/\s+/).indexOf(expected) >= 0;
+      case "|=":
+        return actual === expected || actual.startsWith(expected + "-");
+      case "^=":
+        return expected !== "" && actual.startsWith(expected);
+      case "$=":
+        return expected !== "" && actual.endsWith(expected);
+      case "*=":
+        return expected !== "" && actual.indexOf(expected) >= 0;
+      default:
+        return true;
     }
   }
 
@@ -286,6 +359,219 @@
     if (VOID_ELEMENTS[tag]) return s;
     s += serializeChildren(el);
     return s + "</" + tag + ">";
+  }
+
+  // html/parserRef.ts
+  var parserRef = { parseFragment: null };
+
+  // browser/Event.ts
+  var Event = class {
+    constructor(type, init) {
+      this.isTrusted = false;
+      this.defaultPrevented = false;
+      this.eventPhase = 0;
+      this.target = null;
+      this.currentTarget = null;
+      this._stoppedImmediate = false;
+      this.type = String(type);
+      this.bubbles = !!(init && init.bubbles);
+      this.cancelable = !!(init && init.cancelable);
+      this.timeStamp = Date.now();
+    }
+    preventDefault() {
+      if (this.cancelable) this.defaultPrevented = true;
+    }
+    stopPropagation() {
+    }
+    stopImmediatePropagation() {
+      this._stoppedImmediate = true;
+    }
+  };
+
+  // dom/resourceLoader.ts
+  var _counter = 0;
+  var _pending = [];
+  var _byId = /* @__PURE__ */ new Map();
+  var _seen = /* @__PURE__ */ new WeakSet();
+  function registerResource(node) {
+    const tag = node.localName;
+    if (tag !== "script" && tag !== "link") return;
+    if (tag === "script" && !node.getAttribute("src")) return;
+    if (_seen.has(node)) return;
+    _seen.add(node);
+    const id = ++_counter;
+    _pending.push({ id, node });
+    _byId.set(id, node);
+  }
+  function takeResources() {
+    if (!_pending.length) return "";
+    const batch = _pending.splice(0, _pending.length);
+    return JSON.stringify(batch.map((r) => ({ id: r.id, tag: r.node.localName, src: r.node.getAttribute("src") || "" })));
+  }
+  function pendingResourceCount() {
+    return _pending.length;
+  }
+  function fireResourceEvent(id, type) {
+    const node = _byId.get(id);
+    if (!node) return;
+    _byId.delete(id);
+    const event = new Event(type);
+    event.target = node;
+    const handler = type === "load" ? node.onload : node.onerror;
+    if (typeof handler === "function") {
+      try {
+        handler.call(node, event);
+      } catch {
+      }
+    }
+    if (typeof node.dispatchEvent === "function") {
+      try {
+        node.dispatchEvent(event);
+      } catch {
+      }
+    }
+  }
+
+  // browser/viewport.ts
+  var _width = 1920;
+  var _height = 1080;
+  function setViewport(width, height) {
+    const w = Number(width);
+    const h = Number(height);
+    if (w > 0) _width = Math.floor(w);
+    if (h > 0) _height = Math.floor(h);
+  }
+  function viewportWidth() {
+    return _width;
+  }
+  function viewportHeight() {
+    return _height;
+  }
+  function numeric(value) {
+    const m = /-?\d*\.?\d+/.exec(value);
+    return m ? parseFloat(m[0]) : NaN;
+  }
+  function resolutionDppx(value) {
+    const n = numeric(value);
+    if (isNaN(n)) return NaN;
+    if (/dpi/i.test(value)) return n / 96;
+    if (/dpcm/i.test(value)) return n / 37.795;
+    return n;
+  }
+  function matchFeature(name, value) {
+    switch (name) {
+      case "min-width":
+      case "min-device-width":
+        return _width >= numeric(value);
+      case "max-width":
+      case "max-device-width":
+        return _width <= numeric(value);
+      case "width":
+      case "device-width":
+        return _width === numeric(value);
+      case "min-height":
+      case "min-device-height":
+        return _height >= numeric(value);
+      case "max-height":
+      case "max-device-height":
+        return _height <= numeric(value);
+      case "height":
+      case "device-height":
+        return _height === numeric(value);
+      case "min-resolution":
+        return 1 >= resolutionDppx(value);
+      case "max-resolution":
+        return 1 <= resolutionDppx(value);
+      case "resolution":
+        return resolutionDppx(value) === 1;
+      case "orientation":
+        return value === "portrait" ? _height > _width : _width >= _height;
+      // An unmodelled feature must never veto a layout (the crawl must not hide content), so it matches.
+      default:
+        return true;
+    }
+  }
+  function matchClause(clause) {
+    const inner = clause.replace(/^\(/, "").replace(/\)$/, "");
+    const colon = inner.indexOf(":");
+    if (colon < 0) return true;
+    const name = inner.slice(0, colon).trim().toLowerCase();
+    const value = inner.slice(colon + 1).trim().toLowerCase();
+    return matchFeature(name, value);
+  }
+  function matchSingle(query) {
+    let q = query.trim().toLowerCase();
+    if (!q) return true;
+    let negate = false;
+    if (q.indexOf("not ") === 0) {
+      negate = true;
+      q = q.slice(4).trim();
+    }
+    const typeMatch = /^(all|screen|print|speech)\b/.exec(q);
+    if (typeMatch) {
+      const type = typeMatch[1];
+      q = q.slice(type.length).trim();
+      if (q.indexOf("and") === 0) q = q.slice(3).trim();
+      if (type === "print" || type === "speech") return negate;
+      if (!q) return !negate;
+    }
+    const clauses = q.split(/\band\b/).map((c) => c.trim()).filter((c) => c.length > 0);
+    const result = clauses.every((c) => matchClause(c));
+    return negate ? !result : result;
+  }
+  function matches(query) {
+    const list = String(query == null ? "" : query).split(",");
+    return list.some((q) => matchSingle(q));
+  }
+  function installViewport(global) {
+    const define = (name, get) => Object.defineProperty(global, name, { get, configurable: true });
+    define("innerWidth", () => _width);
+    define("innerHeight", () => _height);
+    define("outerWidth", () => _width);
+    define("outerHeight", () => _height);
+    global.devicePixelRatio = 1;
+    global.screen = {
+      get width() {
+        return _width;
+      },
+      get height() {
+        return _height;
+      },
+      get availWidth() {
+        return _width;
+      },
+      get availHeight() {
+        return _height;
+      },
+      colorDepth: 24,
+      pixelDepth: 24,
+      orientation: {
+        get type() {
+          return _width >= _height ? "landscape-primary" : "portrait-primary";
+        },
+        angle: 0,
+        addEventListener() {
+        },
+        removeEventListener() {
+        }
+      }
+    };
+    global.matchMedia = (query) => ({
+      matches: matches(query),
+      media: String(query == null ? "" : query),
+      onchange: null,
+      addListener() {
+      },
+      removeListener() {
+      },
+      addEventListener() {
+      },
+      removeEventListener() {
+      },
+      dispatchEvent() {
+        return false;
+      }
+    });
   }
 
   // dom/Element.ts
@@ -364,11 +650,28 @@
     querySelectorAll(sel) {
       return querySelectorAll(this, sel);
     }
-    closest() {
+    matches(sel) {
+      return matchesSelector(this, sel);
+    }
+    closest(sel) {
+      let cur = this;
+      while (cur) {
+        if (cur.nodeType === 1 /* Element */ && matchesSelector(cur, sel)) return cur;
+        cur = cur.parentNode;
+      }
       return null;
     }
     getBoundingClientRect() {
       return { top: 0, left: 0, right: 0, bottom: 0, width: 0, height: 0, x: 0, y: 0 };
+    }
+    // The viewport-sized box: jQuery's $(window).width() and many breakpoint helpers read the root element's
+    // clientWidth/Height rather than window.innerWidth. Only the root (html/body) reports the viewport; every
+    // other element is unlaid-out and reports 0, as in the always-zero getBoundingClientRect.
+    get clientWidth() {
+      return this.localName === "html" || this.localName === "body" ? viewportWidth() : 0;
+    }
+    get clientHeight() {
+      return this.localName === "html" || this.localName === "body" ? viewportHeight() : 0;
     }
     contains(n) {
       let cur = n;
@@ -422,6 +725,7 @@
     _notifyConnected(node) {
       if (node.nodeType === 1 /* Element */) {
         const el = node;
+        registerResource(el);
         if (!el._connected && typeof el.connectedCallback === "function" && el.isConnected) {
           el._connected = true;
           el.connectedCallback();
@@ -476,15 +780,68 @@
     set className(v) {
       this.attrs.set("class", String(v));
     }
+    get dir() {
+      return this.attrs.get("dir") || "";
+    }
+    set dir(v) {
+      this.attrs.set("dir", String(v));
+    }
+    get classList() {
+      const read = () => (this.attrs.get("class") || "").split(/\s+/).filter(Boolean);
+      const write = (tokens) => {
+        this.attrs.set("class", tokens.join(" "));
+      };
+      return {
+        add: (...names) => {
+          const t = read();
+          for (const n of names) if (t.indexOf(n) < 0) t.push(n);
+          write(t);
+        },
+        remove: (...names) => {
+          write(read().filter((x) => names.indexOf(x) < 0));
+        },
+        toggle: (name, force) => {
+          const has = read().indexOf(name) >= 0;
+          const next = force === void 0 ? !has : force;
+          if (next && !has) write([...read(), name]);
+          else if (!next && has) write(read().filter((x) => x !== name));
+          return next;
+        },
+        replace: (oldName, newName) => {
+          const t = read();
+          const i = t.indexOf(oldName);
+          if (i < 0) return false;
+          t[i] = newName;
+          write(t);
+          return true;
+        },
+        contains: (name) => read().indexOf(name) >= 0,
+        item: (i) => read()[i] ?? null,
+        forEach: (cb) => read().forEach(cb),
+        get length() {
+          return read().length;
+        },
+        get value() {
+          return read().join(" ");
+        },
+        toString: () => read().join(" ")
+      };
+    }
     get children() {
       return this.childNodes.filter((n) => n.nodeType === 1 /* Element */);
     }
     get innerHTML() {
       return this.cachedInnerHTML != null ? this.cachedInnerHTML : serializeChildren(this);
     }
+    // Parse into real child nodes (so cloneNode/lastChild/querySelector and the link collector see injected
+    // content — CMS rich-text and dangerouslySetInnerHTML blocks carry anchors), then keep the verbatim
+    // string as a serialization fast-path. Any later child mutation nulls the cache via appendChild et al.
     set innerHTML(v) {
       this.childNodes = [];
-      this.cachedInnerHTML = v == null ? "" : String(v);
+      const html = v == null ? "" : String(v);
+      const parse = parserRef.parseFragment;
+      if (parse) for (const node of parse(html)) this.appendChild(node);
+      this.cachedInnerHTML = html;
     }
     get textContent() {
       return textOf(this);
@@ -526,6 +883,15 @@
       this.data = data == null ? "" : String(data);
       hideOwnFields(this);
     }
+    get nodeName() {
+      return "#comment";
+    }
+    get nodeValue() {
+      return this.data;
+    }
+    set nodeValue(v) {
+      this.data = v == null ? "" : String(v);
+    }
     _shallowClone() {
       return new _Comment(this.data);
     }
@@ -536,6 +902,21 @@
     constructor() {
       super(11 /* DocumentFragment */);
       hideOwnFields(this);
+    }
+    get nodeName() {
+      return "#document-fragment";
+    }
+    querySelector(sel) {
+      const r = querySelectorAll(this, sel);
+      return r.length ? r[0] : null;
+    }
+    querySelectorAll(sel) {
+      return querySelectorAll(this, sel);
+    }
+    getElementsByTagName(tag) {
+      const out = [];
+      collectByTag(this, String(tag).toLowerCase(), out);
+      return out;
     }
     _shallowClone() {
       return new _DocumentFragment();
@@ -843,6 +1224,44 @@
     }
   };
 
+  // dom/HTMLScriptElement.ts
+  var HTMLScriptElement = class extends HTMLElement {
+    constructor() {
+      super("script");
+    }
+    get src() {
+      return this.getAttribute("src") || "";
+    }
+    set src(value) {
+      this.setAttribute("src", value == null ? "" : String(value));
+    }
+    get type() {
+      return this.getAttribute("type") || "";
+    }
+    set type(value) {
+      this.setAttribute("type", value == null ? "" : String(value));
+    }
+  };
+
+  // dom/HTMLLinkElement.ts
+  var HTMLLinkElement = class extends HTMLElement {
+    constructor() {
+      super("link");
+    }
+    get href() {
+      return this.getAttribute("href") || "";
+    }
+    set href(value) {
+      this.setAttribute("href", value == null ? "" : String(value));
+    }
+    get rel() {
+      return this.getAttribute("rel") || "";
+    }
+    set rel(value) {
+      this.setAttribute("rel", value == null ? "" : String(value));
+    }
+  };
+
   // html/entities.ts
   var NAMED = {
     amp: "&",
@@ -1047,7 +1466,7 @@
         i = j;
         continue;
       }
-      const el = tag === "a" ? new HTMLAnchorElement() : new Element(tag);
+      const el = tag === "a" ? new HTMLAnchorElement() : tag === "script" ? new HTMLScriptElement() : tag === "link" ? new HTMLLinkElement() : new Element(tag);
       if (attrs) for (const key in attrs) el.setAttribute(key, attrs[key]);
       if (RAWTEXT_ELEMENTS[tag]) {
         const rawFrom = j;
@@ -1077,6 +1496,77 @@
     for (const k of kids) k.parentNode = null;
     return kids;
   }
+  parserRef.parseFragment = parseFragment;
+
+  // dom/Range.ts
+  var _zeroRect = { top: 0, left: 0, right: 0, bottom: 0, width: 0, height: 0, x: 0, y: 0 };
+  var Range = class _Range {
+    constructor() {
+      this.startContainer = null;
+      this.endContainer = null;
+      this.startOffset = 0;
+      this.endOffset = 0;
+      this.collapsed = true;
+      this.commonAncestorContainer = null;
+    }
+    setStart(node, offset) {
+      this.startContainer = node;
+      this.startOffset = offset;
+    }
+    setEnd(node, offset) {
+      this.endContainer = node;
+      this.endOffset = offset;
+    }
+    setStartBefore(node) {
+      this.startContainer = node;
+    }
+    setStartAfter(node) {
+      this.startContainer = node;
+    }
+    setEndBefore(node) {
+      this.endContainer = node;
+    }
+    setEndAfter(node) {
+      this.endContainer = node;
+    }
+    selectNode(node) {
+      this.startContainer = this.endContainer = this.commonAncestorContainer = node;
+    }
+    selectNodeContents(node) {
+      this.startContainer = this.endContainer = this.commonAncestorContainer = node;
+    }
+    collapse() {
+    }
+    cloneRange() {
+      return new _Range();
+    }
+    detach() {
+    }
+    insertNode(node) {
+      if (this.startContainer && typeof this.startContainer.appendChild === "function") this.startContainer.appendChild(node);
+    }
+    deleteContents() {
+    }
+    cloneContents() {
+      return new DocumentFragment();
+    }
+    extractContents() {
+      return new DocumentFragment();
+    }
+    surroundContents() {
+    }
+    getBoundingClientRect() {
+      return _zeroRect;
+    }
+    getClientRects() {
+      return [];
+    }
+    createContextualFragment(html) {
+      const fragment = new DocumentFragment();
+      for (const node of parseFragment(html)) fragment.appendChild(node);
+      return fragment;
+    }
+  };
 
   // dom/HTMLTemplateElement.ts
   var HTMLTemplateElement = class _HTMLTemplateElement extends Element {
@@ -1107,13 +1597,39 @@
       this.head = null;
       this.body = null;
       this.styleSheets = [];
+      // The <script> currently executing, set by the host around each classic script. Next's webpack
+      // auto-public-path asserts it `instanceof HTMLScriptElement` and reads its src; outside execution it's null.
+      this.currentScript = null;
+      this._cookies = /* @__PURE__ */ new Map();
       this.defaultView = defaultView || null;
       hideOwnFields(this);
+    }
+    // Browsers expose document.location as an alias of window.location; scripts (analytics, Clerk's CDN
+    // loader) read document.location.protocol/href, which threw on undefined when only window.location existed.
+    get location() {
+      return this.defaultView ? this.defaultView.location : null;
+    }
+    // A real document.cookie is always a string. Bundles probe it (document.cookie.includes(...)) and set it;
+    // we keep a name→value store, ignoring attributes (path/expires/domain) and expiry since rendering is a
+    // single synchronous pass.
+    get cookie() {
+      const out = [];
+      for (const [k, v] of this._cookies) out.push(`${k}=${v}`);
+      return out.join("; ");
+    }
+    set cookie(value) {
+      const pair = String(value ?? "").split(";")[0];
+      const eq = pair.indexOf("=");
+      if (eq < 0) return;
+      const name = pair.slice(0, eq).trim();
+      if (name) this._cookies.set(name, pair.slice(eq + 1).trim());
     }
     createElement(tag) {
       const name = String(tag).toLowerCase();
       if (name === "template") return new HTMLTemplateElement();
       if (name === "a") return new HTMLAnchorElement();
+      if (name === "script") return new HTMLScriptElement();
+      if (name === "link") return new HTMLLinkElement();
       const custom = customElements.tryCreate(name);
       return custom || new Element(name);
     }
@@ -1129,6 +1645,9 @@
     createDocumentFragment() {
       return new DocumentFragment();
     }
+    createRange() {
+      return new Range();
+    }
     getElementById(id) {
       return walkFind(this.documentElement, (e) => e.getAttribute("id") === id);
     }
@@ -1136,6 +1655,9 @@
       const out = [];
       if (this.documentElement) collectByTag(this.documentElement, String(tag).toLowerCase(), out);
       return out;
+    }
+    get scripts() {
+      return this.getElementsByTagName("script");
     }
     querySelector(sel) {
       const r = querySelectorAll(this, sel);
@@ -1177,6 +1699,9 @@
           return d;
         }
       };
+    }
+    get nodeName() {
+      return "#document";
     }
     get ownerDocument() {
       return null;
@@ -1224,10 +1749,6 @@
   var HTMLFormElement = class extends HTMLElement {
   };
   var HTMLStyleElement = class extends HTMLElement {
-  };
-  var HTMLScriptElement = class extends HTMLElement {
-  };
-  var HTMLLinkElement = class extends HTMLElement {
   };
   var HTMLCanvasElement = class extends HTMLElement {
   };
@@ -1323,30 +1844,6 @@
     global.cancelAnimationFrame = () => {
     };
   }
-
-  // browser/Event.ts
-  var Event = class {
-    constructor(type, init) {
-      this.isTrusted = false;
-      this.defaultPrevented = false;
-      this.eventPhase = 0;
-      this.target = null;
-      this.currentTarget = null;
-      this._stoppedImmediate = false;
-      this.type = String(type);
-      this.bubbles = !!(init && init.bubbles);
-      this.cancelable = !!(init && init.cancelable);
-      this.timeStamp = Date.now();
-    }
-    preventDefault() {
-      if (this.cancelable) this.defaultPrevented = true;
-    }
-    stopPropagation() {
-    }
-    stopImmediatePropagation() {
-      this._stoppedImmediate = true;
-    }
-  };
 
   // browser/CustomEvent.ts
   var CustomEvent = class extends Event {
@@ -1540,6 +2037,48 @@
   };
   var performance = new Performance();
 
+  // browser/IntersectionObserver.ts
+  var IntersectionObserver = class {
+    constructor(callback) {
+      this._pending = [];
+      this._scheduled = false;
+      this._callback = typeof callback === "function" ? callback : () => {
+      };
+    }
+    observe(target) {
+      const rect = target && typeof target.getBoundingClientRect === "function" ? target.getBoundingClientRect() : { top: 0, left: 0, right: 0, bottom: 0, width: 0, height: 0, x: 0, y: 0 };
+      this._pending.push({
+        target,
+        isIntersecting: true,
+        intersectionRatio: 1,
+        boundingClientRect: rect,
+        intersectionRect: rect,
+        rootBounds: rect,
+        time: 0
+      });
+      if (!this._scheduled) {
+        this._scheduled = true;
+        enqueue(() => this._flush());
+      }
+    }
+    unobserve() {
+    }
+    disconnect() {
+      this._pending = [];
+      this._scheduled = false;
+    }
+    takeRecords() {
+      return [];
+    }
+    _flush() {
+      this._scheduled = false;
+      if (!this._pending.length) return;
+      const entries = this._pending;
+      this._pending = [];
+      this._callback(entries, this);
+    }
+  };
+
   // browser/globals.ts
   var doc = new Document(globalThis);
   documentRef.current = doc;
@@ -1548,18 +2087,6 @@
     global.window = global;
     global.self = global;
     global.navigator = navigator;
-    global.console = global.console || {
-      log() {
-      },
-      warn() {
-      },
-      error() {
-      },
-      info() {
-      },
-      debug() {
-      }
-    };
     global.location = createLocation();
     global.history = createHistory();
     global.addEventListener = () => {
@@ -1567,18 +2094,23 @@
     global.removeEventListener = () => {
     };
     global.dispatchEvent = () => true;
-    global.matchMedia = () => ({
-      matches: false,
-      addListener() {
+    global.getComputedStyle = () => ({ getPropertyValue: () => "" });
+    global.getSelection = () => ({
+      rangeCount: 0,
+      type: "None",
+      isCollapsed: true,
+      addRange() {
       },
-      removeListener() {
+      removeAllRanges() {
       },
-      addEventListener() {
+      getRangeAt() {
+        return null;
       },
-      removeEventListener() {
+      toString() {
+        return "";
       }
     });
-    global.getComputedStyle = () => ({ getPropertyValue: () => "" });
+    installViewport(global);
     global.MutationObserver = function() {
       this.observe = () => {
       };
@@ -1586,15 +2118,7 @@
       };
       this.takeRecords = () => [];
     };
-    global.IntersectionObserver = function() {
-      this.observe = () => {
-      };
-      this.unobserve = () => {
-      };
-      this.disconnect = () => {
-      };
-      this.takeRecords = () => [];
-    };
+    global.IntersectionObserver = IntersectionObserver;
     global.ResizeObserver = function() {
       this.observe = () => {
       };
@@ -1630,7 +2154,167 @@
     installTimerGlobals(global);
   }
 
+  // console/constants.ts
+  var LEVEL_TRACE = 0;
+  var LEVEL_DEBUG = 1;
+  var LEVEL_INFO = 2;
+  var LEVEL_WARN = 3;
+  var LEVEL_ERROR = 4;
+
+  // console/utils.ts
+  function formatArgs(args) {
+    if (args.length === 0) return "";
+    if (args.length === 1) return stringify(args[0]);
+    const fmt = stringify(args[0]);
+    if (fmt.indexOf("%") < 0) return args.map(stringify).join(" ");
+    let out = "";
+    let argIdx = 1;
+    let i = 0;
+    while (i < fmt.length) {
+      if (fmt[i] === "%" && i + 1 < fmt.length && argIdx < args.length) {
+        const spec = fmt[i + 1];
+        if (spec === "s" || spec === "o" || spec === "O") {
+          out += stringify(args[argIdx++]);
+          i += 2;
+          continue;
+        }
+        if (spec === "d" || spec === "i") {
+          out += toInt(args[argIdx++]);
+          i += 2;
+          continue;
+        }
+        if (spec === "f") {
+          out += toFloat(args[argIdx++]);
+          i += 2;
+          continue;
+        }
+        if (spec === "%") {
+          out += "%";
+          i += 2;
+          continue;
+        }
+      }
+      out += fmt[i++];
+    }
+    while (argIdx < args.length) out += " " + stringify(args[argIdx++]);
+    return out;
+  }
+  function stringify(value) {
+    if (value === null) return "null";
+    if (value === void 0) return "undefined";
+    const type = typeof value;
+    if (type === "string") return value;
+    if (type === "number" || type === "boolean" || type === "bigint") return String(value);
+    if (type === "function" || type === "symbol") return String(value);
+    try {
+      return JSON.stringify(value) ?? String(value);
+    } catch {
+      return String(value);
+    }
+  }
+  function toInt(value) {
+    const n = Number(value);
+    return Number.isFinite(n) ? Math.trunc(n) : 0;
+  }
+  function toFloat(value) {
+    const n = Number(value);
+    return Number.isFinite(n) ? n : 0;
+  }
+
+  // console/api.ts
+  function installConsole(global) {
+    let minLevel = Number.POSITIVE_INFINITY;
+    const timers = /* @__PURE__ */ new Map();
+    const counters = /* @__PURE__ */ new Map();
+    let groupDepth = 0;
+    const emit = (level, build) => {
+      if (level < minLevel) return;
+      const log = global.__crawlerLog;
+      if (typeof log !== "function") return;
+      const indent = groupDepth > 0 ? " ".repeat(groupDepth * 2) : "";
+      log(level, indent + build());
+    };
+    const label = (args) => args.length > 0 ? stringify(args[0]) : "default";
+    global.console = {
+      log: (...args) => emit(LEVEL_INFO, () => formatArgs(args)),
+      info: (...args) => emit(LEVEL_INFO, () => formatArgs(args)),
+      debug: (...args) => emit(LEVEL_DEBUG, () => formatArgs(args)),
+      warn: (...args) => emit(LEVEL_WARN, () => formatArgs(args)),
+      error: (...args) => emit(LEVEL_ERROR, () => formatArgs(args)),
+      trace: (...args) => emit(LEVEL_TRACE, () => formatArgs(args)),
+      dir: (...args) => emit(LEVEL_DEBUG, () => formatArgs(args)),
+      dirxml: (...args) => emit(LEVEL_DEBUG, () => formatArgs(args)),
+      assert: (...args) => {
+        if (args.length > 0 && args[0]) return;
+        emit(LEVEL_ERROR, () => args.length > 1 ? "Assertion failed: " + formatArgs(args.slice(1)) : "Assertion failed");
+      },
+      group: (...args) => {
+        emit(LEVEL_DEBUG, () => "\u25B6 " + (args.length > 0 ? formatArgs(args) : ""));
+        groupDepth++;
+      },
+      groupCollapsed: (...args) => {
+        emit(LEVEL_DEBUG, () => "\u25B6 " + (args.length > 0 ? formatArgs(args) : ""));
+        groupDepth++;
+      },
+      groupEnd: () => {
+        if (groupDepth > 0) groupDepth--;
+      },
+      count: (...args) => {
+        const key = label(args);
+        const value = (counters.get(key) ?? 0) + 1;
+        counters.set(key, value);
+        emit(LEVEL_DEBUG, () => `${key}: ${value}`);
+      },
+      countReset: (...args) => {
+        const key = label(args);
+        if (!counters.has(key)) emit(LEVEL_WARN, () => `Count for '${key}' does not exist`);
+        else counters.set(key, 0);
+      },
+      time: (...args) => {
+        const key = label(args);
+        if (timers.has(key)) emit(LEVEL_WARN, () => `Timer '${key}' already exists`);
+        else timers.set(key, Date.now());
+      },
+      timeLog: (...args) => {
+        const key = label(args);
+        const start = timers.get(key);
+        if (start === void 0) {
+          emit(LEVEL_WARN, () => `Timer '${key}' does not exist`);
+          return;
+        }
+        const extra = args.length > 1 ? " " + formatArgs(args.slice(1)) : "";
+        emit(LEVEL_DEBUG, () => `${key}: ${Date.now() - start}ms${extra}`);
+      },
+      timeEnd: (...args) => {
+        const key = label(args);
+        const start = timers.get(key);
+        if (start === void 0) {
+          emit(LEVEL_WARN, () => `Timer '${key}' does not exist`);
+          return;
+        }
+        timers.delete(key);
+        emit(LEVEL_DEBUG, () => `${key}: ${Date.now() - start}ms - timer ended`);
+      },
+      table: (...args) => emit(LEVEL_DEBUG, () => args.length > 0 ? stringify(args[0]) : "(empty table)"),
+      clear: () => {
+      }
+    };
+    global.__crawlerSetLogLevel = (level) => {
+      minLevel = level;
+    };
+  }
+
   // crawler/api.ts
+  function setCurrentScript(src) {
+    if (src == null) {
+      doc.currentScript = null;
+      return;
+    }
+    const script = new HTMLScriptElement();
+    const s = String(src);
+    if (s) script.src = s;
+    doc.currentScript = script;
+  }
   function collectScripts() {
     const out = [];
     if (!doc.documentElement) return out;
@@ -1683,6 +2367,12 @@
     global.__crawlerSetLocation = (url) => {
       applyUrl(url);
     };
+    global.__crawlerSetViewport = (width, height) => {
+      setViewport(width, height);
+    };
+    global.__crawlerSetCurrentScript = (src) => {
+      setCurrentScript(src);
+    };
     global.__crawlerLoadHtml = (html) => {
       parseHTML(doc, html);
     };
@@ -1690,10 +2380,16 @@
     global.__crawlerCollectLinks = () => JSON.stringify(collectLinks());
     global.__crawlerPending = () => pendingCount();
     global.__crawlerPump = () => pumpTasks();
+    global.__crawlerTakeResources = () => takeResources();
+    global.__crawlerPendingResources = () => pendingResourceCount();
+    global.__crawlerFireResourceEvent = (id, type) => {
+      fireResourceEvent(id, type);
+    };
     global.__crawlerSerialize = () => doc.documentElement ? serializeNode(doc.documentElement) : "";
   }
 
   // index.ts
   installDOM(globalThis);
+  installConsole(globalThis);
   installCrawlerApi(globalThis);
 })();

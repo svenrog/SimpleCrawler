@@ -1,4 +1,4 @@
-import { toHeaderObject } from "./utils";
+import { toHeaderObject } from "../utils";
 
 export class Headers {
     private _m: any = {};

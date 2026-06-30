@@ -21,7 +21,6 @@ internal sealed class ProfilingJsEngine : IJsEngine
     public T Evaluate<T>(string expression) => Time("engine.Evaluate", () => _inner.Evaluate<T>(expression));
     public object GetGlobalObject() => Time("engine.GetGlobalObject", () => _inner.GetGlobalObject());
     public object CreateArray(IReadOnlyList<object?> items) => Time("engine.CreateArray", () => _inner.CreateArray(items));
-    public object CreateScriptElement(string src) => Time("engine.CreateScriptElement", () => _inner.CreateScriptElement(src));
     public void InvokeCallback(object callback) => Time("engine.InvokeCallback", () => _inner.InvokeCallback(callback));
     public void CallGlobal(string name, params object?[] args) => Time("engine.CallGlobal", () => _inner.CallGlobal(name, args));
     public void RunMicrotasks() => Time("engine.RunMicrotasks", () => _inner.RunMicrotasks());

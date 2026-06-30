@@ -64,9 +64,10 @@ public sealed class JsRenderer
 
         var setupTime = RenderProfiler.Start();
         RunPrelude(engine, JsPreludes.Dom);
-        RenderProfiler.Stop("phase.setupGlobals", setupTime);
-
         engine.CallGlobal("__crawlerSetLocation", pageUrl);
+        engine.CallGlobal("__crawlerSetViewport", (int)_options.Viewport.Width, (int)_options.Viewport.Height);
+        ConfigureScriptLogging(engine);
+        RenderProfiler.Stop("phase.setupGlobals", setupTime);
 
         var parseTime = RenderProfiler.Start();
         try
@@ -111,7 +112,7 @@ public sealed class JsRenderer
         RenderProfiler.Stop("phase.bundleExec", bundleExecutionTime);
 
         var drainTime = RenderProfiler.Start();
-        DrainJs(engine);
+        await DrainJsAsync(engine, pageUri, client, pageUrl, cancellationToken);
         RenderProfiler.Stop("phase.drain", drainTime);
 
         return Finalize(engine, finalize, totalTime);
@@ -175,6 +176,7 @@ public sealed class JsRenderer
 
     private void RunRegularJs(IJsEngine engine, RegularScript script, string pageUrl)
     {
+        SetCurrentScript(engine, script.External ? script.Src : "");
         try
         {
             if (script.External)
@@ -186,23 +188,110 @@ public sealed class JsRenderer
         {
             _logger.LogWarning("Bundle execution error on '{url}': {message}\n{details}", pageUrl, ex.Message, ex.ErrorDetails);
         }
+        finally
+        {
+            SetCurrentScript(engine, null);
+        }
     }
 
-    private void DrainJs(IJsEngine engine)
+    // A classic <script> exposes itself as document.currentScript only while it runs synchronously; webpack's
+    // auto-public-path (and Next's instanceof-HTMLScriptElement invariant over it) reads that during chunk
+    // evaluation, so it must be set around each execution and cleared after — exactly as a browser does.
+    private static void SetCurrentScript(IJsEngine engine, string? src)
+        => engine.CallGlobal("__crawlerSetCurrentScript", src);
+
+    private async Task DrainJsAsync(IJsEngine engine, Uri pageUri, HttpClient client, string pageUrl, CancellationToken cancellationToken)
     {
-        // Mirrors the Bridge drain's "settle after idle turns": __crawlerPending reports the queue depth
-        // before __crawlerPump runs it, so a turn with no pending work counts as idle.
+        // Settle after a few idle turns: __crawlerPending reports the queue depth before __crawlerPump runs
+        // it, so a turn with no pending work counts as idle. Runtime-appended <script src>/<link> chunks are
+        // loaded at the top of each turn — before the timer pump — so a code-split route's chunk is installed
+        // and its load event fired before webpack's chunk-load timeout callback runs.
         var iterations = 0;
         var idle = 0;
         while (iterations++ < _options.MaxTaskDrainIterations && idle < _idleTurnsBeforeSettled)
         {
+            var loadedResource = await DrainResourcesAsync(engine, pageUri, client, pageUrl, cancellationToken);
+
             engine.RunMicrotasks();
             var pending = engine.Evaluate<int>("__crawlerPending()");
             engine.Evaluate<int>("__crawlerPump()");
             engine.RunMicrotasks();
-            idle = pending == 0 ? idle + 1 : 0;
+
+            var pendingResources = engine.Evaluate<int>("__crawlerPendingResources()");
+            idle = pending == 0 && pendingResources == 0 && !loadedResource ? idle + 1 : 0;
         }
     }
+
+    private async Task<bool> DrainResourcesAsync(IJsEngine engine, Uri pageUri, HttpClient client, string pageUrl, CancellationToken cancellationToken)
+    {
+        var json = engine.Evaluate<string>("__crawlerTakeResources()");
+        if (string.IsNullOrEmpty(json))
+            return false;
+
+        using var doc = JsonDocument.Parse(json);
+        var loaded = false;
+        foreach (var entry in doc.RootElement.EnumerateArray())
+        {
+            var id = entry.GetProperty("id").GetInt32();
+            var tag = entry.TryGetProperty("tag", out var tagProp) ? tagProp.GetString() : null;
+            var src = entry.TryGetProperty("src", out var srcProp) ? srcProp.GetString() : null;
+
+            await LoadResourceAsync(engine, id, tag, src, pageUri, client, pageUrl, cancellationToken);
+            loaded = true;
+        }
+
+        return loaded;
+    }
+
+    // A same-origin <script> is fetched and executed so a webpack chunk's module registrations run; a <link>
+    // is treated as loaded without fetching (a crawl needs no CSS). Cross-origin scripts (AppInsights/GTM and
+    // similar analytics SDKs) are left pending — running them is slow and yields no links, and nothing awaits
+    // their load. Every other case fires the node's load (or error) event to settle the awaiting import().
+    private async Task LoadResourceAsync(IJsEngine engine, int id, string? tag, string? src, Uri pageUri, HttpClient client, string pageUrl, CancellationToken cancellationToken)
+    {
+        if (!string.Equals(tag, "script", StringComparison.Ordinal))
+        {
+            FireResourceEvent(engine, id, "load");
+            return;
+        }
+
+        if (string.IsNullOrEmpty(src) || !Uri.TryCreate(pageUri, src, out var absolute))
+        {
+            FireResourceEvent(engine, id, "error");
+            return;
+        }
+
+        if (!string.Equals(absolute.Host, pageUri.Host, StringComparison.OrdinalIgnoreCase))
+            return;
+
+        var source = await FetchSourceAsync(client, _sources, absolute, cancellationToken);
+        if (source is null)
+        {
+            FireResourceEvent(engine, id, "error");
+            return;
+        }
+
+        SetCurrentScript(engine, absolute.AbsoluteUri);
+        try
+        {
+            engine.ExecuteCached(absolute.AbsoluteUri, source);
+        }
+        catch (JsException ex)
+        {
+            _logger.LogWarning("Chunk execution error on '{url}': {message}\n{details}", pageUrl, ex.Message, ex.ErrorDetails);
+            FireResourceEvent(engine, id, "error");
+            return;
+        }
+        finally
+        {
+            SetCurrentScript(engine, null);
+        }
+
+        FireResourceEvent(engine, id, "load");
+    }
+
+    private static void FireResourceEvent(IJsEngine engine, int id, string type)
+        => engine.CallGlobal("__crawlerFireResourceEvent", id, type);
 
     private static JsExtract CollectLinks(IJsEngine engine)
     {
@@ -233,6 +322,49 @@ public sealed class JsRenderer
     }
 
     private static void RunPrelude(IJsEngine engine, in PreludeEntry prelude) => engine.ExecuteCached(prelude.Key, prelude.Source);
+
+    // The bundle's console.* calls reach the logger only when ScriptLogging opts in: the JS console stays a
+    // no-op until __crawlerSetLogLevel raises it off Infinity, so unset means no embedding and no formatting
+    // cost. The level numbers match LogLevel's, so the floor round-trips and __crawlerLog casts straight back.
+    private void ConfigureScriptLogging(IJsEngine engine)
+    {
+        if (_options.ScriptLogging is not { } level)
+            return;
+
+        engine.EmbedFunction("__crawlerLog", LogFromScript);
+        engine.CallGlobal("__crawlerSetLogLevel", (int)level);
+    }
+
+    private object? LogFromScript(params object?[] args)
+    {
+        var level = args.Length > 0 ? ToLogLevel(args[0]) : LogLevel.Information;
+        if (!_logger.IsEnabled(level))
+            return null;
+
+        var message = args.Length > 1 ? args[1]?.ToString() ?? string.Empty : string.Empty;
+        _logger.Log(level, "{Message}", message);
+        return null;
+    }
+
+    private static LogLevel ToLogLevel(object? value)
+    {
+        var number = value switch
+        {
+            int i => i,
+            long l => (int)l,
+            double d => (int)d,
+            _ => int.TryParse(value?.ToString(), out var parsed) ? parsed : (int)LogLevel.Information,
+        };
+
+        return number switch
+        {
+            <= 0 => LogLevel.Trace,
+            1 => LogLevel.Debug,
+            2 => LogLevel.Information,
+            3 => LogLevel.Warning,
+            _ => LogLevel.Error,
+        };
+    }
 
     private void RunModule(IJsEngine engine, ModuleScript module, string pageUrl)
     {

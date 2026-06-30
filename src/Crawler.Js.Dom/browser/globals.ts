@@ -22,6 +22,8 @@ import { crypto } from "./crypto";
 import { MessageChannel, MessagePort } from "./MessageChannel";
 import { createStorage } from "./Storage";
 import { performance } from "./Performance";
+import { installViewport } from "./viewport";
+import { IntersectionObserver } from "./IntersectionObserver";
 import { documentRef } from "../dom/documentRef";
 
 export const doc = new Document(globalThis as any);
@@ -32,31 +34,28 @@ export function installDOM(global: any): void {
     global.window = global;
     global.self = global;
     global.navigator = navigator;
-    global.console = global.console || {
-        log() { }, warn() { }, error() { }, info() { }, debug() { },
-    };
     global.location = createLocation();
     global.history = createHistory();
     global.addEventListener = () => { };
     global.removeEventListener = () => { };
     global.dispatchEvent = () => true;
-    global.matchMedia = () => ({
-        matches: false,
-        addListener() { }, removeListener() { },
-        addEventListener() { }, removeEventListener() { },
-    });
     global.getComputedStyle = () => ({ getPropertyValue: () => "" });
+    global.getSelection = () => ({
+        rangeCount: 0,
+        type: "None",
+        isCollapsed: true,
+        addRange() { },
+        removeAllRanges() { },
+        getRangeAt() { return null; },
+        toString() { return ""; },
+    });
+    installViewport(global);
     global.MutationObserver = function () {
         this.observe = () => { };
         this.disconnect = () => { };
         this.takeRecords = () => [];
     };
-    global.IntersectionObserver = function () {
-        this.observe = () => { };
-        this.unobserve = () => { };
-        this.disconnect = () => { };
-        this.takeRecords = () => [];
-    };
+    global.IntersectionObserver = IntersectionObserver;
     global.ResizeObserver = function () {
         this.observe = () => { };
         this.unobserve = () => { };

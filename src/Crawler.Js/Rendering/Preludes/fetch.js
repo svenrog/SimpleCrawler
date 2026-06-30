@@ -22,7 +22,7 @@
     return out;
   }
 
-  // network/Headers.ts
+  // network/types/Headers.ts
   var Headers = class {
     constructor(init) {
       this._m = {};
@@ -58,7 +58,7 @@
     }
   };
 
-  // network/Response.ts
+  // network/types/Response.ts
   var Response = class _Response {
     constructor(r) {
       this._r = r;
@@ -112,7 +112,102 @@
     return Promise.resolve(new Response(r));
   }
 
-  // network/Request.ts
+  // network/types/AbortSignal.ts
+  var AbortSignal = class {
+    constructor() {
+      this.aborted = false;
+    }
+    throwIfAborted() {
+    }
+    addEventListener(type = null, listener = null, options = null) {
+    }
+    removeEventListener(type = null, listener = null, options = null) {
+    }
+    dispatchEvent(evt = null) {
+      return true;
+    }
+  };
+
+  // network/types/AbortController.ts
+  var AbortController = class {
+    constructor() {
+      this.signal = new AbortSignal();
+    }
+    abort(reason) {
+    }
+  };
+
+  // network/types/FormData.ts
+  var FormData = class {
+    constructor() {
+      this._e = [];
+    }
+    append(name, value) {
+      this._e.push([String(name), value]);
+    }
+    delete(name) {
+      const n = String(name);
+      this._e = this._e.filter((p) => p[0] !== n);
+    }
+    get(name) {
+      const n = String(name);
+      for (const p of this._e) if (p[0] === n) return p[1];
+      return null;
+    }
+    getAll(name) {
+      const n = String(name);
+      const out = [];
+      for (const p of this._e) if (p[0] === n) out.push(p[1]);
+      return out;
+    }
+    has(name) {
+      const n = String(name);
+      for (const p of this._e) if (p[0] === n) return true;
+      return false;
+    }
+    set(name, value) {
+      const n = String(name);
+      let added = false;
+      const out = [];
+      for (const p of this._e) {
+        if (p[0] === n) {
+          if (!added) {
+            out.push([n, value]);
+            added = true;
+          }
+        } else out.push(p);
+      }
+      if (!added) out.push([n, value]);
+      this._e = out;
+    }
+    entries() {
+      let i = 0;
+      const d = this._e;
+      return { next() {
+        return i < d.length ? { value: d[i++], done: false } : { value: void 0, done: true };
+      } };
+    }
+    keys() {
+      let i = 0;
+      const d = this._e;
+      return { next() {
+        return i < d.length ? { value: d[i++][0], done: false } : { value: void 0, done: true };
+      } };
+    }
+    values() {
+      let i = 0;
+      const d = this._e;
+      return { next() {
+        return i < d.length ? { value: d[i++][1], done: false } : { value: void 0, done: true };
+      } };
+    }
+    forEach(cb, thisArg) {
+      for (const p of this._e) cb.call(thisArg, p[1], p[0], this);
+    }
+  };
+  FormData.prototype[Symbol.iterator] = FormData.prototype.entries;
+
+  // network/types/Request.ts
   var Request = class {
     constructor(input, init) {
       init = init || {};
@@ -218,8 +313,11 @@
     global.Headers = global.Headers || Headers;
     global.Response = global.Response || Response;
     global.Request = global.Request || Request;
+    global.FormData = global.FormData || FormData;
     global.fetch = global.fetch || fetch;
     global.XMLHttpRequest = global.XMLHttpRequest || XMLHttpRequest;
+    global.AbortController = global.AbortController || AbortController;
+    global.AbortSignal = global.AbortSignal || AbortSignal;
   }
 
   // network/index.ts

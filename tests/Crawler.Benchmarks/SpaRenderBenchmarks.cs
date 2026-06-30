@@ -1,7 +1,7 @@
 using BenchmarkDotNet.Attributes;
+using Crawler.Core;
 using Crawler.Js.Jint;
 using Crawler.Js.V8;
-using Crawler.Core;
 using Crawler.Playwright;
 using Crawler.Puppeteer;
 using Crawler.TestHost.Infrastructure.Factories;

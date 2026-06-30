@@ -11,6 +11,10 @@ export class Text extends Node {
         hideOwnFields(this);
     }
 
+    get nodeName(): string {
+        return "#text";
+    }
+
     get nodeValue(): string {
         return this.data;
     }
