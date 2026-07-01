@@ -624,7 +624,11 @@
       },
       onresize: null,
       onscroll: null,
-      onscrollend: null
+      onscrollend: null,
+      addEventListener() {
+      },
+      removeEventListener() {
+      }
     };
     global.matchMedia = (query) => ({
       matches: matches(query),

@@ -122,6 +122,8 @@ export function installViewport(global: any): void {
         onresize: null,
         onscroll: null,
         onscrollend: null,
+        addEventListener() { },
+        removeEventListener() { },
     };
     global.matchMedia = (query: unknown) => ({
         matches: matches(query),
