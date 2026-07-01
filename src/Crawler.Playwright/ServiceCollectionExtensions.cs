@@ -18,6 +18,7 @@ public static class ServiceCollectionExtensions
     {
         services.AddLogging();
         services.AddScoped<DefaultPlaywrightCrawler>();
+        services.AddScoped<ICrawler>(provider => provider.GetRequiredService<DefaultPlaywrightCrawler>());
         return services;
     }
 }

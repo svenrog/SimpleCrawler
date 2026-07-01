@@ -1,7 +1,6 @@
 ﻿using Crawler.Core;
 using Crawler.HtmlAgilityPack;
 using Microsoft.Extensions.DependencyInjection;
-using ExtensionsOptions = Microsoft.Extensions.Options.Options;
 
 namespace SimpleCrawler.Extensions;
 
@@ -9,18 +8,9 @@ internal static class ServiceCollectionExtensions
 {
     public static void AddCrawler(this IServiceCollection services, Options options)
     {
-        services.AddOptions(options);
-        services.AddHtmlAgilityPackCrawler((provider, client) =>
-            ConfigureHttpClient(client, options));
-    }
-
-    private static void AddOptions(this IServiceCollection services, Options options)
-    {
-        var crawlerOptions = MapCrawlerOptions(options);
-        var optionsContainer = ExtensionsOptions.Create(crawlerOptions);
-
         services.AddSingleton(options);
-        services.AddSingleton(optionsContainer);
+        services.AddHtmlAgilityPackCrawler(MapCrawlerOptions(options), (provider, client) =>
+            ConfigureHttpClient(client, options));
     }
 
     private static CrawlerOptions MapCrawlerOptions(Options options)

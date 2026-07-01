@@ -1,5 +1,4 @@
 using Crawler.Core;
-using Crawler.Core.Helpers;
 using Crawler.Js.Abstractions;
 using Crawler.Js.Models;
 using Microsoft.Extensions.DependencyInjection;
@@ -15,13 +14,8 @@ public static class ServiceCollectionExtensions
 
         services.AddSingleton(Options.Create(engineOptions ?? new V8EngineOptions()));
         services.AddKeyedSingleton<IJsEngineFactory, V8JsEngineFactory>(DefaultV8Crawler.EngineKey);
-
-        services.AddHttpClient<DefaultV8Crawler>((provider, client) =>
-        {
-            config?.Invoke(provider, client);
-            ConfigurationHelper.ConfigureClient(client, provider.GetRequiredService<IOptions<CrawlerOptions>>());
-        }).ConfigurePrimaryHttpMessageHandler(provider =>
-            ConfigurationHelper.CreatePrimaryHandler(provider.GetRequiredService<IOptions<CrawlerOptions>>()));
+        services.AddCrawlerHttpClient<DefaultV8Crawler>(config);
+        services.AddTransient<ICrawler>(provider => provider.GetRequiredService<DefaultV8Crawler>());
 
         return services;
     }

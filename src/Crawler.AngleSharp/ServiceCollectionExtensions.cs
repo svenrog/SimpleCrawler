@@ -32,6 +32,7 @@ public static class ServiceCollectionExtensions
             ConfigurationHelper.ConfigureClient(client, provider.GetRequiredService<IOptions<CrawlerOptions>>());
         }).ConfigurePrimaryHttpMessageHandler(provider =>
             ConfigurationHelper.CreatePrimaryHandler(provider.GetRequiredService<IOptions<CrawlerOptions>>()));
+        services.AddTransient<ICrawler>(provider => provider.GetRequiredService<DefaultAngleSharpCrawler>());
 
         return services;
     }

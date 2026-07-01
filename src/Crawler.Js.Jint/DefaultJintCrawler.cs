@@ -10,7 +10,7 @@ using Microsoft.Extensions.Options;
 
 namespace Crawler.Js.Jint;
 
-public sealed class DefaultJintCrawler : JsCrawler<ScrapeResult>
+public sealed class DefaultJintCrawler : JsCrawler<ScrapeResult>, ICrawler
 {
     internal const string EngineKey = "js-jint";
 

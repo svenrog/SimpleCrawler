@@ -16,13 +16,31 @@ public static class ServiceCollectionExtensions
         services.AddSingleton(Options.Create(options));
         services.AddSingleton(Options.Create(renderOptions ?? new JsRenderOptions()));
 
-        services.AddHttpClient<IRobotClient, RobotWebClient>((provider, client) =>
-        {
-            config?.Invoke(provider, client);
-            ConfigurationHelper.ConfigureClient(client, provider.GetRequiredService<IOptions<CrawlerOptions>>());
-        }).ConfigurePrimaryHttpMessageHandler(provider =>
-            ConfigurationHelper.CreatePrimaryHandler(provider.GetRequiredService<IOptions<CrawlerOptions>>()));
+        services.AddCrawlerHttpClient<IRobotClient, RobotWebClient>(config);
 
         return services;
+    }
+
+    public static IHttpClientBuilder AddCrawlerHttpClient<TClient>(this IServiceCollection services, Action<IServiceProvider, HttpClient>? config)
+        where TClient : class
+    {
+        return services.AddHttpClient<TClient>((provider, client) => ConfigureClient(provider, client, config))
+            .ConfigurePrimaryHttpMessageHandler(provider =>
+                ConfigurationHelper.CreatePrimaryHandler(provider.GetRequiredService<IOptions<CrawlerOptions>>()));
+    }
+
+    public static IHttpClientBuilder AddCrawlerHttpClient<TClient, TImplementation>(this IServiceCollection services, Action<IServiceProvider, HttpClient>? config)
+        where TClient : class
+        where TImplementation : class, TClient
+    {
+        return services.AddHttpClient<TClient, TImplementation>((provider, client) => ConfigureClient(provider, client, config))
+            .ConfigurePrimaryHttpMessageHandler(provider =>
+                ConfigurationHelper.CreatePrimaryHandler(provider.GetRequiredService<IOptions<CrawlerOptions>>()));
+    }
+
+    private static void ConfigureClient(IServiceProvider provider, HttpClient client, Action<IServiceProvider, HttpClient>? config)
+    {
+        config?.Invoke(provider, client);
+        ConfigurationHelper.ConfigureClient(client, provider.GetRequiredService<IOptions<CrawlerOptions>>());
     }
 }

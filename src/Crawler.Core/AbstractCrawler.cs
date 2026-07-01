@@ -11,7 +11,7 @@ using System.Threading.Channels;
 
 namespace Crawler.Core;
 
-public abstract class AbstractCrawler<TResponse, TResult>
+public abstract class AbstractCrawler<TResponse, TResult> : ICrawler<TResult>
     where TResult : IScrapeResult
 {
     private readonly CrawlerOptions _options;

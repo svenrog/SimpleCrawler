@@ -18,6 +18,7 @@ public static class ServiceCollectionExtensions
     {
         services.AddLogging();
         services.AddScoped<DefaultPuppeteerCrawler>();
+        services.AddScoped<ICrawler>(provider => provider.GetRequiredService<DefaultPuppeteerCrawler>());
         return services;
     }
 }

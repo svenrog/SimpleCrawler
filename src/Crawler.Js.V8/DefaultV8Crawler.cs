@@ -10,7 +10,7 @@ using Microsoft.Extensions.Options;
 
 namespace Crawler.Js.V8;
 
-public sealed class DefaultV8Crawler : JsCrawler<ScrapeResult>
+public sealed class DefaultV8Crawler : JsCrawler<ScrapeResult>, ICrawler
 {
     internal const string EngineKey = "js-v8";
 

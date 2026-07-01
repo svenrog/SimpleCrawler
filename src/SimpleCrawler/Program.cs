@@ -1,5 +1,5 @@
 ﻿using CommandLine;
-using Crawler.HtmlAgilityPack;
+using Crawler.Core;
 using Crude.Logging.Console.Extensions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -42,9 +42,9 @@ internal static class Program
             tokenSource.Cancel();
         };
 
-        var logger = host.Services.GetRequiredService<ILogger<DefaultHtmlAgilityPackCrawler>>();
+        var logger = host.Services.GetRequiredService<ILogger<ICrawler>>();
         var options = host.Services.GetRequiredService<Options>();
-        var crawler = host.Services.GetRequiredService<DefaultHtmlAgilityPackCrawler>();
+        var crawler = host.Services.GetRequiredService<ICrawler>();
 
         var result = await crawler.Start(options.Entry, tokenSource.Token);
 
@@ -56,7 +56,7 @@ internal static class Program
     private static void Fail(HostApplicationBuilder builder, IEnumerable<Error> errors)
     {
         using var host = builder.Build();
-        var logger = host.Services.GetRequiredService<ILogger<DefaultHtmlAgilityPackCrawler>>();
+        var logger = host.Services.GetRequiredService<ILogger<ICrawler>>();
 
         logger.LogCliErrors(errors);
     }
