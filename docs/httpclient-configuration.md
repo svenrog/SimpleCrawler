@@ -13,11 +13,9 @@ services.AddHtmlAgilityPackCrawler(options, (provider, client) =>
 
 Two things worth knowing:
 
-- The hook is applied to **both** the page client and the internal `robots.txt`/sitemap client, so a
-  site that puts those behind the same auth is fetched with the same credentials.
+- The hook is applied to **both** the page client and the internal `robots.txt`/sitemap client, so a site that puts those behind the same auth is fetched with the same credentials.
 - It runs *before* the crawler sets its defaults (HTTP/2, and the `UserAgent` from
-  [`CrawlerOptions`](./crawler-options.md)). A `User-Agent` you set in the hook is kept — the crawler
-  won't overwrite one that's already present.
+  [`CrawlerOptions`](./crawler-options.md)). A `User-Agent` you set in the hook is kept. The crawler won't overwrite one that's already present.
 
 ## Cookies
 
@@ -26,9 +24,7 @@ services.AddHtmlAgilityPackCrawler(options, (provider, client) =>
     client.DefaultRequestHeaders.Add("Cookie", "session=abc123; theme=dark"));
 ```
 
-The underlying handler keeps a cookie container, so `Set-Cookie` responses during the crawl are stored
-and resent automatically. Use the hook to seed an initial cookie (an existing logged-in session, a
-consent cookie), not to track per-request cookies yourself.
+The underlying handler keeps a cookie container, so `Set-Cookie` responses during the crawl are stored and resent automatically. Use the hook to seed an initial cookie (an existing logged-in session, a consent cookie), not to track per-request cookies yourself.
 
 ## Basic auth
 
@@ -54,7 +50,7 @@ services.AddV8Crawler(options, renderOptions, config: (provider, client) =>
 
 ## Resolving secrets from DI
 
-The hook hands you the `IServiceProvider`, so the credential can come from configuration or any
+The hook hands you the `IServiceProvider`, the credential can come from configuration or any
 registered service instead of being hard-coded:
 
 ```csharp
@@ -69,10 +65,8 @@ services.AddV8Crawler(options, renderOptions, config: (provider, client) =>
 
 ## From the CLI
 
-The `smpcrawl` CLI wires its `--cookie` and `--userAgent` flags through this same hook, so the command
-line is just a thin front for the cases above.
+The `smpcrawl` CLI wires its `--cookie` and `--userAgent` flags through this same hook. The commandline is just a thin front for the cases above.
 
 ## Headless backends
 
-`Playwright` and `Puppeteer` don't fetch over `HttpClient` and take no hook — set headers, cookies, or a
-stored session on the browser context instead (e.g. Playwright's `ExtraHTTPHeaders` / storage state).
+`Playwright` and `Puppeteer` don't fetch over `HttpClient` and take no hook headers, cookies, or a stored session has to be set in the browser context instead (e.g. Playwright's `ExtraHTTPHeaders`).

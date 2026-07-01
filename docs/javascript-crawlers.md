@@ -1,6 +1,6 @@
 # JavaScript crawlers
 
-Using `Crawler.Js` crawlers requires 2 choices (engine + parser), plus render options.
+Using `Crawler.Js` crawlers requires 2 choices (engine and parser).
 
 ## Engine
 
@@ -18,12 +18,8 @@ Use for AOT, locked-down environments or just don't like dependencies.
 - Much faster on render-heavy pages (optimising JIT).
 - Broadest compatibility, including Vue.
 - Lowest *managed* allocations.
-- **Memory lives outside the .NET heap.** The V8 isolate has its own native heap, so managed profilers
-  understate real footprint, the low "Allocated" numbers in [performance](./performance.md) are misleading.
-  Size host RAM for it, especially at high `ParseConcurrency`.
+- **Memory lives outside the .NET heap.** The V8 isolate has its own native heap, so managed profilers understate real footprint, the low "Allocated" numbers in [performance](./performance.md) are misleading. Size host RAM for it, especially at high `ParseConcurrency`.
 - Ships a version-locked, per-platform native binary. AOT works but deployment is heavier than Jint.
-
-Use for throughput and max compatibility, when you can budget the off-heap memory.
 
 ## HTML parser
 
@@ -47,3 +43,13 @@ Passed to `AddJintCrawler`/`AddV8Crawler`.
 | `Viewport` | 1920×1080 | Window/screen reported to scripts. Set a mobile screen size to crawl the mobile layout on responsive sites. |
 | `ScriptLogging` | `null` | `LogLevel` floor for forwarding page `console.*` to your logger. `Debug` to diagnose non-rendering pages. |
 | `MaxTaskDrainIterations` | `1000` | Cap on microtask/chunk-load drain iterations before giving up on a page. |
+
+## V8EngineOptions
+
+The JS rendering implementation for V8 uses a pool of engines that is equal to the concurrency. So if concurrency is set to 8 in crawl options, the pool is 8 in size.
+
+| Option | Default | Effect |
+| ------ | ------- | ------ |
+| `MaxHeapSizeMb` | `256` | Sets the max heap allocation of each pool. This value should be multiplied by the number of threads (by default 2048 MiB) |
+| `MaxUsesPerRuntime` | `50` | The maximum number of uses for each engine, the heap will grow uncontrollably during crawl (depending on client scripts encountered) and this can be used as a safety valve |
+| `HeapSampleInterval` | `250&nbsp;ms` | The interval at which to sample memory use, lower values use more system resources. |

@@ -22,8 +22,6 @@ This project stemmed from the need to crawl a single domain in preparation of lo
 | [Puppeteer Sharp](https://www.puppeteersharp.com/) | :heavy_check_mark: | :heavy_check_mark: |
 | [Selenium WebDriver](https://www.selenium.dev/) | :skull: | :skull: |
 
-[^1]: Experimental implementation, more details under "Jint and V8" below.
-
 ## Running the .exe
 
 Executing the binary will crawl a single domain using the default `HtmlAgilityPack` crawler.
@@ -36,15 +34,15 @@ Full list of possible options can be found [here](./src/SimpleCrawler/Options.cs
 
 Adjusting which implementation is used can be done by referencing another implementation project and switching service collection extension [here](./src/SimpleCrawler/Extensions/ServiceCollectionExtensions.cs).
 
-## Configuration :gear:
+## Configuration
 
 Wiring a backend into your own project [`docs/`](./docs/configuration.md):
 
-- [Overview](./docs/configuration.md): Static/JS/Headless tiers, DI.
-- [`CrawlerOptions`](./docs/crawler-options.md): shared options.
-- [JavaScript crawlers](./docs/javascript-crawlers.md): Jint vs V8, HTML parsers, `JsRenderOptions`.
-- [Performance](./docs/performance.md): comparison of crawler performance.
-
+- [Overview](./docs/configuration.md) - project overview and code examples.
+- [CrawlerOptions](./docs/crawler-options.md) - detailed options.
+- [HttpClient configuration](./docs/httpclient-configuration.md) - examples of customizations.
+- [JavaScript crawlers](./docs/javascript-crawlers.md) - information on javascript crawlers, how to use parsers and options.
+- [Performance](./docs/performance.md) - comparison of crawler performance.
 
 ## Notes on implementations
 

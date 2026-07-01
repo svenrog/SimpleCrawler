@@ -2,10 +2,10 @@
 
 This section describes configuration in detail.
 
-- [`CrawlerOptions`](./crawler-options.md): shared options.
-- [JavaScript crawlers](./javascript-crawlers.md): Jint vs V8, HTML parsers, `JsRenderOptions`.
-- [HttpClient configuration](./httpclient-configuration.md): custom auth, cookies, and headers via the HttpClient hook.
-- [Performance](./performance.md): comparison of crawler performance.
+- [CrawlerOptions](./crawler-options.md)
+- [JavaScript crawlers](./javascript-crawlers.md)
+- [HttpClient configuration](./httpclient-configuration.md)
+- [Performance](./performance.md)
 
 ## Pipeline
 

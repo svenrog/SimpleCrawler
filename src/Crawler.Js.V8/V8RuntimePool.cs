@@ -15,16 +15,16 @@ namespace Crawler.Js.V8;
 // the accumulated heap and compilation cache while still amortizing spin-up over many pages.
 internal sealed class V8RuntimePool : IDisposable
 {
-    private const int _maxUsesPerRuntime = 50;
-
-    private static readonly TimeSpan _heapSampleInterval = TimeSpan.FromMilliseconds(250);
-
     private readonly ConcurrentBag<V8RuntimeLease> _leases = [];
-    private readonly nuint _maxHeapSizeBytes;
+    private readonly uint _maxHeapSizeBytes;
+    private readonly uint _maxUsesPerRuntime;
+    private readonly TimeSpan _heapSampleInterval;
 
-    public V8RuntimePool(int maxHeapSizeMb = 0)
+    public V8RuntimePool(V8EngineOptions options)
     {
-        _maxHeapSizeBytes = maxHeapSizeMb > 0 ? (nuint)maxHeapSizeMb * 1024 * 1024 : 0;
+        _maxHeapSizeBytes = options.MaxHeapSizeMb > 0 ? (uint)options.MaxHeapSizeMb * 1024 * 1024 : 0;
+        _maxUsesPerRuntime = options.MaxUsesPerRuntime > 0 ? (uint)options.MaxUsesPerRuntime : 0;
+        _heapSampleInterval = options.HeapSampleInterval;
     }
 
     public V8RuntimeLease Rent()

@@ -9,7 +9,7 @@ internal sealed class V8JsEngineFactory : IJsEngineFactory, IDisposable
 
     public V8JsEngineFactory(IOptions<V8EngineOptions> options)
     {
-        _pool = new V8RuntimePool(options.Value.MaxHeapSizeMb);
+        _pool = new V8RuntimePool(options.Value);
     }
 
     public IJsEngine Create(IModuleFetcher fetcher, Uri baseUri)
