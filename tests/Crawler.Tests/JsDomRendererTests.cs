@@ -530,6 +530,40 @@ public class JsDomRendererTests
         Assert.DoesNotContain("href=\"/notthis\"", rendered);
     }
 
+    // webpack guards a lazy chunk with a 120s setTimeout that rejects the import as a "timeout" unless the
+    // script's load event clears it first. A render collapses time, so a delay that long is a give-up guard
+    // that must never fire (the resource drain loads the chunk in-turn); a short timer still runs, and an
+    // explicit clearTimeout cancels one. Regressed spurious "Loading chunk failed" when setTimeout ignored
+    // its delay and clearTimeout was a no-op.
+    [Theory]
+    [InlineData(JsEngine.Jint)]
+    [InlineData(JsEngine.V8)]
+    public async Task JsMode_LongTimersNeverFire_ShortTimersRun_ClearTimeoutCancels(JsEngine engine)
+    {
+        if (engine == JsEngine.V8)
+            Assert.SkipUnless(V8Support.IsAvailable, V8Support.UnavailableReason);
+
+        const string html = """
+            <html><body><div id="t"></div>
+            <script>
+            var d = document.getElementById('t');
+            setTimeout(function () { var a = document.createElement('a'); a.setAttribute('href', '/give-up'); d.appendChild(a); }, 120000);
+            setTimeout(function () { var a = document.createElement('a'); a.setAttribute('href', '/short'); d.appendChild(a); }, 0);
+            var h = setTimeout(function () { var a = document.createElement('a'); a.setAttribute('href', '/cancelled'); d.appendChild(a); }, 10);
+            clearTimeout(h);
+            </script>
+            </body></html>
+            """;
+
+        var renderer = CreateJsRenderer(engine);
+        var result = await renderer.RenderAsync(Encoding.UTF8.GetBytes(html), "http://localhost:5000/", new HttpClient(), CancellationToken.None);
+        var rendered = Encoding.UTF8.GetString(result);
+
+        Assert.Contains("href=\"/short\"", rendered);
+        Assert.DoesNotContain("href=\"/give-up\"", rendered);
+        Assert.DoesNotContain("href=\"/cancelled\"", rendered);
+    }
+
     // Viewport: the JS DOM reports the configured screen size (default desktop 1920x1080) through
     // window.innerWidth/screen/documentElement.clientWidth, and matchMedia evaluates width queries against it
     // — so a responsive bundle takes its desktop branch. A mobile override flips every signal, proving both

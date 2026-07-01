@@ -63,5 +63,15 @@
     "key": "element-traversal",
     "href": "/features/element-traversal",
     "name": "Element traversal"
+  },
+  {
+    "key": "has-child-nodes",
+    "href": "/features/has-child-nodes",
+    "name": "Has child nodes"
+  },
+  {
+    "key": "htmlelement-instanceof",
+    "href": "/features/htmlelement-instanceof",
+    "name": "HTMLElement instanceof"
   }
 ]

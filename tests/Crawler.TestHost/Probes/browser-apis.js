@@ -76,6 +76,16 @@
                 && a.parentElement === track
                 && track.childElementCount === 2
                 && track.getElementsByClassName('slide').length === 2;
+        },
+        'has-child-nodes': function () {
+            var parent = document.createElement('div');
+            if (parent.hasChildNodes() !== false) return false;
+            parent.appendChild(document.createElement('span'));
+            return parent.hasChildNodes() === true;
+        },
+        'htmlelement-instanceof': function () {
+            return document.createElement('div') instanceof HTMLElement
+                && document.body instanceof HTMLElement;
         }
     };
     var app = document.getElementById('app');

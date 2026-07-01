@@ -1,6 +1,7 @@
 import { Node } from "./Node";
 import { NodeType } from "../types/NodeType";
 import { Element } from "./Element";
+import { HTMLElement } from "./HTMLElement";
 import { Text } from "./Text";
 import { Comment } from "./Comment";
 import { DocumentType } from "./DocumentType";
@@ -58,7 +59,7 @@ export class Document extends Node {
         const factory = reflectedElementFactories[name];
         if (factory) return factory();
         const custom = customElements.tryCreate(name);
-        return custom || new Element(name);
+        return custom || new HTMLElement(name);
     }
 
     createElementNS(ns: string, tag: string): Element {

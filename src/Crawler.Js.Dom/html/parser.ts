@@ -1,6 +1,7 @@
 import type { Document } from "../dom/Document";
 import type { Node } from "../dom/Node";
 import { Element } from "../dom/Element";
+import { HTMLElement } from "../dom/HTMLElement";
 import { reflectedElementFactories } from "../dom/reflectedElements";
 import { Text } from "../dom/Text";
 import { Comment } from "../dom/Comment";
@@ -15,7 +16,7 @@ import { parserRef } from "./parserRef";
 // (deliberately not document.createElement, which would consult customElements during initial parse).
 export function createLocalElement(tag: string): Element {
     const factory = reflectedElementFactories[tag];
-    return factory ? factory() : new Element(tag);
+    return factory ? factory() : new HTMLElement(tag);
 }
 
 // Attaches a finished root tree to the document. Shared so the string parser and the tree builder produce the
@@ -33,9 +34,9 @@ export function parseHTML(doc: Document, input: unknown): Element {
     const len = src.length;
     const sc = createTagScanners();
 
-    const root = new Element("html");
-    const head = new Element("head");
-    const body = new Element("body");
+    const root = new HTMLElement("html");
+    const head = new HTMLElement("head");
+    const body = new HTMLElement("body");
     root.appendChild(head);
     root.appendChild(body);
 

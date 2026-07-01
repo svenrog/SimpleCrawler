@@ -101,6 +101,9 @@
     remove() {
       if (this.parentNode) this.parentNode.removeChild(this);
     }
+    hasChildNodes() {
+      return this.childNodes.length > 0;
+    }
     get firstChild() {
       return this.childNodes[0] || null;
     }
@@ -958,37 +961,6 @@
     }
   };
 
-  // dom/Comment.ts
-  var Comment = class _Comment extends CharacterData {
-    constructor(data) {
-      super(8 /* Comment */, data);
-      hideOwnFields(this);
-    }
-    get nodeName() {
-      return "#comment";
-    }
-    _shallowClone() {
-      return new _Comment(this.data);
-    }
-  };
-
-  // dom/DocumentType.ts
-  var DocumentType = class _DocumentType extends Node {
-    constructor(name, publicId = "", systemId = "") {
-      super(10 /* DocumentType */);
-      this.name = name;
-      this.publicId = publicId;
-      this.systemId = systemId;
-      hideOwnFields(this);
-    }
-    get nodeName() {
-      return this.name;
-    }
-    _shallowClone() {
-      return new _DocumentType(this.name, this.publicId, this.systemId);
-    }
-  };
-
   // dom/DocumentFragment.ts
   var DocumentFragment = class _DocumentFragment extends Node {
     constructor() {
@@ -1140,6 +1112,37 @@
       if (tracked && typeof this.attributeChangedCallback === "function") {
         this.attributeChangedCallback(name, old, this.getAttribute(name));
       }
+    }
+  };
+
+  // dom/Comment.ts
+  var Comment = class _Comment extends CharacterData {
+    constructor(data) {
+      super(8 /* Comment */, data);
+      hideOwnFields(this);
+    }
+    get nodeName() {
+      return "#comment";
+    }
+    _shallowClone() {
+      return new _Comment(this.data);
+    }
+  };
+
+  // dom/DocumentType.ts
+  var DocumentType = class _DocumentType extends Node {
+    constructor(name, publicId = "", systemId = "") {
+      super(10 /* DocumentType */);
+      this.name = name;
+      this.publicId = publicId;
+      this.systemId = systemId;
+      hideOwnFields(this);
+    }
+    get nodeName() {
+      return this.name;
+    }
+    _shallowClone() {
+      return new _DocumentType(this.name, this.publicId, this.systemId);
     }
   };
 
@@ -1518,7 +1521,7 @@
   // html/parser.ts
   function createLocalElement(tag) {
     const factory = reflectedElementFactories[tag];
-    return factory ? factory() : new Element(tag);
+    return factory ? factory() : new HTMLElement(tag);
   }
   function wireDocument(doc2, root, head, body) {
     doc2.documentElement = root;
@@ -1531,9 +1534,9 @@
     const src = input == null ? "" : String(input);
     const len = src.length;
     const sc = createTagScanners();
-    const root = new Element("html");
-    const head = new Element("head");
-    const body = new Element("body");
+    const root = new HTMLElement("html");
+    const head = new HTMLElement("head");
+    const body = new HTMLElement("body");
     root.appendChild(head);
     root.appendChild(body);
     let open = [body];
@@ -1816,7 +1819,7 @@
       const factory = reflectedElementFactories[name];
       if (factory) return factory();
       const custom = customElements.tryCreate(name);
-      return custom || new Element(name);
+      return custom || new HTMLElement(name);
     }
     createElementNS(ns, tag) {
       return new Element(tag, ns);
@@ -1995,36 +1998,51 @@
   }
 
   // scheduler/taskQueue.ts
-  var tasks = [];
+  var _longTimerMs = 4e3;
+  var _seq = 0;
+  var _tasks = [];
+  var _byId2 = /* @__PURE__ */ new Map();
   function enqueue(cb) {
-    if (typeof cb === "function") tasks.push(cb);
-    return tasks.length;
+    if (typeof cb !== "function") return 0;
+    const id = ++_seq;
+    const task = { id, cb, cancelled: false };
+    _tasks.push(task);
+    _byId2.set(id, task);
+    return id;
+  }
+  function cancel(id) {
+    if (typeof id !== "number") return;
+    const task = _byId2.get(id);
+    if (task) {
+      task.cancelled = true;
+      _byId2.delete(id);
+    }
   }
   function pendingCount() {
-    return tasks.length;
+    return _tasks.length;
   }
   function pumpTasks() {
-    if (!tasks.length) return 0;
-    const batch = tasks.splice(0, tasks.length);
-    for (const fn of batch) {
+    if (!_tasks.length) return 0;
+    const batch = _tasks.splice(0, _tasks.length);
+    for (const task of batch) {
+      _byId2.delete(task.id);
+      if (task.cancelled) continue;
       try {
-        fn();
+        task.cb();
       } catch {
       }
     }
-    return tasks.length;
+    return _tasks.length;
   }
   function installTimerGlobals(global) {
     global.queueMicrotask = (cb) => enqueue(cb);
-    global.setTimeout = (cb) => enqueue(cb);
-    global.clearTimeout = () => {
-    };
+    global.setTimeout = (cb, delay) => typeof delay === "number" && delay > _longTimerMs ? ++_seq : enqueue(cb);
+    global.clearTimeout = (id) => cancel(id);
     global.setInterval = () => 0;
     global.clearInterval = () => {
     };
     global.requestAnimationFrame = (cb) => enqueue(() => cb(0));
-    global.cancelAnimationFrame = () => {
-    };
+    global.cancelAnimationFrame = (id) => cancel(id);
   }
 
   // browser/CustomEvent.ts

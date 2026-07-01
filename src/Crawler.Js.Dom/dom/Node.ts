@@ -53,6 +53,10 @@ export abstract class Node {
         if (this.parentNode) this.parentNode.removeChild(this);
     }
 
+    hasChildNodes(): boolean {
+        return this.childNodes.length > 0;
+    }
+
     get firstChild(): Node | null {
         return this.childNodes[0] || null;
     }
