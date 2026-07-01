@@ -31,15 +31,34 @@ export function matchesSelector(el: any, selector: string): boolean {
     return false;
 }
 
+// Split on combinators/descendant whitespace to isolate the rightmost compound, but only at bracket/quote
+// depth 0 — an attribute value can legitimately contain a space (e.g. [data-emotion^="css "]) and must not
+// be treated as a descendant combinator, or the tail becomes garbage that matchesCompound then matches on.
 function rightmostCompound(part: string): string {
-    const tokens = part.trim().split(/\s*[>+~]\s*|\s+/);
-    return tokens[tokens.length - 1];
+    const s = part.trim();
+    let start = 0;
+    let depth = 0;
+    let quote = "";
+    for (let i = 0; i < s.length; i++) {
+        const ch = s[i];
+        if (quote) {
+            if (ch === quote) quote = "";
+            continue;
+        }
+        if (ch === '"' || ch === "'") quote = ch;
+        else if (ch === "[") depth++;
+        else if (ch === "]") { if (depth > 0) depth--; }
+        else if (depth === 0 && (ch === ">" || ch === "+" || ch === "~" || /\s/.test(ch))) start = i + 1;
+    }
+    return s.slice(start);
 }
 
 function matchesCompound(el: any, compound: string): boolean {
     const re = /[#.]?[\w-]+|\[[^\]]*\]|\*/g;
     let m: RegExpExecArray | null;
+    let matched = 0;
     while ((m = re.exec(compound))) {
+        matched++;
         const tok = m[0];
         const c = tok[0];
         if (tok === "*") continue;
@@ -53,7 +72,7 @@ function matchesCompound(el: any, compound: string): boolean {
             return false;
         }
     }
-    return true;
+    return matched > 0;
 }
 
 function hasClass(el: any, name: string): boolean {

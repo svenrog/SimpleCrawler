@@ -282,13 +282,30 @@
     return false;
   }
   function rightmostCompound(part) {
-    const tokens = part.trim().split(/\s*[>+~]\s*|\s+/);
-    return tokens[tokens.length - 1];
+    const s = part.trim();
+    let start = 0;
+    let depth = 0;
+    let quote = "";
+    for (let i = 0; i < s.length; i++) {
+      const ch = s[i];
+      if (quote) {
+        if (ch === quote) quote = "";
+        continue;
+      }
+      if (ch === '"' || ch === "'") quote = ch;
+      else if (ch === "[") depth++;
+      else if (ch === "]") {
+        if (depth > 0) depth--;
+      } else if (depth === 0 && (ch === ">" || ch === "+" || ch === "~" || /\s/.test(ch))) start = i + 1;
+    }
+    return s.slice(start);
   }
   function matchesCompound(el, compound) {
     const re = /[#.]?[\w-]+|\[[^\]]*\]|\*/g;
     let m;
+    let matched = 0;
     while (m = re.exec(compound)) {
+      matched++;
       const tok = m[0];
       const c = tok[0];
       if (tok === "*") continue;
@@ -302,7 +319,7 @@
         return false;
       }
     }
-    return true;
+    return matched > 0;
   }
   function hasClass(el, name) {
     const cls = el.getAttribute("class");

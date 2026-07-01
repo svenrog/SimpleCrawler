@@ -59,6 +59,49 @@ public class JsDomRendererTests
         Assert.Contains("href=\"/injected\"", rendered);
     }
 
+    // Emotion's SSR-cache hydration runs document.querySelectorAll('style[data-emotion^="css "]') — the
+    // attribute value carries a space. A whitespace-naive rightmost-compound split treated that space as a
+    // descendant combinator, produced the garbage tail `"]`, and matchesCompound (matching zero tokens) then
+    // returned true for every element, so the selector matched the whole document and Emotion's
+    // getAttribute('data-emotion').split(' ') NRE'd on the first attribute-less node, aborting the bundle.
+    [Theory]
+    [InlineData(JsEngine.Jint)]
+    [InlineData(JsEngine.V8)]
+    public async Task JsMode_AttributeSelectorWithSpacedValue_DoesNotMatchEveryElement(JsEngine engine)
+    {
+        if (engine == JsEngine.V8)
+            Assert.SkipUnless(V8Support.IsAvailable, V8Support.UnavailableReason);
+
+        const string html = """
+            <!doctype html><html><head>
+            <style data-emotion="css 1a2b 3c4d">.x{}</style>
+            <style data-emotion="css">.y{}</style>
+            </head><body><div>a</div><span>b</span>
+            <script>
+            try {
+              var m = document.querySelectorAll('style[data-emotion^="css "]');
+              var keys = [];
+              Array.prototype.forEach.call(m, function (e) {
+                keys = keys.concat(e.getAttribute('data-emotion').split(' ').slice(1));
+              });
+              var a = document.createElement('a');
+              a.setAttribute('href', '/ok-' + m.length + '-' + keys.join('.'));
+              document.body.appendChild(a);
+            } catch (err) {
+              var b = document.createElement('a'); b.setAttribute('href', '/err'); document.body.appendChild(b);
+            }
+            </script>
+            </body></html>
+            """;
+
+        var renderer = CreateJsRenderer(engine);
+        var result = await renderer.RenderAsync(Encoding.UTF8.GetBytes(html), "http://localhost:5000/", new HttpClient(), CancellationToken.None);
+        var rendered = Encoding.UTF8.GetString(result);
+
+        Assert.DoesNotContain("href=\"/err\"", rendered);
+        Assert.Contains("href=\"/ok-1-1a2b.3c4d\"", rendered);
+    }
+
     [Theory]
     [InlineData(JsEngine.Jint)]
     [InlineData(JsEngine.V8)]
