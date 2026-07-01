@@ -22,7 +22,31 @@ internal sealed class V8StackTraceFormatter
             return details;
 
         var builder = new StringBuilder(details.Length);
+        var frameSource = new StringBuilder();
+        string? frameLocation = null;
+        var frameOpen = false;
         var isFirstLine = true;
+
+        // A frame's source is a whole minified line, which can itself contain literal newlines (e.g. a
+        // string literal spanning lines); EnumerateLines would split those off as separate lines that no
+        // longer look like frames, so they must be re-joined onto the frame's source before it is windowed,
+        // otherwise the continuation dumps verbatim and defeats the truncation.
+        void FlushFrame()
+        {
+            if (!frameOpen)
+                return;
+
+            if (builder.Length > 0)
+                builder.Append('\n');
+
+            builder.Append(frameLocation);
+            AppendSourceSnippet(builder, frameLocation.AsSpan(), frameSource.ToString());
+
+            frameOpen = false;
+            frameLocation = null;
+            frameSource.Clear();
+        }
+
         foreach (var line in details.AsSpan().EnumerateLines())
         {
             if (isFirstLine)
@@ -32,22 +56,35 @@ internal sealed class V8StackTraceFormatter
                     continue;
             }
 
-            if (builder.Length > 0)
-                builder.Append('\n');
-
-            var arrow = line.IndexOf(" -> ");
-            if (arrow >= 0 && line.TrimStart().StartsWith("at "))
+            if (line.TrimStart().StartsWith("at "))
             {
-                var location = line[..arrow];
-                builder.Append(location.TrimEnd());
-                AppendSourceSnippet(builder, location, line[(arrow + 4)..]);
+                FlushFrame();
+
+                var arrow = line.IndexOf(" -> ");
+                if (arrow >= 0)
+                {
+                    frameLocation = line[..arrow].TrimEnd().ToString();
+                    frameSource.Append(line[(arrow + 4)..]);
+                }
+                else
+                {
+                    frameLocation = line.TrimEnd().ToString();
+                }
+                frameOpen = true;
+            }
+            else if (frameOpen)
+            {
+                frameSource.Append('\n').Append(line);
             }
             else
             {
+                if (builder.Length > 0)
+                    builder.Append('\n');
                 builder.Append(line);
             }
         }
 
+        FlushFrame();
         return builder.ToString();
     }
 
