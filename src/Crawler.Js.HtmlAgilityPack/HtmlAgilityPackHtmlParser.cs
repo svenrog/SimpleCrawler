@@ -3,8 +3,9 @@ using HtmlAgilityPack;
 
 namespace Crawler.Js.HtmlAgilityPack;
 
-// Walks HAP's parsed tree into the flat, parent-indexed IR that dom.js consumes. HAP decodes entities in
-// InnerText and walks cleanly; names are lowercased to match dom.js's attribute/tag conventions.
+// Walks HAP's parsed tree into the flat, parent-indexed IR that dom.js consumes. HAP leaves entities raw in
+// InnerText and attribute values, so both are de-entitized here to match the string parser; names are
+// lowercased to match dom.js's attribute/tag conventions.
 public sealed class HtmlAgilityPackHtmlParser : IHtmlParser
 {
     public ParsedDocument Parse(string html)
@@ -41,7 +42,7 @@ public sealed class HtmlAgilityPackHtmlParser : IHtmlParser
             var attrs = new List<KeyValuePair<string, string>>();
             foreach (HtmlAttribute attr in node.Attributes)
             {
-                attrs.Add(new(attr.Name.ToLowerInvariant(), attr.Value));
+                attrs.Add(new(attr.Name.ToLowerInvariant(), attr.DeEntitizeValue));
             }
 
             return new ParsedNode(ParsedNodeKind.Element, node.Name.ToLowerInvariant(), string.Empty, attrs, parentIndex);

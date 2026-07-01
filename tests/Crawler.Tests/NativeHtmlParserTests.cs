@@ -10,7 +10,7 @@ public class NativeHtmlParserTests
 {
     private const string Html = """
         <!doctype html><html><head><title>T</title><link rel="canonical" href="/canon" /></head>
-        <body class="b"><a href="/a">A</a><p>para &amp; more</p><!--note--></body></html>
+        <body class="b"><a href="/a" data-config="{&quot;crop&quot;:{&quot;left&quot;:0.0}}">A</a><p>para &amp; more</p><!--note--></body></html>
         """;
 
     [Fact]
@@ -41,6 +41,7 @@ public class NativeHtmlParserTests
 
         var anchor = nodes.First(n => n.Kind == ParsedNodeKind.Element && n.Tag == "a");
         Assert.Equal("/a", anchor.Attributes.First(kv => kv.Key == "href").Value);
+        Assert.Equal("""{"crop":{"left":0.0}}""", anchor.Attributes.First(kv => kv.Key == "data-config").Value);
 
         Assert.Contains(nodes, n => n.Kind == ParsedNodeKind.Text && n.Data.Contains("para & more"));
         Assert.Contains(nodes, n => n.Kind == ParsedNodeKind.Comment && n.Data.Contains("note"));
