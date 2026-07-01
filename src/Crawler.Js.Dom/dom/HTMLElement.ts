@@ -26,6 +26,10 @@ export class HTMLElement extends Element {
         return root;
     }
 
+    focus(): void { }
+
+    blur(): void { }
+
     connectedCallback(): void { }
 
     disconnectedCallback(): void { }

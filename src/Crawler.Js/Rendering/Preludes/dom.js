@@ -1113,6 +1113,10 @@
       this.shadowRoot = root;
       return root;
     }
+    focus() {
+    }
+    blur() {
+    }
     connectedCallback() {
     }
     disconnectedCallback() {

@@ -102,6 +102,39 @@ public class JsDomRendererTests
         Assert.Contains("href=\"/ok-1-1a2b.3c4d\"", rendered);
     }
 
+    // A React componentDidMount that holds a ref to an input and calls inputRef.current.focus() crashed the
+    // bundle ("focus is not a function"): focus()/blur() existed only on the iframe stub, not on HTMLElement.
+    [Theory]
+    [InlineData(JsEngine.Jint)]
+    [InlineData(JsEngine.V8)]
+    public async Task JsMode_HtmlElementFocusAndBlur_AreCallable(JsEngine engine)
+    {
+        if (engine == JsEngine.V8)
+            Assert.SkipUnless(V8Support.IsAvailable, V8Support.UnavailableReason);
+
+        const string html = """
+            <!doctype html><html><head></head><body><input id="q" />
+            <script>
+            try {
+              var input = document.getElementById('q');
+              input.focus();
+              input.blur();
+              var a = document.createElement('a'); a.setAttribute('href', '/ok'); document.body.appendChild(a);
+            } catch (err) {
+              var b = document.createElement('a'); b.setAttribute('href', '/err'); document.body.appendChild(b);
+            }
+            </script>
+            </body></html>
+            """;
+
+        var renderer = CreateJsRenderer(engine);
+        var result = await renderer.RenderAsync(Encoding.UTF8.GetBytes(html), "http://localhost:5000/", new HttpClient(), CancellationToken.None);
+        var rendered = Encoding.UTF8.GetString(result);
+
+        Assert.DoesNotContain("href=\"/err\"", rendered);
+        Assert.Contains("href=\"/ok\"", rendered);
+    }
+
     [Theory]
     [InlineData(JsEngine.Jint)]
     [InlineData(JsEngine.V8)]
