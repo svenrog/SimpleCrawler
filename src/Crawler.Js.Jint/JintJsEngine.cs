@@ -30,6 +30,8 @@ internal sealed class JintJsEngine : IJsEngine
                 .EnableModules(new JintModuleLoader(fetcher, baseUri, moduleCache))
                 .CatchClrExceptions();
         });
+
+        _engine.Execute(Shim.Source);
     }
 
     public void EmbedHostObject(string name, object value)

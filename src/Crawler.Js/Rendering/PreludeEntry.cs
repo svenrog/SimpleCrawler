@@ -1,3 +1,3 @@
 namespace Crawler.Js.Rendering;
 
-internal readonly record struct PreludeEntry(string Key, string Source);
+public readonly record struct PreludeEntry(string Key, string Source);

@@ -11,4 +11,5 @@ public enum JsProbeCapability
     JQuery,
     BrowserApis,
     DeepWalk,
+    MapIterator,
 }

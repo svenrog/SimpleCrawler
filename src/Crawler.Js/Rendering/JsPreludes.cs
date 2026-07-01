@@ -1,3 +1,5 @@
+using Crawler.Js.Helpers;
+
 namespace Crawler.Js.Rendering;
 
 internal static class JsPreludes
@@ -9,12 +11,9 @@ internal static class JsPreludes
     // Network fetch/XHR shim, run only when EnableFetch is on.
     public static readonly PreludeEntry Fetch = Load("fetch.js");
 
-    private static PreludeEntry Load(string filename)
+    private static PreludeEntry Load(string fileName)
     {
         var type = typeof(JsPreludes);
-        var resourceName = $"{type.Namespace}.Preludes.{filename}";
-        using var stream = type.Assembly.GetManifestResourceStream(resourceName)!;
-        using var reader = new StreamReader(stream);
-        return new PreludeEntry(filename, reader.ReadToEnd());
+        return PreludeHelper.Load(type, fileName);
     }
 }
