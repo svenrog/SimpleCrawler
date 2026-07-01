@@ -1,9 +1,7 @@
 import type { Document } from "../dom/Document";
 import type { Node } from "../dom/Node";
 import { Element } from "../dom/Element";
-import { HTMLAnchorElement } from "../dom/HTMLAnchorElement";
-import { HTMLScriptElement } from "../dom/HTMLScriptElement";
-import { HTMLLinkElement } from "../dom/HTMLLinkElement";
+import { reflectedElementFactories } from "../dom/reflectedElements";
 import { Text } from "../dom/Text";
 import { Comment } from "../dom/Comment";
 import { NodeType } from "../types/NodeType";
@@ -16,10 +14,8 @@ import { parserRef } from "./parserRef";
 // Shared with the tree builder so a C#-parsed tree instantiates the same node types as the tokenizer path
 // (deliberately not document.createElement, which would consult customElements during initial parse).
 export function createLocalElement(tag: string): Element {
-    return tag === "a" ? new HTMLAnchorElement()
-        : tag === "script" ? new HTMLScriptElement()
-            : tag === "link" ? new HTMLLinkElement()
-                : new Element(tag);
+    const factory = reflectedElementFactories[tag];
+    return factory ? factory() : new Element(tag);
 }
 
 // Attaches a finished root tree to the document. Shared so the string parser and the tree builder produce the

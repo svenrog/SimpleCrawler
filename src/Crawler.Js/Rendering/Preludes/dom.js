@@ -1279,6 +1279,59 @@
     }
   };
 
+  // dom/HTMLSelectElement.ts
+  var HTMLSelectElement = class extends HTMLElement {
+    constructor() {
+      super("select");
+    }
+    get options() {
+      return this.getElementsByTagName("option");
+    }
+  };
+
+  // dom/HTMLOptionElement.ts
+  var HTMLOptionElement = class extends HTMLElement {
+    constructor() {
+      super("option");
+    }
+    get value() {
+      const v = this.getAttribute("value");
+      return v != null ? v : this.textContent;
+    }
+    set value(v) {
+      this.setAttribute("value", v == null ? "" : String(v));
+    }
+  };
+
+  // dom/HTMLImageElement.ts
+  var HTMLImageElement = class extends HTMLElement {
+    constructor() {
+      super("img");
+    }
+    get alt() {
+      return this.getAttribute("alt") || "";
+    }
+    set alt(value) {
+      this.setAttribute("alt", value == null ? "" : String(value));
+    }
+    get src() {
+      return this.getAttribute("src") || "";
+    }
+    set src(value) {
+      this.setAttribute("src", value == null ? "" : String(value));
+    }
+  };
+
+  // dom/reflectedElements.ts
+  var reflectedElementFactories = {
+    a: () => new HTMLAnchorElement(),
+    script: () => new HTMLScriptElement(),
+    link: () => new HTMLLinkElement(),
+    select: () => new HTMLSelectElement(),
+    option: () => new HTMLOptionElement(),
+    img: () => new HTMLImageElement()
+  };
+
   // html/entities.ts
   var NAMED = {
     amp: "&",
@@ -1355,7 +1408,8 @@
 
   // html/parser.ts
   function createLocalElement(tag) {
-    return tag === "a" ? new HTMLAnchorElement() : tag === "script" ? new HTMLScriptElement() : tag === "link" ? new HTMLLinkElement() : new Element(tag);
+    const factory = reflectedElementFactories[tag];
+    return factory ? factory() : new Element(tag);
   }
   function wireDocument(doc2, root, head, body) {
     doc2.documentElement = root;
@@ -1650,9 +1704,8 @@
     createElement(tag) {
       const name = String(tag).toLowerCase();
       if (name === "template") return new HTMLTemplateElement();
-      if (name === "a") return new HTMLAnchorElement();
-      if (name === "script") return new HTMLScriptElement();
-      if (name === "link") return new HTMLLinkElement();
+      const factory = reflectedElementFactories[name];
+      if (factory) return factory();
       const custom = customElements.tryCreate(name);
       return custom || new Element(name);
     }
@@ -1761,13 +1814,7 @@
   };
   var HTMLTextAreaElement = class extends HTMLElement {
   };
-  var HTMLSelectElement = class extends HTMLElement {
-  };
-  var HTMLOptionElement = class extends HTMLElement {
-  };
   var HTMLButtonElement = class extends HTMLElement {
-  };
-  var HTMLImageElement = class extends HTMLElement {
   };
   var HTMLFormElement = class extends HTMLElement {
   };
@@ -2163,6 +2210,7 @@
     global.DocumentFragment = DocumentFragment;
     global.HTMLElement = HTMLElement;
     global.HTMLTemplateElement = HTMLTemplateElement;
+    global.Image = HTMLImageElement;
     for (const name in htmlInterfaces_exports) global[name] = htmlInterfaces_exports[name];
     global.customElements = customElements;
     customElements.setDocument(doc);

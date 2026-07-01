@@ -201,6 +201,45 @@ public class JsDomRendererTests
         Assert.Contains("closest=wrap", rendered);
     }
 
+    // <select> exposes an options collection (its <option> descendants) and each option reflects its value
+    // (the `value` attribute, else the text) — react-dom's updateOptions does `node.options` then iterates
+    // `.length`/`.value` to sync selection, so a missing options collection read undefined and aborted the
+    // whole hydration render. Both the parsed SSR shell and createElement('select') must carry it.
+    [Theory]
+    [InlineData(JsEngine.Jint)]
+    [InlineData(JsEngine.V8)]
+    public async Task JsMode_SelectExposesOptionsCollectionAndValues(JsEngine engine)
+    {
+        if (engine == JsEngine.V8)
+            Assert.SkipUnless(V8Support.IsAvailable, V8Support.UnavailableReason);
+
+        const string html = """
+            <html><body>
+            <select id="s"><option value="a">A</option><option value="b">B</option><option>C</option></select>
+            <script>
+            var s = document.getElementById('s');
+            var opts = s.options;
+            var values = [];
+            for (var i = 0; i < opts.length; i++) values.push(opts[i].value);
+            opts[1].selected = true;
+            var created = document.createElement('select');
+            var out = document.createElement('a');
+            out.setAttribute('href', '/probe?count=' + opts.length + '&values=' + values.join(',') + '&created=' + created.options.length + '&selected=' + opts[1].selected);
+            document.body.appendChild(out);
+            </script>
+            </body></html>
+            """;
+
+        var renderer = CreateJsRenderer(engine);
+        var result = await renderer.RenderAsync(Encoding.UTF8.GetBytes(html), "http://localhost:5000/", new HttpClient(), CancellationToken.None);
+        var rendered = Encoding.UTF8.GetString(result);
+
+        Assert.Contains("count=3", rendered);
+        Assert.Contains("values=a,b,C", rendered);
+        Assert.Contains("created=0", rendered);
+        Assert.Contains("selected=true", rendered);
+    }
+
     // customElements: a parsed <my-widget> is upgraded retroactively when the bundle defines it (the Astro
     // island path), and a createElement'd instance fires connectedCallback on attach. Both paths must
     // hydrate the anchor the connected callback injects.

@@ -6,6 +6,9 @@ import { HTMLElement } from "./HTMLElement";
 export { HTMLAnchorElement } from "./HTMLAnchorElement";
 export { HTMLScriptElement } from "./HTMLScriptElement";
 export { HTMLLinkElement } from "./HTMLLinkElement";
+export { HTMLSelectElement } from "./HTMLSelectElement";
+export { HTMLOptionElement } from "./HTMLOptionElement";
+export { HTMLImageElement } from "./HTMLImageElement";
 
 // Marker interfaces for `instanceof` checks. Frameworks probe element types (React's getActiveElementDeep
 // does `node instanceof window.HTMLIFrameElement`, Vue references SVGElement) and a `instanceof undefined`
@@ -15,10 +18,7 @@ export { HTMLLinkElement } from "./HTMLLinkElement";
 export class HTMLIFrameElement extends HTMLElement { }
 export class HTMLInputElement extends HTMLElement { }
 export class HTMLTextAreaElement extends HTMLElement { }
-export class HTMLSelectElement extends HTMLElement { }
-export class HTMLOptionElement extends HTMLElement { }
 export class HTMLButtonElement extends HTMLElement { }
-export class HTMLImageElement extends HTMLElement { }
 export class HTMLFormElement extends HTMLElement { }
 export class HTMLStyleElement extends HTMLElement { }
 export class HTMLCanvasElement extends HTMLElement { }

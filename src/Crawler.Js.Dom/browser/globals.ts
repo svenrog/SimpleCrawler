@@ -7,6 +7,7 @@ import { Comment } from "../dom/Comment";
 import { DocumentType } from "../dom/DocumentType";
 import { DocumentFragment } from "../dom/DocumentFragment";
 import { HTMLElement } from "../dom/HTMLElement";
+import { HTMLImageElement } from "../dom/HTMLImageElement";
 import { HTMLTemplateElement } from "../dom/HTMLTemplateElement";
 import * as htmlInterfaces from "../dom/htmlInterfaces";
 import { customElements } from "../dom/customElements";
@@ -78,6 +79,7 @@ export function installDOM(global: any): void {
     global.DocumentFragment = DocumentFragment;
     global.HTMLElement = HTMLElement;
     global.HTMLTemplateElement = HTMLTemplateElement;
+    global.Image = HTMLImageElement;
     for (const name in htmlInterfaces) global[name] = (htmlInterfaces as any)[name];
     global.customElements = customElements;
     customElements.setDocument(doc);

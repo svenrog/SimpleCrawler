@@ -7,9 +7,7 @@ import { DocumentType } from "./DocumentType";
 import { DocumentFragment } from "./DocumentFragment";
 import { Range } from "./Range";
 import { HTMLTemplateElement } from "./HTMLTemplateElement";
-import { HTMLAnchorElement } from "./HTMLAnchorElement";
-import { HTMLScriptElement } from "./HTMLScriptElement";
-import { HTMLLinkElement } from "./HTMLLinkElement";
+import { reflectedElementFactories } from "./reflectedElements";
 import { customElements } from "./customElements";
 import { collectByTag, walkFind, hideOwnFields } from "./utils";
 import { querySelectorAll } from "../selector/querySelector";
@@ -57,9 +55,8 @@ export class Document extends Node {
     createElement(tag: string): Element {
         const name = String(tag).toLowerCase();
         if (name === "template") return new HTMLTemplateElement();
-        if (name === "a") return new HTMLAnchorElement();
-        if (name === "script") return new HTMLScriptElement();
-        if (name === "link") return new HTMLLinkElement();
+        const factory = reflectedElementFactories[name];
+        if (factory) return factory();
         const custom = customElements.tryCreate(name);
         return custom || new Element(name);
     }
