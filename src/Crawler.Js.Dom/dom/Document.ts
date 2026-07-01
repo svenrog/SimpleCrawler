@@ -91,6 +91,12 @@ export class Document extends Node {
         return out as unknown as Element[];
     }
 
+    getElementsByClassName(className: string): Element[] {
+        const out: Node[] = [];
+        if (this.documentElement) collectByTag(this.documentElement, String(className), out);
+        return out as unknown as Element[];
+    }
+
     get scripts(): Element[] {
         return this.getElementsByTagName("script");
     }

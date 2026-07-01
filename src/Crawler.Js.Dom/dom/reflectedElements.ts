@@ -5,6 +5,7 @@ import { HTMLLinkElement } from "./HTMLLinkElement";
 import { HTMLSelectElement } from "./HTMLSelectElement";
 import { HTMLOptionElement } from "./HTMLOptionElement";
 import { HTMLImageElement } from "./HTMLImageElement";
+import { HTMLIFrameElement } from "./HTMLIFrameElement";
 
 // tag → factory for the element subclasses that reflect properties (anchor href, script/img src, select
 // options, ...). Shared by the string parser, the tree builder and document.createElement so every
@@ -16,4 +17,5 @@ export const reflectedElementFactories: Record<string, () => Element> = {
     select: () => new HTMLSelectElement(),
     option: () => new HTMLOptionElement(),
     img: () => new HTMLImageElement(),
+    iframe: () => new HTMLIFrameElement(),
 };

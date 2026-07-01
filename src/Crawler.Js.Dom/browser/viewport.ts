@@ -111,6 +111,18 @@ export function installViewport(global: any): void {
             removeEventListener() { },
         },
     };
+    global.visualViewport = {
+        get offsetLeft() { return 0; },
+        get offsetTop() { return 0; },
+        get pageLeft() { return 0; },
+        get pageTop() { return 0; },
+        get width() { return _width },
+        get height() { return _height },
+        get scale() { return 1 },
+        onresize: null,
+        onscroll: null,
+        onscrollend: null,
+    };
     global.matchMedia = (query: unknown) => ({
         matches: matches(query),
         media: String(query == null ? "" : query),

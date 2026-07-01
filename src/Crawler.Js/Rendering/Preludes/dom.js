@@ -23,9 +23,9 @@
     return String(v).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   }
   function collectByTag(node, tag, out) {
-    const kids = node.childNodes;
-    for (let i = 0; i < kids.length; i++) {
-      const c = kids[i];
+    const children = node.childNodes;
+    for (let i = 0; i < children.length; i++) {
+      const c = children[i];
       if (c.nodeType === 1 /* Element */) {
         if (c.localName === tag) out.push(c);
         collectByTag(c, tag, out);
@@ -562,6 +562,32 @@
         removeEventListener() {
         }
       }
+    };
+    global.visualViewport = {
+      get offsetLeft() {
+        return 0;
+      },
+      get offsetTop() {
+        return 0;
+      },
+      get pageLeft() {
+        return 0;
+      },
+      get pageTop() {
+        return 0;
+      },
+      get width() {
+        return _width;
+      },
+      get height() {
+        return _height;
+      },
+      get scale() {
+        return 1;
+      },
+      onresize: null,
+      onscroll: null,
+      onscrollend: null
     };
     global.matchMedia = (query) => ({
       matches: matches(query),
@@ -1322,6 +1348,39 @@
     }
   };
 
+  // dom/HTMLIFrameElement.ts
+  var HTMLIFrameElement = class extends HTMLElement {
+    constructor() {
+      super("iframe");
+    }
+    get src() {
+      return this.getAttribute("src") || "";
+    }
+    set src(value) {
+      this.setAttribute("src", value == null ? "" : String(value));
+    }
+    get contentWindow() {
+      let win = this._contentWindow;
+      if (!win) {
+        win = {
+          postMessage() {
+          },
+          close() {
+          },
+          focus() {
+          },
+          blur() {
+          }
+        };
+        Object.defineProperty(this, "_contentWindow", { value: win, enumerable: false });
+      }
+      return win;
+    }
+    get contentDocument() {
+      return null;
+    }
+  };
+
   // dom/reflectedElements.ts
   var reflectedElementFactories = {
     a: () => new HTMLAnchorElement(),
@@ -1329,7 +1388,8 @@
     link: () => new HTMLLinkElement(),
     select: () => new HTMLSelectElement(),
     option: () => new HTMLOptionElement(),
-    img: () => new HTMLImageElement()
+    img: () => new HTMLImageElement(),
+    iframe: () => new HTMLIFrameElement()
   };
 
   // html/entities.ts
@@ -1732,6 +1792,11 @@
       if (this.documentElement) collectByTag(this.documentElement, String(tag).toLowerCase(), out);
       return out;
     }
+    getElementsByClassName(className) {
+      const out = [];
+      if (this.documentElement) collectByTag(this.documentElement, String(className), out);
+      return out;
+    }
     get scripts() {
       return this.getElementsByTagName("script");
     }
@@ -1808,8 +1873,6 @@
     SVGElement: () => SVGElement,
     SVGSVGElement: () => SVGSVGElement
   });
-  var HTMLIFrameElement = class extends HTMLElement {
-  };
   var HTMLInputElement = class extends HTMLElement {
   };
   var HTMLTextAreaElement = class extends HTMLElement {
@@ -2149,6 +2212,49 @@
     }
   };
 
+  // browser/Blob.ts
+  var _encoder = new TextEncoder();
+  var _decoder = new TextDecoder();
+  function partBytes(part) {
+    if (part instanceof Blob) return part._bytes();
+    if (part instanceof Uint8Array) return part;
+    if (part instanceof ArrayBuffer) return new Uint8Array(part);
+    if (part && ArrayBuffer.isView(part)) return new Uint8Array(part.buffer, part.byteOffset, part.byteLength);
+    return _encoder.encode(part == null ? "" : String(part));
+  }
+  var Blob = class _Blob {
+    constructor(parts, options) {
+      this._parts = (parts || []).map(partBytes);
+      this.type = options && options.type != null ? String(options.type).toLowerCase() : "";
+    }
+    get size() {
+      let n = 0;
+      for (const p of this._parts) n += p.length;
+      return n;
+    }
+    _bytes() {
+      const out = new Uint8Array(this.size);
+      let at = 0;
+      for (const p of this._parts) {
+        out.set(p, at);
+        at += p.length;
+      }
+      return out;
+    }
+    arrayBuffer() {
+      return Promise.resolve(this._bytes().buffer);
+    }
+    text() {
+      return Promise.resolve(_decoder.decode(this._bytes()));
+    }
+    slice(start, end, contentType) {
+      const bytes = this._bytes();
+      const b = new _Blob([bytes.slice(start, end)]);
+      b.type = contentType == null ? "" : String(contentType).toLowerCase();
+      return b;
+    }
+  };
+
   // browser/globals.ts
   var doc = new Document(globalThis);
   documentRef.current = doc;
@@ -2164,6 +2270,26 @@
     global.removeEventListener = () => {
     };
     global.dispatchEvent = () => true;
+    for (const on of [
+      "onresize",
+      "onscroll",
+      "onload",
+      "onerror",
+      "onunload",
+      "onbeforeunload",
+      "onpopstate",
+      "onhashchange",
+      "onpageshow",
+      "onpagehide",
+      "onmessage",
+      "onoffline",
+      "ononline",
+      "onfocus",
+      "onblur",
+      "onorientationchange"
+    ]) {
+      if (!(on in global)) global[on] = null;
+    }
     global.getComputedStyle = () => ({ getPropertyValue: () => "" });
     global.getSelection = () => ({
       rangeCount: 0,
@@ -2198,6 +2324,10 @@
       };
     };
     global.structuredClone = global.structuredClone || ((value) => value == null ? value : JSON.parse(JSON.stringify(value)));
+    global.Blob = Blob;
+    URL.createObjectURL = URL.createObjectURL || (() => "blob:" + Math.random().toString(36).slice(2));
+    URL.revokeObjectURL = URL.revokeObjectURL || (() => {
+    });
     global.URL = URL;
     global.URLSearchParams = URLSearchParams;
     global.Node = Node;
@@ -2420,6 +2550,7 @@
     const script = new HTMLScriptElement();
     const s = String(src);
     if (s) script.src = s;
+    script.parentNode = doc.head || doc.body || doc.documentElement;
     doc.currentScript = script;
   }
   function collectScripts() {

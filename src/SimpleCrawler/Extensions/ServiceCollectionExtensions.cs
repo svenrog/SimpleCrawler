@@ -1,6 +1,9 @@
 ﻿using Crawler.Core;
-using Crawler.HtmlAgilityPack;
+using Crawler.Js.HtmlAgilityPack;
+using Crawler.Js.Models;
+using Crawler.Js.V8;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 
 namespace SimpleCrawler.Extensions;
 
@@ -8,8 +11,15 @@ internal static class ServiceCollectionExtensions
 {
     public static void AddCrawler(this IServiceCollection services, Options options)
     {
+        var renderOptions = new JsRenderOptions
+        {
+            EnableFetch = true,
+            ScriptLogging = LogLevel.Trace,
+        };
+
         services.AddSingleton(options);
-        services.AddHtmlAgilityPackCrawler(MapCrawlerOptions(options), (provider, client) =>
+        services.AddHtmlAgilityPackHtmlParser();
+        services.AddV8Crawler(MapCrawlerOptions(options), renderOptions, null, (provider, client) =>
             ConfigureHttpClient(client, options));
     }
 

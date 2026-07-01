@@ -22,12 +22,23 @@ export function escapeText(v: unknown): string {
 }
 
 export function collectByTag(node: Node, tag: string, out: Node[]): void {
-    const kids = node.childNodes;
-    for (let i = 0; i < kids.length; i++) {
-        const c = kids[i];
+    const children = node.childNodes;
+    for (let i = 0; i < children.length; i++) {
+        const c = children[i];
         if (c.nodeType === NodeType.Element) {
             if ((c as any).localName === tag) out.push(c);
             collectByTag(c, tag, out);
+        }
+    }
+}
+
+export function collectByClass(node: Node, className: string, out: Node[]): void {
+    const children = node.childNodes;
+    for (let i = 0; i < children.length; i++) {
+        const c = children[i];
+        if (c.nodeType === NodeType.Element) {
+            if ((c as any).classList.contains(className)) out.push(c);
+            collectByClass(c, className, out);
         }
     }
 }

@@ -450,6 +450,39 @@ public class JsDomRendererTests
         Assert.Contains("href=\"/perf\"", rendered);
     }
 
+    // iframe.contentWindow.postMessage — consent/widget bundles post to an embedded frame and crash on
+    // undefined without it; the frame element must also be a real HTMLIFrameElement so `instanceof` identifies
+    // it. Both the parsed shell iframe and a createElement'd one carry contentWindow.
+    [Theory]
+    [InlineData(JsEngine.Jint)]
+    [InlineData(JsEngine.V8)]
+    public async Task JsMode_IframeContentWindowPostMessage(JsEngine engine)
+    {
+        if (engine == JsEngine.V8)
+            Assert.SkipUnless(V8Support.IsAvailable, V8Support.UnavailableReason);
+
+        const string html = """
+            <html><body><div id="t"></div><iframe id="f" src="/frame"></iframe>
+            <script>
+            var d = document.getElementById('t');
+            var parsed = document.getElementById('f');
+            parsed.contentWindow.postMessage({ cmd: 'ping' }, '*');
+            var created = document.createElement('iframe');
+            created.contentWindow.postMessage('x');
+            var ok = (parsed instanceof HTMLIFrameElement) && (created instanceof HTMLIFrameElement);
+            var a = document.createElement('a'); a.setAttribute('href', ok ? '/iframe' : '/fail'); a.textContent = 'f';
+            d.appendChild(a);
+            </script>
+            </body></html>
+            """;
+
+        var renderer = CreateJsRenderer(engine);
+        var result = await renderer.RenderAsync(Encoding.UTF8.GetBytes(html), "http://localhost:5000/", new HttpClient(), CancellationToken.None);
+        var rendered = Encoding.UTF8.GetString(result);
+
+        Assert.Contains("href=\"/iframe\"", rendered);
+    }
+
     // Node load/error events on runtime-appended resources — the webpack lazy-chunk mechanism React Router
     // code-splitting depends on. A same-origin <script src> is fetched and executed by the resource drain,
     // then its load event fires (the bundle's own anchor proves execution, the onload handler's proves the
@@ -657,6 +690,67 @@ public class JsDomRendererTests
 
             return Task.FromResult(new HttpResponseMessage(HttpStatusCode.NotFound));
         }
+    }
+
+    // The canonical inline-bootstrap self-removal, `(document.currentScript || last script).parentNode
+    // .removeChild(self)`. currentScript is a synthetic, detached element, so its parentNode must resolve to a
+    // live container and the removal must be a harmless no-op — otherwise it dereferences null and aborts the
+    // rest of the script. The trailing anchor proves execution continued past it.
+    [Theory]
+    [InlineData(JsEngine.Jint)]
+    [InlineData(JsEngine.V8)]
+    public async Task JsMode_CurrentScript_SelfRemoval_DoesNotAbortScript(JsEngine engine)
+    {
+        if (engine == JsEngine.V8)
+            Assert.SkipUnless(V8Support.IsAvailable, V8Support.UnavailableReason);
+
+        const string html = """
+            <html><body><div id="t"></div>
+            <script>
+            var e = document.currentScript || document.scripts[document.scripts.length - 1];
+            e.parentNode.removeChild(e);
+            var a = document.createElement('a');
+            a.setAttribute('href', '/after-self-remove');
+            document.getElementById('t').appendChild(a);
+            </script>
+            </body></html>
+            """;
+
+        var renderer = CreateJsRenderer(engine);
+        var result = await renderer.RenderAsync(Encoding.UTF8.GetBytes(html), "http://localhost:5000/", new HttpClient(), CancellationToken.None);
+        var rendered = Encoding.UTF8.GetString(result);
+
+        Assert.Contains("href=\"/after-self-remove\"", rendered);
+    }
+
+    // window.Blob backs bundles that build object URLs or read blob bytes; a missing global threw
+    // ReferenceError into the SPA error boundary. Size (bytes across string + typed-array parts), type, and
+    // URL.createObjectURL must all resolve.
+    [Theory]
+    [InlineData(JsEngine.Jint)]
+    [InlineData(JsEngine.V8)]
+    public async Task JsMode_Blob_IsAvailable(JsEngine engine)
+    {
+        if (engine == JsEngine.V8)
+            Assert.SkipUnless(V8Support.IsAvailable, V8Support.UnavailableReason);
+
+        const string html = """
+            <html><body><div id="t"></div>
+            <script>
+            var b = new Blob(['hello ', new Uint8Array([119,111,114,108,100])], { type: 'text/plain' });
+            var url = URL.createObjectURL(b);
+            var a = document.createElement('a');
+            a.setAttribute('href', '/blob-' + b.size + '-' + b.type + '-' + (url.indexOf('blob:') === 0));
+            document.getElementById('t').appendChild(a);
+            </script>
+            </body></html>
+            """;
+
+        var renderer = CreateJsRenderer(engine);
+        var result = await renderer.RenderAsync(Encoding.UTF8.GetBytes(html), "http://localhost:5000/", new HttpClient(), CancellationToken.None);
+        var rendered = Encoding.UTF8.GetString(result);
+
+        Assert.Contains("href=\"/blob-11-text/plain-true\"", rendered);
     }
 
     // Lazy-mount-on-visible blocks (e.g. AntD skeletons) stay placeholders until an IntersectionObserver

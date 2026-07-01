@@ -22,6 +22,10 @@ function setCurrentScript(src: unknown): void {
     const script = new HTMLScriptElement();
     const s = String(src);
     if (s) script.src = s;
+    // A real currentScript is attached to the document, and bundles self-remove with
+    // currentScript.parentNode.removeChild(currentScript). Point parentNode at a live container (never adding
+    // the synthetic node to its childNodes) so that call resolves to a harmless no-op instead of throwing on null.
+    script.parentNode = (doc.head || doc.body || doc.documentElement) as any;
     doc.currentScript = script as any;
 }
 
