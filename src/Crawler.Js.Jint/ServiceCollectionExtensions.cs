@@ -1,9 +1,7 @@
 using Crawler.Js.Abstractions;
 using Crawler.Js.Models;
 using Crawler.Core;
-using Crawler.Core.Helpers;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Options;
 
 namespace Crawler.Js.Jint;
 
@@ -14,13 +12,8 @@ public static class ServiceCollectionExtensions
         services.AddJsCore(options, renderOptions, config);
 
         services.AddKeyedSingleton<IJsEngineFactory, JintJsEngineFactory>(DefaultJintCrawler.EngineKey);
-
-        services.AddHttpClient<DefaultJintCrawler>((provider, client) =>
-        {
-            config?.Invoke(provider, client);
-            ConfigurationHelper.ConfigureClient(client, provider.GetRequiredService<IOptions<CrawlerOptions>>());
-        }).ConfigurePrimaryHttpMessageHandler(provider =>
-            ConfigurationHelper.CreatePrimaryHandler(provider.GetRequiredService<IOptions<CrawlerOptions>>()));
+        services.AddCrawlerHttpClient<DefaultJintCrawler>(config);
+        services.AddTransient<ICrawler>(provider => provider.GetRequiredService<DefaultJintCrawler>());
 
         return services;
     }

@@ -6,7 +6,7 @@ using Microsoft.Extensions.Options;
 
 namespace Crawler.AngleSharp;
 
-public sealed class DefaultAngleSharpCrawler : AngleSharpCrawler<ScrapeResult>
+public sealed class DefaultAngleSharpCrawler : AngleSharpCrawler<ScrapeResult>, ICrawler
 {
     public DefaultAngleSharpCrawler(HttpClient client, IRobotClient robotClient, IOptions<CrawlerOptions> options, ILogger<DefaultAngleSharpCrawler> logger) : base(client, robotClient, options, logger)
     {

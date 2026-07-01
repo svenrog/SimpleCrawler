@@ -6,7 +6,7 @@ using Microsoft.Extensions.Options;
 
 namespace Crawler.HtmlAgilityPack;
 
-public sealed class DefaultHtmlAgilityPackCrawler : HtmlAgilityPackCrawler<ScrapeResult>
+public sealed class DefaultHtmlAgilityPackCrawler : HtmlAgilityPackCrawler<ScrapeResult>, ICrawler
 {
     public DefaultHtmlAgilityPackCrawler(HttpClient client, IRobotClient robotClient, IOptions<CrawlerOptions> options, ILogger<DefaultHtmlAgilityPackCrawler> logger) : base(client, robotClient, options, logger)
     {

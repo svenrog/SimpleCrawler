@@ -6,7 +6,7 @@ using Microsoft.Extensions.Options;
 
 namespace Crawler.Puppeteer;
 
-public sealed class DefaultPuppeteerCrawler : PuppeteerCrawler<ScrapeResult>
+public sealed class DefaultPuppeteerCrawler : PuppeteerCrawler<ScrapeResult>, ICrawler
 {
     public DefaultPuppeteerCrawler(IRobotClient robotClient, IOptions<CrawlerOptions> options, ILogger logger) : base(robotClient, options, logger)
     {

@@ -4,6 +4,7 @@ This section describes configuration in detail.
 
 - [`CrawlerOptions`](./crawler-options.md): shared options.
 - [JavaScript crawlers](./javascript-crawlers.md): Jint vs V8, HTML parsers, `JsRenderOptions`.
+- [HttpClient configuration](./httpclient-configuration.md): custom auth, cookies, and headers via the HttpClient hook.
 - [Performance](./performance.md): comparison of crawler performance.
 
 ## Pipeline
@@ -34,7 +35,7 @@ Trade fidelity for cost. Start at the cheapest tier that returns the links you n
 **Static** (`HtmlAgilityPack`, `AngleSharp`) crawlers do one HTTP request, then a HTML parse, they run no scripts and miss anything injected by client JS.
 
 **JS** (`Crawler.Js`) crawlers fetches the shell, builds an in-process DOM (`dom.js`), runs scripts in Jint or V8, extracts links. Renders real markup without a browser. Two-part
-choice (engine + parser): [JS tier](./js-tier.md).
+choice (engine + parser): [JavaScript crawlers](./javascript-crawlers.md).
 
 **Headless** (`Playwright`, `Puppeteer`) crawlers run a real browser with everything in it. This is for sites that use advanced features like: RSC streaming, service workers, canvas/WebGL that the JavaScript crawlers don't support.
 
@@ -61,9 +62,12 @@ var services = new ServiceCollection();
 services.AddHtmlAgilityPackCrawler(options, (provider, client) =>
     client.DefaultRequestHeaders.Add("Cookie", "session=..."));   // optional HttpClient hook
 
-var crawler = services.BuildServiceProvider().GetRequiredService<DefaultHtmlAgilityPackCrawler>();
+var crawler = services.BuildServiceProvider().GetRequiredService<ICrawler>();
 var result = await crawler.Start("https://example.com/");         // result.Urls = discovered set
 ```
+
+The `(provider, client)` hook is where custom auth, cookies, and headers go — see
+[HttpClient configuration](./httpclient-configuration.md).
 
 
 ### JS (engine + parser)
@@ -80,7 +84,7 @@ var services = new ServiceCollection();
 services.AddV8Crawler(options, renderOptions);
 services.AddHtmlAgilityPackHtmlParser();
 
-var crawler = services.BuildServiceProvider().GetRequiredService<DefaultV8Crawler>();
+var crawler = services.BuildServiceProvider().GetRequiredService<ICrawler>();
 var result = await crawler.Start("https://example.com/");
 ```
 
@@ -92,6 +96,6 @@ using Crawler.Playwright;            // or Crawler.Puppeteer
 var services = new ServiceCollection();
 services.AddPlaywrightCrawler(options);   // no HttpClient hook; configure via browser context
 
-var crawler = services.BuildServiceProvider().GetRequiredService<DefaultPlaywrightCrawler>();
+var crawler = services.BuildServiceProvider().GetRequiredService<ICrawler>();
 var result = await crawler.Start("https://example.com/");
 ```
