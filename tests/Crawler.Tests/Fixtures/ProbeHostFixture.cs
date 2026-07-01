@@ -66,6 +66,7 @@ public sealed class ProbeHostFixture : AbstractHostFixture
             JsProbeCapability.JQuery => ProbeSpaWebApplicationFactory.Create(host, "jQuery SPA", "jquery.js"),
             JsProbeCapability.BrowserApis => ProbeSpaWebApplicationFactory.Create(host, "Browser APIs SPA", "browser-apis.js"),
             JsProbeCapability.DeepWalk => ProbeSpaWebApplicationFactory.Create(host, "Deep Walk SPA", "deep-walk.js"),
+            JsProbeCapability.MapIterator => ProbeSpaWebApplicationFactory.Create(host, "Map Iterator SPA", "map-iterator.js"),
             _ => throw new ArgumentOutOfRangeException(nameof(capability)),
         };
     }
