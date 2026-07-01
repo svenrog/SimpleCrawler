@@ -7,10 +7,13 @@ namespace Crawler.Core.Robots;
 /// <summary>
 /// Describes a Sitemap
 /// </summary>
-public interface ISitemap
+public class Sitemap : ISitemap
 {
-    /// <summary>
-    /// Url set included in the Sitemap
-    /// </summary>
-    IAsyncEnumerable<UrlSetItem> UrlSet { get; }
+    public Sitemap(IAsyncEnumerable<UrlSetItem> urlSet)
+    {
+        UrlSet = urlSet;
+    }
+
+    /// <inheritdoc />
+    public IAsyncEnumerable<UrlSetItem> UrlSet { get; }
 }
