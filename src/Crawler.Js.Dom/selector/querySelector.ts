@@ -1,9 +1,10 @@
 import type { Node } from "../dom/Node";
 import { NodeType } from "../types/NodeType";
+import { NodeList } from "../dom/NodeList";
 
 export function querySelectorAll(root: Node, sel: string): Node[] {
     const el: Node = (root as any).documentElement || root;
-    const out: Node[] = [];
+    const out = new NodeList<Node>();
     const s = String(sel).trim();
 
     walk(el);

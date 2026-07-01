@@ -55,6 +55,27 @@
         },
         'custom-elements': function () {
             return typeof customElements !== 'undefined' && !!customElements && typeof customElements.define === 'function';
+        },
+        'node-list': function () {
+            if (typeof NodeList === 'undefined') return false;
+            var list = document.querySelectorAll('*');
+            return list instanceof NodeList && typeof list.item === 'function';
+        },
+        'element-traversal': function () {
+            var track = document.createElement('div');
+            var a = document.createElement('span');
+            a.setAttribute('class', 'slide');
+            var b = document.createElement('span');
+            b.setAttribute('class', 'slide');
+            track.appendChild(a);
+            track.appendChild(b);
+            return track.firstElementChild === a
+                && track.lastElementChild === b
+                && a.nextElementSibling === b
+                && b.previousElementSibling === a
+                && a.parentElement === track
+                && track.childElementCount === 2
+                && track.getElementsByClassName('slide').length === 2;
         }
     };
     var app = document.getElementById('app');

@@ -86,8 +86,11 @@ public sealed class JsHttp
             if (value is null)
                 continue;
 
-            if (!message.Headers.TryAddWithoutValidation(header.Name, value))
-                message.Content?.Headers.TryAddWithoutValidation(header.Name, value);
+            if (!message.Headers.TryAddWithoutValidation(header.Name, value) && message.Content is not null)
+            {
+                message.Content.Headers.Remove(header.Name);
+                message.Content.Headers.TryAddWithoutValidation(header.Name, value);
+            }
         }
     }
 

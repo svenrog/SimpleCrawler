@@ -29,6 +29,13 @@ export function stringify(value: any): string {
     if (type === "string") return value;
     if (type === "number" || type === "boolean" || type === "bigint") return String(value);
     if (type === "function" || type === "symbol") return String(value);
+    if (value instanceof Error || (type === "object" && typeof value.message === "string" && typeof value.stack === "string")) {
+        const name = typeof value.name === "string" ? value.name : "Error";
+        const header = value.message ? name + ": " + value.message : name;
+        const stack = typeof value.stack === "string" ? value.stack : "";
+        if (!stack) return header;
+        return stack.indexOf(header) === 0 ? stack : header + "\n" + stack;
+    }
     try { return JSON.stringify(value) ?? String(value); } catch { return String(value); }
 }
 

@@ -32,6 +32,16 @@
       }
     }
   }
+  function collectByClass(node, className, out) {
+    const children = node.childNodes;
+    for (let i = 0; i < children.length; i++) {
+      const c = children[i];
+      if (c.nodeType === 1 /* Element */) {
+        if (c.classList.contains(className)) out.push(c);
+        collectByClass(c, className, out);
+      }
+    }
+  }
   function textOf(node) {
     if (node.nodeType === 3 /* Text */) return node.data;
     let s = "";
@@ -240,10 +250,17 @@
     return new Proxy({}, handler);
   }
 
+  // dom/NodeList.ts
+  var NodeList = class extends Array {
+    item(index) {
+      return this[index] ?? null;
+    }
+  };
+
   // selector/querySelector.ts
   function querySelectorAll(root, sel) {
     const el = root.documentElement || root;
-    const out = [];
+    const out = new NodeList();
     const s = String(sel).trim();
     walk(el);
     return out;
@@ -862,6 +879,38 @@
     }
     get children() {
       return this.childNodes.filter((n) => n.nodeType === 1 /* Element */);
+    }
+    get childElementCount() {
+      return this.children.length;
+    }
+    // Element-only traversal. Slider/drag libraries step through slides via nextElementSibling and cache
+    // the track's parentElement/firstElementChild; a missing accessor returns undefined where they expect an
+    // element-or-null, so the next `.removeAttribute`/`.classList` call throws instead of skipping.
+    get parentElement() {
+      const p = this.parentNode;
+      return p && p.nodeType === 1 /* Element */ ? p : null;
+    }
+    get firstElementChild() {
+      return this.children[0] || null;
+    }
+    get lastElementChild() {
+      const kids = this.children;
+      return kids[kids.length - 1] || null;
+    }
+    get nextElementSibling() {
+      let n = this.nextSibling;
+      while (n && n.nodeType !== 1 /* Element */) n = n.nextSibling;
+      return n || null;
+    }
+    get previousElementSibling() {
+      let n = this.previousSibling;
+      while (n && n.nodeType !== 1 /* Element */) n = n.previousSibling;
+      return n || null;
+    }
+    getElementsByClassName(className) {
+      const out = [];
+      collectByClass(this, String(className), out);
+      return out;
     }
     get innerHTML() {
       return this.cachedInnerHTML != null ? this.cachedInnerHTML : serializeChildren(this);
@@ -1794,7 +1843,7 @@
     }
     getElementsByClassName(className) {
       const out = [];
-      if (this.documentElement) collectByTag(this.documentElement, String(className), out);
+      if (this.documentElement) collectByClass(this.documentElement, String(className), out);
       return out;
     }
     get scripts() {
@@ -2255,6 +2304,18 @@
     }
   };
 
+  // browser/scroll.ts
+  function installScrollApi(global) {
+    global.scrollTo = () => {
+    };
+    global.scrollBy = () => {
+    };
+    global.scrollByLines = () => {
+    };
+    global.scrollByPages = () => {
+    };
+  }
+
   // browser/globals.ts
   var doc = new Document(globalThis);
   documentRef.current = doc;
@@ -2331,6 +2392,7 @@
     global.URL = URL;
     global.URLSearchParams = URLSearchParams;
     global.Node = Node;
+    global.NodeList = NodeList;
     global.Element = Element;
     global.CharacterData = CharacterData;
     global.Document = Document;
@@ -2355,6 +2417,7 @@
     global.localStorage = createStorage();
     global.sessionStorage = createStorage();
     installTimerGlobals(global);
+    installScrollApi(global);
   }
 
   // console/constants.ts
@@ -2409,6 +2472,13 @@
     if (type === "string") return value;
     if (type === "number" || type === "boolean" || type === "bigint") return String(value);
     if (type === "function" || type === "symbol") return String(value);
+    if (value instanceof Error || type === "object" && typeof value.message === "string" && typeof value.stack === "string") {
+      const name = typeof value.name === "string" ? value.name : "Error";
+      const header = value.message ? name + ": " + value.message : name;
+      const stack = typeof value.stack === "string" ? value.stack : "";
+      if (!stack) return header;
+      return stack.indexOf(header) === 0 ? stack : header + "\n" + stack;
+    }
     try {
       return JSON.stringify(value) ?? String(value);
     } catch {

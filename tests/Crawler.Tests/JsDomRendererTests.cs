@@ -587,6 +587,7 @@ public class JsDomRendererTests
             console.debug('debug %s', 'noise');
             console.log('hello %s number %d', 'world', 42);
             console.error('boom');
+            console.error(new Error('kaboom'));
             </script>
             </body></html>
             """;
@@ -597,6 +598,8 @@ public class JsDomRendererTests
 
         Assert.Contains((LogLevel.Information, "hello world number 42"), enabled.Entries);
         Assert.Contains((LogLevel.Error, "boom"), enabled.Entries);
+        Assert.Contains(enabled.Entries, e => e.Level == LogLevel.Error && e.Message.Contains("kaboom"));
+        Assert.DoesNotContain(enabled.Entries, e => e.Level == LogLevel.Error && e.Message == "{}");
         Assert.DoesNotContain(enabled.Entries, e => e.Level == LogLevel.Debug);
 
         var suppressed = new CapturingLogger();

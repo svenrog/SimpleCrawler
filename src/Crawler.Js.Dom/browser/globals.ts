@@ -1,5 +1,6 @@
 import { Document } from "../dom/Document";
 import { Node } from "../dom/Node";
+import { NodeList } from "../dom/NodeList";
 import { Element } from "../dom/Element";
 import { CharacterData } from "../dom/CharacterData";
 import { Text } from "../dom/Text";
@@ -29,6 +30,7 @@ import { installViewport } from "./viewport";
 import { IntersectionObserver } from "./IntersectionObserver";
 import { Blob } from "./Blob";
 import { documentRef } from "../dom/documentRef";
+import { installScrollApi } from "./scroll";
 
 export const doc = new Document(globalThis as any);
 documentRef.current = doc;
@@ -82,6 +84,7 @@ export function installDOM(global: any): void {
     global.URL = URL;
     global.URLSearchParams = URLSearchParams;
     global.Node = Node;
+    global.NodeList = NodeList;
     global.Element = Element;
     global.CharacterData = CharacterData;
     global.Document = Document;
@@ -106,4 +109,5 @@ export function installDOM(global: any): void {
     global.localStorage = createStorage();
     global.sessionStorage = createStorage();
     installTimerGlobals(global);
+    installScrollApi(global);
 }

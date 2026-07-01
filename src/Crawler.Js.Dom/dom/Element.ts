@@ -2,7 +2,7 @@ import { Node } from "./Node";
 import { NodeType } from "../types/NodeType";
 import { Text } from "./Text";
 import { createStyleDeclaration } from "../css/CSSStyleDeclaration";
-import { collectByTag, textOf, hideOwnFields } from "./utils";
+import { collectByTag, collectByClass, textOf, hideOwnFields } from "./utils";
 import { querySelectorAll, matchesSelector } from "../selector/querySelector";
 import { serializeChildren, serializeNode } from "../html/serializer";
 import { parserRef } from "../html/parserRef";
@@ -290,6 +290,45 @@ export class Element extends Node {
 
     get children(): Element[] {
         return this.childNodes.filter((n) => n.nodeType === NodeType.Element) as unknown as Element[];
+    }
+
+    get childElementCount(): number {
+        return this.children.length;
+    }
+
+    // Element-only traversal. Slider/drag libraries step through slides via nextElementSibling and cache
+    // the track's parentElement/firstElementChild; a missing accessor returns undefined where they expect an
+    // element-or-null, so the next `.removeAttribute`/`.classList` call throws instead of skipping.
+    get parentElement(): Element | null {
+        const p = this.parentNode;
+        return p && p.nodeType === NodeType.Element ? (p as unknown as Element) : null;
+    }
+
+    get firstElementChild(): Element | null {
+        return this.children[0] || null;
+    }
+
+    get lastElementChild(): Element | null {
+        const kids = this.children;
+        return kids[kids.length - 1] || null;
+    }
+
+    get nextElementSibling(): Element | null {
+        let n = this.nextSibling;
+        while (n && n.nodeType !== NodeType.Element) n = n.nextSibling;
+        return (n as unknown as Element) || null;
+    }
+
+    get previousElementSibling(): Element | null {
+        let n = this.previousSibling;
+        while (n && n.nodeType !== NodeType.Element) n = n.previousSibling;
+        return (n as unknown as Element) || null;
+    }
+
+    getElementsByClassName(className: string): Element[] {
+        const out: Node[] = [];
+        collectByClass(this, String(className), out);
+        return out as unknown as Element[];
     }
 
     get innerHTML(): string {

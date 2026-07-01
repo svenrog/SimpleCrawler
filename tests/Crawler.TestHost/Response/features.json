@@ -53,5 +53,15 @@
     "key": "custom-elements",
     "href": "/features/custom-elements",
     "name": "Custom elements"
+  },
+  {
+    "key": "node-list",
+    "href": "/features/node-list",
+    "name": "Node list"
+  },
+  {
+    "key": "element-traversal",
+    "href": "/features/element-traversal",
+    "name": "Element traversal"
   }
 ]

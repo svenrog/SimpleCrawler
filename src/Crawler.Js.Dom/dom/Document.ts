@@ -9,7 +9,7 @@ import { Range } from "./Range";
 import { HTMLTemplateElement } from "./HTMLTemplateElement";
 import { reflectedElementFactories } from "./reflectedElements";
 import { customElements } from "./customElements";
-import { collectByTag, walkFind, hideOwnFields } from "./utils";
+import { collectByTag, walkFind, hideOwnFields, collectByClass } from "./utils";
 import { querySelectorAll } from "../selector/querySelector";
 
 export class Document extends Node {
@@ -93,7 +93,7 @@ export class Document extends Node {
 
     getElementsByClassName(className: string): Element[] {
         const out: Node[] = [];
-        if (this.documentElement) collectByTag(this.documentElement, String(className), out);
+        if (this.documentElement) collectByClass(this.documentElement, String(className), out);
         return out as unknown as Element[];
     }
 
