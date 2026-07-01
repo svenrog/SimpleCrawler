@@ -225,9 +225,39 @@
     }
   };
 
-  // network/XMLHttpRequest.ts
-  var XMLHttpRequest = class {
+  // network/XMLHttpRequestEventTarget.ts
+  var XMLHttpRequestEventTarget = class {
     constructor() {
+      this._listeners = {};
+    }
+    addEventListener(type, cb) {
+      if (typeof cb !== "function") return;
+      (this._listeners[type] || (this._listeners[type] = [])).push(cb);
+    }
+    removeEventListener(type, cb) {
+      const list = this._listeners[type];
+      if (!list) return;
+      const index = list.indexOf(cb);
+      if (index >= 0) list.splice(index, 1);
+    }
+    dispatchEvent(event) {
+      const list = event && this._listeners[event.type];
+      if (list) {
+        for (const cb of list.slice()) {
+          try {
+            cb.call(this, event);
+          } catch {
+          }
+        }
+      }
+      return true;
+    }
+  };
+
+  // network/XMLHttpRequest.ts
+  var XMLHttpRequest = class extends XMLHttpRequestEventTarget {
+    constructor() {
+      super();
       this.readyState = 0;
       this.status = 0;
       this.statusText = "";
@@ -246,7 +276,7 @@
       this._method = m;
       this._url = u;
       this.readyState = 1;
-      if (this.onreadystatechange) this.onreadystatechange();
+      this._emit("readystatechange");
     }
     setRequestHeader(k, v) {
       this._h[k] = v;
@@ -256,8 +286,9 @@
       if (r.error) {
         this.status = 0;
         this.readyState = 4;
-        if (this.onerror) this.onerror(new Error(r.error));
-        if (this.onloadend) this.onloadend();
+        this._emit("readystatechange", this.onerror, new Error(r.error));
+        this._emit("error", this.onerror, new Error(r.error));
+        this._emit("loadend", this.onloadend);
         return;
       }
       this.status = r.status;
@@ -266,9 +297,9 @@
       this.response = r.body;
       this._rh = r.headersJson || "{}";
       this.readyState = 4;
-      if (this.onreadystatechange) this.onreadystatechange();
-      if (this.onload) this.onload();
-      if (this.onloadend) this.onloadend();
+      this._emit("readystatechange");
+      this._emit("load", this.onload);
+      this._emit("loadend", this.onloadend);
     }
     abort() {
     }
@@ -293,13 +324,18 @@
         return "";
       }
     }
-    addEventListener(t, cb) {
-      if (t === "load") this.onload = cb;
-      else if (t === "error") this.onerror = cb;
-      else if (t === "loadend") this.onloadend = cb;
-      else if (t === "readystatechange") this.onreadystatechange = cb;
-    }
-    removeEventListener() {
+    // Fire an event to both the corresponding on* handler and any addEventListener listeners (Zone.js
+    // attaches its readystatechange listener via the latter). onreadystatechange has no explicit handler
+    // argument because it is always read live off `this`.
+    _emit(type, handler, arg) {
+      const cb = type === "readystatechange" ? this.onreadystatechange : handler;
+      if (typeof cb === "function") {
+        try {
+          cb.call(this, arg);
+        } catch {
+        }
+      }
+      this.dispatchEvent({ type, target: this });
     }
   };
   XMLHttpRequest.UNSENT = 0;
@@ -316,6 +352,7 @@
     global.FormData = global.FormData || FormData;
     global.fetch = global.fetch || fetch;
     global.XMLHttpRequest = global.XMLHttpRequest || XMLHttpRequest;
+    global.XMLHttpRequestEventTarget = global.XMLHttpRequestEventTarget || XMLHttpRequestEventTarget;
     global.AbortController = global.AbortController || AbortController;
     global.AbortSignal = global.AbortSignal || AbortSignal;
   }

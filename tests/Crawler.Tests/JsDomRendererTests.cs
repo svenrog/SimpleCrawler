@@ -978,4 +978,100 @@ public class JsDomRendererTests
         var result = await renderer.RenderAsync(Encoding.UTF8.GetBytes(html), "http://localhost:5000/", new HttpClient(), CancellationToken.None);
         return Encoding.UTF8.GetString(result);
     }
+
+    // A page served from a nested path with <base href="/"> resolves a relative <script src> against the
+    // base, not the page URL. Without that, the host fetches /nested/app.js — which an SPA serves as its HTML
+    // catch-all fallback — and the engine aborts on "Unexpected token <" instead of running the bundle.
+    [Theory]
+    [InlineData(JsEngine.Jint)]
+    [InlineData(JsEngine.V8)]
+    public async Task JsMode_RelativeScript_ResolvesAgainstBaseHref(JsEngine engine)
+    {
+        if (engine == JsEngine.V8)
+            Assert.SkipUnless(V8Support.IsAvailable, V8Support.UnavailableReason);
+
+        const string html = """
+            <!doctype html><html><head><base href="/"></head>
+            <body><script src="app.js"></script></body></html>
+            """;
+
+        var handler = new BaseHrefHandler();
+        using var client = new HttpClient(handler);
+        var renderer = CreateJsRenderer(engine);
+
+        var result = await renderer.RenderAsync(Encoding.UTF8.GetBytes(html), "https://example.test/page/Start2/", client, CancellationToken.None);
+        var rendered = Encoding.UTF8.GetString(result);
+
+        Assert.Equal("https://example.test/app.js", handler.RequestedScriptUrl);
+        Assert.Contains("href=\"/from-base\"", rendered);
+    }
+
+    // Zone.js (Angular/RxJS) patches XHR event listeners on XMLHttpRequestEventTarget.prototype and, when
+    // scheduling the request, reads the original addEventListener off it to attach its own readystatechange
+    // listener. XHR must therefore be an XMLHttpRequestEventTarget (registered globally) whose send dispatches
+    // to addEventListener listeners, not only the on* handlers — otherwise Zone throws before send runs.
+    [Theory]
+    [InlineData(JsEngine.Jint)]
+    [InlineData(JsEngine.V8)]
+    public async Task JsMode_Xhr_IsEventTarget_AndDispatchesLoadListener(JsEngine engine)
+    {
+        if (engine == JsEngine.V8)
+            Assert.SkipUnless(V8Support.IsAvailable, V8Support.UnavailableReason);
+
+        const string html = """
+            <!doctype html><html><head></head>
+            <body><div id="r"></div>
+            <script>
+              var x = new XMLHttpRequest();
+              if (x instanceof XMLHttpRequestEventTarget) {
+                x.addEventListener('load', function () {
+                  var a = document.createElement('a');
+                  a.setAttribute('href', '/xhr-' + x.status);
+                  document.body.appendChild(a);
+                });
+                x.open('GET', '/api');
+                x.send();
+              }
+            </script>
+            </body></html>
+            """;
+
+        var handler = new FixedResponseHandler();
+        using var client = new HttpClient(handler);
+        var renderer = CreateJsRenderer(engine, new JsRenderOptions { EnableFetch = true });
+
+        var result = await renderer.RenderAsync(Encoding.UTF8.GetBytes(html), "https://example.test/", client, CancellationToken.None);
+        var rendered = Encoding.UTF8.GetString(result);
+
+        Assert.Contains("href=\"/xhr-200\"", rendered);
+    }
+
+    private sealed class FixedResponseHandler : HttpMessageHandler
+    {
+        protected override HttpResponseMessage Send(HttpRequestMessage request, CancellationToken cancellationToken)
+            => new(HttpStatusCode.OK) { Content = new StringContent("{}") };
+
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+            => Task.FromResult(Send(request, cancellationToken));
+    }
+
+    // Serves JS only for the base-resolved script URL; any other path returns the SPA's HTML fallback, so a
+    // page-relative resolution fetches HTML and the injected anchor never appears.
+    private sealed class BaseHrefHandler : HttpMessageHandler
+    {
+        public string? RequestedScriptUrl { get; private set; }
+
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            var url = request.RequestUri!.AbsoluteUri;
+            if (url == "https://example.test/app.js")
+            {
+                RequestedScriptUrl = url;
+                const string js = "var a=document.createElement('a');a.setAttribute('href','/from-base');document.body.appendChild(a);";
+                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(js) });
+            }
+
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent("<!doctype html><html><body>fallback</body></html>") });
+        }
+    }
 }

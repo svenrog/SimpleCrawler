@@ -2687,6 +2687,26 @@
     walk(doc.documentElement);
     return out;
   }
+  function getBaseHref() {
+    if (!doc.documentElement) return "";
+    let found = "";
+    function walk(n) {
+      for (const c of n.childNodes) {
+        if (c.nodeType !== 1 /* Element */) continue;
+        if (c.localName === "base") {
+          const href = c.getAttribute("href");
+          if (href) {
+            found = href;
+            return true;
+          }
+        }
+        if (walk(c)) return true;
+      }
+      return false;
+    }
+    walk(doc.documentElement);
+    return found;
+  }
   function collectLinks() {
     const anchors = [];
     let canonical = null;
@@ -2727,6 +2747,7 @@
       buildDocumentFromTree(doc, String(json));
     };
     global.__crawlerCollectScripts = () => JSON.stringify(collectScripts());
+    global.__crawlerGetBaseHref = () => getBaseHref();
     global.__crawlerCollectLinks = () => JSON.stringify(collectLinks());
     global.__crawlerPending = () => pendingCount();
     global.__crawlerPump = () => pumpTasks();

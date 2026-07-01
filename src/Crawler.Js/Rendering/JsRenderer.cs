@@ -92,8 +92,10 @@ public sealed class JsRenderer
         }
         RenderProfiler.Stop("phase.parse", parseTime);
 
+        var documentBaseUri = ResolveDocumentBase(engine, pageUri);
+
         var collectTime = RenderProfiler.Start();
-        var (regularScripts, moduleEntries) = await CollectScriptsFromJsAsync(engine, pageUrl, client, _sources, cancellationToken);
+        var (regularScripts, moduleEntries) = await CollectScriptsFromJsAsync(engine, documentBaseUri, pageUrl, client, _sources, cancellationToken);
         RenderProfiler.Stop("phase.collect", collectTime);
 
         // The markup had a <script> tag but the parser surfaced nothing executable (e.g. JSON), so nothing
@@ -122,7 +124,7 @@ public sealed class JsRenderer
         RenderProfiler.Stop("phase.bundleExec", bundleExecutionTime);
 
         var drainTime = RenderProfiler.Start();
-        await DrainJsAsync(engine, pageUri, client, pageUrl, cancellationToken);
+        await DrainJsAsync(engine, documentBaseUri, pageUri, client, pageUrl, cancellationToken);
         RenderProfiler.Stop("phase.drain", drainTime);
 
         return Finalize(engine, finalize, totalTime);
@@ -137,9 +139,20 @@ public sealed class JsRenderer
         return result;
     }
 
-    private static async Task<(IReadOnlyList<RegularScript> Regular, IReadOnlyList<ModuleScript> Modules)> CollectScriptsFromJsAsync(IJsEngine engine, string pageUrl, HttpClient client, SourceCache sources, CancellationToken cancellationToken)
+    // Relative script/resource URLs resolve against the document base URL (the first <base href>, if any),
+    // not the page URL — matching the browser. Without this, a <base href="/"> page served from a nested
+    // path fetches the site's HTML fallback for every relative <script src>, and the engine aborts on it.
+    private static Uri ResolveDocumentBase(IJsEngine engine, Uri pageUri)
     {
-        var baseUri = new Uri(pageUrl);
+        var baseHref = engine.Evaluate<string>("__crawlerGetBaseHref()");
+        if (!string.IsNullOrEmpty(baseHref) && Uri.TryCreate(pageUri, baseHref, out var baseUri))
+            return baseUri;
+
+        return pageUri;
+    }
+
+    private static async Task<(IReadOnlyList<RegularScript> Regular, IReadOnlyList<ModuleScript> Modules)> CollectScriptsFromJsAsync(IJsEngine engine, Uri baseUri, string pageUrl, HttpClient client, SourceCache sources, CancellationToken cancellationToken)
+    {
         var regular = new List<RegularScript>();
         var modules = new List<ModuleScript>();
 
@@ -210,7 +223,7 @@ public sealed class JsRenderer
     private static void SetCurrentScript(IJsEngine engine, string? src)
         => engine.CallGlobal("__crawlerSetCurrentScript", src);
 
-    private async Task DrainJsAsync(IJsEngine engine, Uri pageUri, HttpClient client, string pageUrl, CancellationToken cancellationToken)
+    private async Task DrainJsAsync(IJsEngine engine, Uri baseUri, Uri pageUri, HttpClient client, string pageUrl, CancellationToken cancellationToken)
     {
         // Settle after a few idle turns: __crawlerPending reports the queue depth before __crawlerPump runs
         // it, so a turn with no pending work counts as idle. Runtime-appended <script src>/<link> chunks are
@@ -220,7 +233,7 @@ public sealed class JsRenderer
         var idle = 0;
         while (iterations++ < _options.MaxTaskDrainIterations && idle < _idleTurnsBeforeSettled)
         {
-            var loadedResource = await DrainResourcesAsync(engine, pageUri, client, pageUrl, cancellationToken);
+            var loadedResource = await DrainResourcesAsync(engine, baseUri, pageUri, client, pageUrl, cancellationToken);
 
             engine.RunMicrotasks();
             var pending = engine.Evaluate<int>("__crawlerPending()");
@@ -232,7 +245,7 @@ public sealed class JsRenderer
         }
     }
 
-    private async Task<bool> DrainResourcesAsync(IJsEngine engine, Uri pageUri, HttpClient client, string pageUrl, CancellationToken cancellationToken)
+    private async Task<bool> DrainResourcesAsync(IJsEngine engine, Uri baseUri, Uri pageUri, HttpClient client, string pageUrl, CancellationToken cancellationToken)
     {
         var json = engine.Evaluate<string>("__crawlerTakeResources()");
         if (string.IsNullOrEmpty(json))
@@ -246,7 +259,7 @@ public sealed class JsRenderer
             var tag = entry.TryGetProperty("tag", out var tagProp) ? tagProp.GetString() : null;
             var src = entry.TryGetProperty("src", out var srcProp) ? srcProp.GetString() : null;
 
-            await LoadResourceAsync(engine, id, tag, src, pageUri, client, pageUrl, cancellationToken);
+            await LoadResourceAsync(engine, id, tag, src, baseUri, pageUri, client, pageUrl, cancellationToken);
             loaded = true;
         }
 
@@ -257,7 +270,7 @@ public sealed class JsRenderer
     // is treated as loaded without fetching (a crawl needs no CSS). Cross-origin scripts (AppInsights/GTM and
     // similar analytics SDKs) are left pending — running them is slow and yields no links, and nothing awaits
     // their load. Every other case fires the node's load (or error) event to settle the awaiting import().
-    private async Task LoadResourceAsync(IJsEngine engine, int id, string? tag, string? src, Uri pageUri, HttpClient client, string pageUrl, CancellationToken cancellationToken)
+    private async Task LoadResourceAsync(IJsEngine engine, int id, string? tag, string? src, Uri baseUri, Uri pageUri, HttpClient client, string pageUrl, CancellationToken cancellationToken)
     {
         if (!string.Equals(tag, "script", StringComparison.Ordinal))
         {
@@ -265,7 +278,7 @@ public sealed class JsRenderer
             return;
         }
 
-        if (string.IsNullOrEmpty(src) || !Uri.TryCreate(pageUri, src, out var absolute))
+        if (string.IsNullOrEmpty(src) || !Uri.TryCreate(baseUri, src, out var absolute))
         {
             FireResourceEvent(engine, id, "error");
             return;

@@ -28,7 +28,12 @@ public class SitemapParser
     {
         try
         {
-            var reader = XmlReader.Create(stream, new XmlReaderSettings { Async = true });
+            var reader = XmlReader.Create(stream, new XmlReaderSettings
+            {
+                Async = true,
+                DtdProcessing = DtdProcessing.Ignore,
+                XmlResolver = null,
+            });
             await reader.MoveToContentAsync();
 
             return reader switch

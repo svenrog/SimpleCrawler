@@ -55,6 +55,28 @@ function collectScripts(): ScriptDescriptor[] {
     return out;
 }
 
+// The document base URL for resolving relative script/resource URLs: the first in-document <base href>
+// (head, document order) or "" when absent. A <base href="/"> on a page served from a nested path is why
+// a relative <script src="main.js"> must resolve against the base, not the page URL — otherwise the host
+// fetches the SPA's catch-all HTML fallback and the engine chokes on "Unexpected token <".
+function getBaseHref(): string {
+    if (!doc.documentElement) return "";
+    let found = "";
+    function walk(n: any): boolean {
+        for (const c of n.childNodes) {
+            if (c.nodeType !== NodeType.Element) continue;
+            if (c.localName === "base") {
+                const href = c.getAttribute("href");
+                if (href) { found = href; return true; }
+            }
+            if (walk(c)) return true;
+        }
+        return false;
+    }
+    walk(doc.documentElement);
+    return found;
+}
+
 // Mirrors the AngleSharp static extractor (QuerySelectorAll("a"), link[rel=canonical], meta[name=robots])
 // but reads the live DOM directly, avoiding the serialize→reparse round trip. A naive childNodes walk is
 // true parity with serializeNode: the serializer also iterates childNodes, so template .content and
@@ -90,6 +112,7 @@ export function installCrawlerApi(global: any): void {
     global.__crawlerLoadHtml = (html: unknown) => { parseHTML(doc, html); };
     global.__crawlerLoadTree = (json: unknown) => { buildDocumentFromTree(doc, String(json)); };
     global.__crawlerCollectScripts = () => JSON.stringify(collectScripts());
+    global.__crawlerGetBaseHref = () => getBaseHref();
     global.__crawlerCollectLinks = () => JSON.stringify(collectLinks());
     global.__crawlerPending = () => pendingCount();
     global.__crawlerPump = () => pumpTasks();

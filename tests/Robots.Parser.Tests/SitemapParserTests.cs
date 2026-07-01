@@ -171,6 +171,32 @@ public class SitemapParserTests
     }
 
     [Fact]
+    public async Task ReadFromStreamAsync_DoctypeDeclaration_ParseCorrectly()
+    {
+        // Arrange
+        var file =
+@"<?xml version=""1.0"" encoding=""UTF-8""?>
+<!DOCTYPE urlset>
+<urlset xmlns=""http://www.sitemaps.org/schemas/sitemap/0.9"">
+    <url>
+        <loc>https://www.github.com/organisations.xml</loc>
+    </url>
+</urlset>";
+        await using var stream = new MemoryStream(Encoding.UTF8.GetBytes(file));
+        var cancellationToken = TestContext.Current.CancellationToken;
+
+        // Act
+        var sitemap = await SitemapParser.ReadFromStreamAsync(stream, null, cancellationToken);
+
+        // Assert
+        var urlSet = await sitemap.UrlSet.ToListAsync(cancellationToken);
+        urlSet.Select(item => item.Location).Should().BeEquivalentTo(
+        [
+            new Uri("https://www.github.com/organisations.xml"),
+        ]);
+    }
+
+    [Fact]
     public async Task ReadFromStreamAsync_SitemapIndexNoModifiedDateFilter_ParseCorrectly()
     {
         // Arrange

@@ -6,6 +6,7 @@ import { Headers } from "./types/Headers";
 import { Request } from "./types/Request";
 import { Response } from "./types/Response";
 import { XMLHttpRequest } from "./XMLHttpRequest";
+import { XMLHttpRequestEventTarget } from "./XMLHttpRequestEventTarget";
 
 export function installNetwork(global: any): void {
     global.Headers = global.Headers || Headers;
@@ -14,6 +15,7 @@ export function installNetwork(global: any): void {
     global.FormData = global.FormData || FormData;
     global.fetch = global.fetch || fetch;
     global.XMLHttpRequest = global.XMLHttpRequest || XMLHttpRequest;
+    global.XMLHttpRequestEventTarget = global.XMLHttpRequestEventTarget || XMLHttpRequestEventTarget;
     global.AbortController = global.AbortController || AbortController;
     global.AbortSignal = global.AbortSignal || AbortSignal;
 }

@@ -11,6 +11,7 @@ public abstract class AbstractRobotsCrawler<TResponse, TResult> : AbstractCrawle
     private readonly IRobotClient _robotClient;
     private readonly CrawlerOptions _options;
     private readonly ProductToken _userAgent;
+    private readonly ILogger _logger;
 
     private IRobotRuleChecker? _robotRules;
     private IRobotsTxt? _robots;
@@ -21,6 +22,7 @@ public abstract class AbstractRobotsCrawler<TResponse, TResult> : AbstractCrawle
     {
         _robotClient = robotClient;
         _options = options.Value;
+        _logger = logger;
         _userAgent = ProductToken.Wildcard;
 
         if (_options.UserAgent != null)
@@ -47,12 +49,19 @@ public abstract class AbstractRobotsCrawler<TResponse, TResult> : AbstractCrawle
         if (!_options.EnableSitemapDiscovery)
             return;
 
-        var sitemap = _robots!.LoadSitemapAsync(_entryUri!, null, cancellationToken);
-        await foreach (var item in sitemap)
+        try
         {
-            var url = item.Location.ToString();
+            var sitemap = _robots!.LoadSitemapAsync(_entryUri!, null, cancellationToken);
+            await foreach (var item in sitemap)
+            {
+                var url = item.Location.ToString();
 
-            DiscoverLink(url);
+                DiscoverLink(url);
+            }
+        }
+        catch (Exception e) when (e is not OperationCanceledException)
+        {
+            _logger.LogWarning("Sitemap discovery failed: {message}", e.Message);
         }
     }
 
