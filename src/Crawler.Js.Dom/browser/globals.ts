@@ -29,6 +29,7 @@ import { performance } from "./Performance";
 import { installViewport } from "./viewport";
 import { IntersectionObserver } from "./IntersectionObserver";
 import { Blob } from "./Blob";
+import { btoa, atob } from "./base64";
 import { documentRef } from "../dom/documentRef";
 import { installScrollApi } from "./scroll";
 
@@ -78,6 +79,8 @@ export function installDOM(global: any): void {
     // (functions, cycles) aren't supported, matching nothing real but never reached by our targets.
     global.structuredClone = global.structuredClone || ((value: any) => value == null ? value : JSON.parse(JSON.stringify(value)));
     global.Blob = Blob;
+    global.btoa = global.btoa || btoa;
+    global.atob = global.atob || atob;
     // Blobs never leave the render, so an object URL only needs to be a unique, revocable token.
     (URL as any).createObjectURL = (URL as any).createObjectURL || (() => "blob:" + Math.random().toString(36).slice(2));
     (URL as any).revokeObjectURL = (URL as any).revokeObjectURL || (() => { });

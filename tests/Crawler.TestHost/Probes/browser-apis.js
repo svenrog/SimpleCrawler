@@ -86,6 +86,10 @@
         'htmlelement-instanceof': function () {
             return document.createElement('div') instanceof HTMLElement
                 && document.body instanceof HTMLElement;
+        },
+        'base64': function () {
+            if (typeof btoa !== 'function' || typeof atob !== 'function') return false;
+            return btoa('foobar') === 'Zm9vYmFy' && atob('Zm9vYmFy') === 'foobar';
         }
     };
     var app = document.getElementById('app');
