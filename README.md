@@ -36,13 +36,7 @@ Adjusting which implementation is used can be done by referencing another implem
 
 ## Configuration
 
-Wiring a backend into your own project [`docs/`](./docs/configuration.md):
-
-- [Overview](./docs/configuration.md) - project overview and code examples.
-- [CrawlerOptions](./docs/crawler-options.md) - detailed options.
-- [HttpClient configuration](./docs/httpclient-configuration.md) - examples of customizations.
-- [JavaScript crawlers](./docs/javascript-crawlers.md) - information on javascript crawlers, how to use parsers and options.
-- [Performance](./docs/performance.md) - comparison of crawler performance.
+Details on how to wire up your own backend are found under [docs/](./docs/configuration.md).
 
 ## Notes on implementations
 
