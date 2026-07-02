@@ -1749,6 +1749,10 @@
     const factory = reflectedElementFactories[tag];
     return factory ? factory() : new HTMLElement(tag);
   }
+  function attachChild(parent, child) {
+    child.parentNode = parent;
+    parent.childNodes.push(child);
+  }
   function wireDocument(doc2, root, head, body) {
     doc2.documentElement = root;
     doc2.head = head;
@@ -1762,13 +1766,13 @@
     const root = new HTMLElement("html");
     const head = new HTMLElement("head");
     const body = new HTMLElement("body");
-    root.appendChild(head);
-    root.appendChild(body);
+    attachChild(root, head);
+    attachChild(root, body);
     let open = [body];
     function appendText(parent, text) {
       const last = parent.childNodes[parent.childNodes.length - 1];
       if (last && last.nodeType === 3 /* Text */) last.data += text;
-      else parent.appendChild(new Text(text));
+      else attachChild(parent, new Text(text));
     }
     let i = 0;
     while (i < len) {
@@ -1837,13 +1841,13 @@
           const rawFrom = j;
           const rawTo = findRawTextClose(src, tag, rawFrom);
           const raw = rawTo < 0 ? src.slice(rawFrom) : src.slice(rawFrom, rawTo);
-          if (raw) el.appendChild(new Text(raw));
+          if (raw) attachChild(el, new Text(raw));
           const rawGt = rawTo < 0 ? len : src.indexOf(">", rawTo);
           i = rawGt < 0 ? len : rawGt + 1;
-          open[open.length - 1].appendChild(el);
+          attachChild(open[open.length - 1], el);
           continue;
         }
-        open[open.length - 1].appendChild(el);
+        attachChild(open[open.length - 1], el);
         if (!VOID_ELEMENTS[tag] && !selfClosed) open.push(el);
         continue;
       }
@@ -1864,7 +1868,7 @@
       }
       if (c1 === 33 && src.startsWith("<!--", i)) {
         const cEnd = src.indexOf("-->", i + 4);
-        open[open.length - 1].appendChild(new Comment(src.slice(i + 4, cEnd < 0 ? len : cEnd)));
+        attachChild(open[open.length - 1], new Comment(src.slice(i + 4, cEnd < 0 ? len : cEnd)));
         i = cEnd < 0 ? len : cEnd + 3;
         continue;
       }
@@ -1872,8 +1876,8 @@
         const declEnd = src.indexOf(">", i);
         const end = declEnd < 0 ? len : declEnd;
         const inner = src.slice(i + 2, end);
-        if (c1 === 63) open[open.length - 1].appendChild(new Comment("?" + inner));
-        else if (!/^doctype/i.test(inner)) open[open.length - 1].appendChild(new Comment(inner));
+        if (c1 === 63) attachChild(open[open.length - 1], new Comment("?" + inner));
+        else if (!/^doctype/i.test(inner)) attachChild(open[open.length - 1], new Comment(inner));
         i = declEnd < 0 ? len : declEnd + 1;
         continue;
       }
@@ -2894,7 +2898,7 @@
       }
       created[i] = node;
       const p = n.p;
-      if (p >= 0) created[p].appendChild(node);
+      if (p >= 0) attachChild(created[p], node);
     }
     if (nodes.length === 0) return;
     const root = created[0];

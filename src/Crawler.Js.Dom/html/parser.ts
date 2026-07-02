@@ -19,6 +19,15 @@ export function createLocalElement(tag: string): Element {
     return factory ? factory() : new HTMLElement(tag);
 }
 
+// Append a freshly created node to the end of a parent during construction. The child has no prior parent,
+// is never a DocumentFragment, and the tree is still detached from the document, so this skips appendChild's
+// reparent/fragment handling and — crucially — the isConnected walk that would climb to the root on every
+// insert (O(depth) per node). Connection-gated side effects run later, off wireDocument, exactly as before.
+export function attachChild(parent: any, child: any): void {
+    child.parentNode = parent;
+    parent.childNodes.push(child);
+}
+
 // Attaches a finished root tree to the document. Shared so the string parser and the tree builder produce the
 // same documentElement/head/body wiring.
 export function wireDocument(doc: Document, root: Element, head: Element | null, body: Element | null): void {
@@ -36,15 +45,15 @@ export function parseHTML(doc: Document, input: unknown): Element {
     const root = new HTMLElement("html");
     const head = new HTMLElement("head");
     const body = new HTMLElement("body");
-    root.appendChild(head);
-    root.appendChild(body);
+    attachChild(root, head);
+    attachChild(root, body);
 
     let open: Element[] = [body];
 
     function appendText(parent: Element, text: string): void {
         const last = parent.childNodes[parent.childNodes.length - 1] as any;
         if (last && last.nodeType === NodeType.Text) last.data += text;
-        else parent.appendChild(new Text(text));
+        else attachChild(parent, new Text(text));
     }
 
     let i = 0;
@@ -112,14 +121,14 @@ export function parseHTML(doc: Document, input: unknown): Element {
                 const rawFrom = j;
                 const rawTo = findRawTextClose(src, tag, rawFrom);
                 const raw = rawTo < 0 ? src.slice(rawFrom) : src.slice(rawFrom, rawTo);
-                if (raw) el.appendChild(new Text(raw));
+                if (raw) attachChild(el, new Text(raw));
                 const rawGt = rawTo < 0 ? len : src.indexOf(">", rawTo);
                 i = rawGt < 0 ? len : rawGt + 1;
-                open[open.length - 1].appendChild(el);
+                attachChild(open[open.length - 1], el);
                 continue;
             }
 
-            open[open.length - 1].appendChild(el);
+            attachChild(open[open.length - 1], el);
             if (!VOID_ELEMENTS[tag] && !selfClosed) open.push(el);
             continue;
         }
@@ -141,7 +150,7 @@ export function parseHTML(doc: Document, input: unknown): Element {
         // Comment.
         if (c1 === 33 /* ! */ && src.startsWith("<!--", i)) {
             const cEnd = src.indexOf("-->", i + 4);
-            open[open.length - 1].appendChild(new Comment(src.slice(i + 4, cEnd < 0 ? len : cEnd)));
+            attachChild(open[open.length - 1], new Comment(src.slice(i + 4, cEnd < 0 ? len : cEnd)));
             i = cEnd < 0 ? len : cEnd + 3;
             continue;
         }
@@ -152,8 +161,8 @@ export function parseHTML(doc: Document, input: unknown): Element {
             const declEnd = src.indexOf(">", i);
             const end = declEnd < 0 ? len : declEnd;
             const inner = src.slice(i + 2, end);
-            if (c1 === 63) open[open.length - 1].appendChild(new Comment("?" + inner));
-            else if (!/^doctype/i.test(inner)) open[open.length - 1].appendChild(new Comment(inner));
+            if (c1 === 63) attachChild(open[open.length - 1], new Comment("?" + inner));
+            else if (!/^doctype/i.test(inner)) attachChild(open[open.length - 1], new Comment(inner));
             i = declEnd < 0 ? len : declEnd + 1;
             continue;
         }
