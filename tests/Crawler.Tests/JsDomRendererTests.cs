@@ -1046,6 +1046,75 @@ public class JsDomRendererTests
         Assert.Contains("href=\"/xhr-200\"", rendered);
     }
 
+    // A marquee/virtualization component sizes itself by dividing a container measurement by an element's
+    // offsetWidth, then spreads `[...Array(count)]`. offsetWidth used to be undefined (and clientWidth is 0
+    // for non-root), so count came out NaN and `new Array(NaN)` threw "Invalid array length", tripping the
+    // SPA error boundary. A nonzero offsetWidth keeps the ratio finite so the spread — and the render — survive.
+    [Theory]
+    [InlineData(JsEngine.Jint)]
+    [InlineData(JsEngine.V8)]
+    public async Task JsMode_OffsetWidthIsNonzero_KeepsLayoutRatioFinite(JsEngine engine)
+    {
+        if (engine == JsEngine.V8)
+            Assert.SkipUnless(V8Support.IsAvailable, V8Support.UnavailableReason);
+
+        const string html = """
+            <!doctype html><html><body>
+            <div id="c"><span id="i">x</span></div>
+            <script>
+              var c=document.getElementById('c'), i=document.getElementById('i');
+              var count=Math.ceil(c.clientWidth/(i.offsetWidth+0))+1;
+              var arr=[...Array(count)];
+              var a=document.createElement('a');
+              a.setAttribute('href','/ok-'+Number.isFinite(count)+'-len'+arr.length);
+              document.body.appendChild(a);
+            </script>
+            </body></html>
+            """;
+
+        var renderer = CreateJsRenderer(engine);
+        var result = await renderer.RenderAsync(Encoding.UTF8.GetBytes(html), "https://example.test/", new HttpClient(), CancellationToken.None);
+        var rendered = Encoding.UTF8.GetString(result);
+
+        Assert.Contains("href=\"/ok-true-len1\"", rendered);
+    }
+
+    // A <video>/<audio> ref's mount effect calls el.load()/play()/pause() synchronously. Those were missing
+    // on the generic element a <video> parsed into, so the effect threw and blanked the page. Media elements
+    // now carry inert versions and are instanceof HTMLMediaElement.
+    [Theory]
+    [InlineData(JsEngine.Jint)]
+    [InlineData(JsEngine.V8)]
+    public async Task JsMode_MediaElement_HasInertPlaybackApi(JsEngine engine)
+    {
+        if (engine == JsEngine.V8)
+            Assert.SkipUnless(V8Support.IsAvailable, V8Support.UnavailableReason);
+
+        const string html = """
+            <!doctype html><html><body>
+            <script>
+              var out='/media';
+              try {
+                var v=document.createElement('video');
+                var ok = (v instanceof HTMLVideoElement) && (v instanceof HTMLMediaElement);
+                v.onloadeddata=function(){};
+                v.load(); v.play(); v.pause();
+                out='/media-'+ok;
+              } catch (e) { out='/err-'+e.message; }
+              var a=document.createElement('a');
+              a.setAttribute('href',out);
+              document.body.appendChild(a);
+            </script>
+            </body></html>
+            """;
+
+        var renderer = CreateJsRenderer(engine);
+        var result = await renderer.RenderAsync(Encoding.UTF8.GetBytes(html), "https://example.test/", new HttpClient(), CancellationToken.None);
+        var rendered = Encoding.UTF8.GetString(result);
+
+        Assert.Contains("href=\"/media-true\"", rendered);
+    }
+
     private sealed class FixedResponseHandler : HttpMessageHandler
     {
         protected override HttpResponseMessage Send(HttpRequestMessage request, CancellationToken cancellationToken)

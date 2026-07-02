@@ -128,6 +128,50 @@ export class Element extends Node {
         return this.localName === "html" || this.localName === "body" ? viewportHeight() : 0;
     }
 
+    // Unlike client* (0 for non-root), offset* must never be 0 or undefined here: layout-driven components
+    // size themselves by dividing a container measurement by an element's offsetWidth (marquees duplicating
+    // content to fill a row, virtualized lists computing an item count). A 0 or undefined denominator makes
+    // that ratio NaN/Infinity, so the ensuing `new Array(count)` throws "Invalid array length" and trips the
+    // SPA error boundary. A nonzero viewport-sized stand-in keeps the ratio finite (and small).
+    get offsetWidth(): number {
+        return viewportWidth();
+    }
+
+    get offsetHeight(): number {
+        return viewportHeight();
+    }
+
+    get offsetTop(): number {
+        return 0;
+    }
+
+    get offsetLeft(): number {
+        return 0;
+    }
+
+    // null terminates the `while (el = el.offsetParent)` offset-accumulation idiom; a non-null value loops forever.
+    get offsetParent(): Element | null {
+        return null;
+    }
+
+    // Web Animations: unlaid-out elements never animate, but the returned Animation is used synchronously
+    // (cancel/play/pause, onfinish, currentTime), so a missing method would throw inside the effect that a
+    // finite offsetWidth now lets run. Hand back an inert Animation instead.
+    animate(): any {
+        return {
+            currentTime: 0,
+            onfinish: null,
+            oncancel: null,
+            play() { },
+            pause() { },
+            cancel() { },
+            finish() { },
+            reverse() { },
+            addEventListener() { },
+            removeEventListener() { },
+        };
+    }
+
     contains(n: Node | null): boolean {
         let cur: Node | null = n;
         while (cur) {

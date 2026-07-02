@@ -747,6 +747,51 @@
     get clientHeight() {
       return this.localName === "html" || this.localName === "body" ? viewportHeight() : 0;
     }
+    // Unlike client* (0 for non-root), offset* must never be 0 or undefined here: layout-driven components
+    // size themselves by dividing a container measurement by an element's offsetWidth (marquees duplicating
+    // content to fill a row, virtualized lists computing an item count). A 0 or undefined denominator makes
+    // that ratio NaN/Infinity, so the ensuing `new Array(count)` throws "Invalid array length" and trips the
+    // SPA error boundary. A nonzero viewport-sized stand-in keeps the ratio finite (and small).
+    get offsetWidth() {
+      return viewportWidth();
+    }
+    get offsetHeight() {
+      return viewportHeight();
+    }
+    get offsetTop() {
+      return 0;
+    }
+    get offsetLeft() {
+      return 0;
+    }
+    // null terminates the `while (el = el.offsetParent)` offset-accumulation idiom; a non-null value loops forever.
+    get offsetParent() {
+      return null;
+    }
+    // Web Animations: unlaid-out elements never animate, but the returned Animation is used synchronously
+    // (cancel/play/pause, onfinish, currentTime), so a missing method would throw inside the effect that a
+    // finite offsetWidth now lets run. Hand back an inert Animation instead.
+    animate() {
+      return {
+        currentTime: 0,
+        onfinish: null,
+        oncancel: null,
+        play() {
+        },
+        pause() {
+        },
+        cancel() {
+        },
+        finish() {
+        },
+        reverse() {
+        },
+        addEventListener() {
+        },
+        removeEventListener() {
+        }
+      };
+    }
     contains(n) {
       let cur = n;
       while (cur) {
@@ -1458,6 +1503,61 @@
     }
   };
 
+  // dom/HTMLMediaElement.ts
+  var HTMLMediaElement = class extends HTMLElement {
+    get currentTime() {
+      return 0;
+    }
+    set currentTime(_value) {
+    }
+    get paused() {
+      return true;
+    }
+    get src() {
+      return this.getAttribute("src") || "";
+    }
+    set src(value) {
+      this.setAttribute("src", value == null ? "" : String(value));
+    }
+    get muted() {
+      return this.hasAttribute("muted");
+    }
+    set muted(value) {
+      if (value) this.setAttribute("muted", "");
+      else this.removeAttribute("muted");
+    }
+    load() {
+    }
+    play() {
+      return Promise.resolve();
+    }
+    pause() {
+    }
+    canPlayType() {
+      return "";
+    }
+  };
+
+  // dom/HTMLVideoElement.ts
+  var HTMLVideoElement = class extends HTMLMediaElement {
+    constructor() {
+      super("video");
+    }
+    get poster() {
+      return this.getAttribute("poster") || "";
+    }
+    set poster(value) {
+      this.setAttribute("poster", value == null ? "" : String(value));
+    }
+  };
+
+  // dom/HTMLAudioElement.ts
+  var HTMLAudioElement = class extends HTMLMediaElement {
+    constructor() {
+      super("audio");
+    }
+  };
+
   // dom/reflectedElements.ts
   var reflectedElementFactories = {
     a: () => new HTMLAnchorElement(),
@@ -1466,7 +1566,9 @@
     select: () => new HTMLSelectElement(),
     option: () => new HTMLOptionElement(),
     img: () => new HTMLImageElement(),
-    iframe: () => new HTMLIFrameElement()
+    iframe: () => new HTMLIFrameElement(),
+    video: () => new HTMLVideoElement(),
+    audio: () => new HTMLAudioElement()
   };
 
   // html/entities.ts
@@ -1933,6 +2035,7 @@
   var htmlInterfaces_exports = {};
   __export(htmlInterfaces_exports, {
     HTMLAnchorElement: () => HTMLAnchorElement,
+    HTMLAudioElement: () => HTMLAudioElement,
     HTMLButtonElement: () => HTMLButtonElement,
     HTMLCanvasElement: () => HTMLCanvasElement,
     HTMLFormElement: () => HTMLFormElement,
@@ -1940,12 +2043,14 @@
     HTMLImageElement: () => HTMLImageElement,
     HTMLInputElement: () => HTMLInputElement,
     HTMLLinkElement: () => HTMLLinkElement,
+    HTMLMediaElement: () => HTMLMediaElement,
     HTMLOptionElement: () => HTMLOptionElement,
     HTMLScriptElement: () => HTMLScriptElement,
     HTMLSelectElement: () => HTMLSelectElement,
     HTMLStyleElement: () => HTMLStyleElement,
     HTMLTextAreaElement: () => HTMLTextAreaElement,
     HTMLUnknownElement: () => HTMLUnknownElement,
+    HTMLVideoElement: () => HTMLVideoElement,
     MathMLElement: () => MathMLElement,
     SVGElement: () => SVGElement,
     SVGSVGElement: () => SVGSVGElement
