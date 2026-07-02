@@ -1301,6 +1301,52 @@ public class JsDomRendererTests
         Assert.Contains("href=\"/resp-true-200-false-404-42-application/json\"", rendered);
     }
 
+    // A production bundle gates its runtime data cache on `window.indexedDB` being present and functional.
+    // With no shim the feature-detect fails and the cache is bypassed, so every render re-requests the same
+    // data forever (an endless fetch storm that never settles). The shim must both satisfy the detect and
+    // round-trip a value through open → onupgradeneeded/createObjectStore → transaction → put → get.
+    [Theory]
+    [InlineData(JsEngine.Jint)]
+    [InlineData(JsEngine.V8)]
+    public async Task JsMode_IndexedDB_RoundTripsAcrossTransactions(JsEngine engine)
+    {
+        if (engine == JsEngine.V8)
+            Assert.SkipUnless(V8Support.IsAvailable, V8Support.UnavailableReason);
+
+        const string html = """
+            <!doctype html><html><head><title>t</title></head><body>
+            <script>
+            if (window.indexedDB && typeof indexedDB.open === 'function') {
+                var open = indexedDB.open('crawler-db', 1);
+                open.onupgradeneeded = function (e) { e.target.result.createObjectStore('kv'); };
+                open.onsuccess = function (e) {
+                    var db = e.target.result;
+                    var write = db.transaction('kv', 'readwrite');
+                    write.objectStore('kv').put('value-42', 'the-key');
+                    write.oncomplete = function () {
+                        var read = db.transaction('kv', 'readonly');
+                        var got = read.objectStore('kv').get('the-key');
+                        read.oncomplete = function () {
+                            if (got.result === 'value-42') {
+                                var a = document.createElement('a');
+                                a.setAttribute('href', '/idb/' + got.result);
+                                document.body.appendChild(a);
+                            }
+                        };
+                    };
+                };
+            }
+            </script>
+            </body></html>
+            """;
+
+        var renderer = CreateJsRenderer(engine);
+        var result = await renderer.RenderAsync(Encoding.UTF8.GetBytes(html), "https://example.test/", new HttpClient(), CancellationToken.None);
+        var rendered = Encoding.UTF8.GetString(result);
+
+        Assert.Contains("href=\"/idb/value-42\"", rendered);
+    }
+
     private sealed class FixedResponseHandler : HttpMessageHandler
     {
         protected override HttpResponseMessage Send(HttpRequestMessage request, CancellationToken cancellationToken)
