@@ -36,7 +36,7 @@ Adjusting which implementation is used can be done by referencing another implem
 
 ## Configuration
 
-Details on how to wire up your own backend are found under [docs/](./docs/configuration.md).
+Project overview and details on how to wire up your own backend are found under [docs/](./docs/configuration.md).
 
 ## Notes on implementations
 
