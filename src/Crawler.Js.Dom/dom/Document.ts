@@ -36,6 +36,12 @@ export class Document extends Node {
         return this.defaultView ? this.defaultView.location : null;
     }
 
+    // Bundles read document.referrer as a string (analytics, `referrer.split('/')[2] !== location.host`);
+    // a single-pass render has no navigation history, so it's always the empty string.
+    get referrer(): string {
+        return "";
+    }
+
     // A real document.cookie is always a string. Bundles probe it (document.cookie.includes(...)) and set it;
     // we keep a name→value store, ignoring attributes (path/expires/domain) and expiry since rendering is a
     // single synchronous pass.
@@ -110,9 +116,6 @@ export class Document extends Node {
     querySelectorAll(sel: string): Element[] {
         return querySelectorAll(this, sel) as unknown as Element[];
     }
-
-    addEventListener(): void { }
-    removeEventListener(): void { }
 
     createEvent(): any {
         return { initEvent() { } };

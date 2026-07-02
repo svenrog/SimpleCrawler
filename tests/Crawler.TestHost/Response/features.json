@@ -78,5 +78,30 @@
     "key": "base64",
     "href": "/features/base64",
     "name": "Base64"
+  },
+  {
+    "key": "document-referrer",
+    "href": "/features/document-referrer",
+    "name": "Document referrer"
+  },
+  {
+    "key": "document-dispatch-event",
+    "href": "/features/document-dispatch-event",
+    "name": "Document dispatch event"
+  },
+  {
+    "key": "event-target",
+    "href": "/features/event-target",
+    "name": "Event target"
+  },
+  {
+    "key": "element-attributes",
+    "href": "/features/element-attributes",
+    "name": "Element attributes"
+  },
+  {
+    "key": "outer-html-setter",
+    "href": "/features/outer-html-setter",
+    "name": "Outer HTML setter"
   }
 ]

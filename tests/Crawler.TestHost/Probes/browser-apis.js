@@ -90,6 +90,56 @@
         'base64': function () {
             if (typeof btoa !== 'function' || typeof atob !== 'function') return false;
             return btoa('foobar') === 'Zm9vYmFy' && atob('Zm9vYmFy') === 'foobar';
+        },
+        'document-referrer': function () {
+            return typeof document.referrer === 'string'
+                && typeof document.referrer.split('/')[2] !== 'object';
+        },
+        'document-dispatch-event': function () {
+            if (typeof document.dispatchEvent !== 'function' || typeof window.dispatchEvent !== 'function') return false;
+            var firedOn = function (target) {
+                var fired = false;
+                var listener = function () { fired = true; };
+                target.addEventListener('crawler-probe', listener);
+                var result = target.dispatchEvent(new CustomEvent('crawler-probe', { detail: 1 }));
+                target.removeEventListener('crawler-probe', listener);
+                return fired && result === true;
+            };
+            return firedOn(document) && firedOn(window);
+        },
+        'event-target': function () {
+            if (typeof EventTarget !== 'function') return false;
+            class Widget extends EventTarget {
+                constructor() { super(); this.ready = true; }
+            }
+            var w = new Widget();
+            var fired = false;
+            w.addEventListener('crawler-probe', function () { fired = true; });
+            w.dispatchEvent(new CustomEvent('crawler-probe', {}));
+            return w.ready === true && fired
+                && w instanceof Widget && w instanceof EventTarget
+                && document instanceof EventTarget;
+        },
+        'element-attributes': function () {
+            var el = document.createElement('div');
+            el.setAttribute('data-x', '1');
+            el.setAttribute('data-y', '2');
+            var attrs = el.attributes;
+            if (!attrs || attrs.length !== 2) return false;
+            var found = {};
+            for (var i = attrs.length; i--;) found[attrs[i].name] = attrs[i].value;
+            return found['data-x'] === '1' && found['data-y'] === '2'
+                && attrs.getNamedItem('data-x').value === '1';
+        },
+        'outer-html-setter': function () {
+            var parent = document.createElement('div');
+            var wrapper = document.createElement('span');
+            wrapper.innerHTML = '<a href="/unwrapped">x</a>';
+            parent.appendChild(wrapper);
+            wrapper.outerHTML = wrapper.innerHTML;
+            var a = parent.querySelector('a');
+            return !!a && a.getAttribute('href') === '/unwrapped'
+                && parent.querySelector('span') === null;
         }
     };
     var app = document.getElementById('app');

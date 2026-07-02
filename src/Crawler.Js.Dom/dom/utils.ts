@@ -22,11 +22,12 @@ export function escapeText(v: unknown): string {
 }
 
 export function collectByTag(node: Node, tag: string, out: Node[]): void {
+    const all = tag === "*";
     const children = node.childNodes;
     for (let i = 0; i < children.length; i++) {
         const c = children[i];
         if (c.nodeType === NodeType.Element) {
-            if ((c as any).localName === tag) out.push(c);
+            if (all || (c as any).localName === tag) out.push(c);
             collectByTag(c, tag, out);
         }
     }

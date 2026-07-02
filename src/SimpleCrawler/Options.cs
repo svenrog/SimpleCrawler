@@ -22,8 +22,8 @@ public sealed class Options
     [Option('m', "maxPages", Required = false, Default = 10000, HelpText = "Max pages to visit.")]
     public int MaxPages { get; set; } = 10000;
 
-    [Option('d', "delay", Required = false, Default = 0, HelpText = "The crawl delay (in seconds)")]
-    public double CrawlDelay { get; set; } = 0;
+    [Option('d', "delay", Required = false, Default = 1, HelpText = "Minimum seconds between requests (floor; robots.txt can raise it). 0 removes throttling.")]
+    public double CrawlDelay { get; set; } = 1;
 
     [Option('r', "respectRobots", Required = false, Default = true, HelpText = "If crawling should respect meta robots and robots.txt rules.")]
     public bool RespectRobots { get; set; } = true;

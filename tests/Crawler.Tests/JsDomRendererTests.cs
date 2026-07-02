@@ -277,6 +277,115 @@ public class JsDomRendererTests
         Assert.Contains("closest=wrap", rendered);
     }
 
+    // jQuery/Sizzle feature-detects native selection with /\{\s*\[native code/ against our methods; a plain-JS
+    // querySelectorAll/getElementsByClassName fails that test, so for a bare `.class` selector Sizzle falls back
+    // to enumerating every element via getElementsByTagName("*") and filtering by className. That wildcard used
+    // to match nothing (no element's localName is "*"), so $(".x") came back empty even though the element was
+    // in the DOM — which left jQuery UI autocomplete's `.data("ui-autocomplete")` undefined and crashed init.
+    [Theory]
+    [InlineData(JsEngine.Jint)]
+    [InlineData(JsEngine.V8)]
+    public async Task JsMode_GetElementsByTagNameWildcard_EnumeratesAllElements(JsEngine engine)
+    {
+        if (engine == JsEngine.V8)
+            Assert.SkipUnless(V8Support.IsAvailable, V8Support.UnavailableReason);
+
+        const string html = """
+            <html><head></head><body>
+            <form><div class="wrap"><input class="form-control typeahead ui-autocomplete-input" type="text"></div></form>
+            <div id="t"></div>
+            <script>
+            var all = document.getElementsByTagName('*');
+            var byClassFallback = 0, found = 'none';
+            for (var i = 0; i < all.length; i++) {
+              var cls = all[i].className || '';
+              if (/(^|\s)typeahead(\s|$)/.test(cls)) { byClassFallback++; found = all[i].tagName; }
+            }
+            var out = document.createElement('a');
+            out.setAttribute('href', '/probe?all=' + (all.length > 0) + '&hits=' + byClassFallback + '&tag=' + found);
+            document.getElementById('t').appendChild(out);
+            </script>
+            </body></html>
+            """;
+
+        var renderer = CreateJsRenderer(engine);
+        var result = await renderer.RenderAsync(Encoding.UTF8.GetBytes(html), "https://example.test/", new HttpClient(), CancellationToken.None);
+        var rendered = Encoding.UTF8.GetString(result);
+
+        Assert.Contains("all=true", rendered);
+        Assert.Contains("hits=1", rendered);
+        Assert.Contains("tag=INPUT", rendered);
+    }
+
+    // jQuery/Sizzle only take their fast native-selection paths when a method stringifies to "[native code]"
+    // (support.qsa/getElementsByClassName/matchesSelector = rnative.test(fn)); plain-JS host methods failed that
+    // and forced the slow manual matcher. Host DOM methods now report a native-looking toString so the probe
+    // passes — while ordinary bundle functions keep their real source (only marked host methods are affected).
+    [Theory]
+    [InlineData(JsEngine.Jint)]
+    [InlineData(JsEngine.V8)]
+    public async Task JsMode_HostMethodsReportNativeCode_UserFunctionsDoNot(JsEngine engine)
+    {
+        if (engine == JsEngine.V8)
+            Assert.SkipUnless(V8Support.IsAvailable, V8Support.UnavailableReason);
+
+        const string html = """
+            <html><body><input class="x" /><div id="t"></div>
+            <script>
+            var rnative = /^[^{]+\{\s*\[native code/;
+            var qsa = rnative.test(document.querySelectorAll);
+            var gebcn = rnative.test(document.getElementsByClassName);
+            var matches = rnative.test(document.getElementById('t').matches);
+            function userFn() { return 42; }
+            var userNative = rnative.test(userFn);
+            var out = document.createElement('a');
+            out.setAttribute('href', '/probe?qsa=' + qsa + '&gebcn=' + gebcn + '&matches=' + matches + '&user=' + userNative);
+            document.getElementById('t').appendChild(out);
+            </script>
+            </body></html>
+            """;
+
+        var renderer = CreateJsRenderer(engine);
+        var result = await renderer.RenderAsync(Encoding.UTF8.GetBytes(html), "https://example.test/", new HttpClient(), CancellationToken.None);
+        var rendered = Encoding.UTF8.GetString(result);
+
+        Assert.Contains("/probe?qsa=true", rendered);
+        Assert.Contains("gebcn=true", rendered);
+        Assert.Contains("matches=true", rendered);
+        Assert.Contains("user=false", rendered);
+    }
+
+    // jQuery gates .offset() and visibility on `elem.getClientRects().length` before touching the box (jQuery UI
+    // autocomplete positions its menu through that path). A connected element reports one rect, a detached one
+    // none; the method missing entirely threw "getClientRects is not a function" once autocomplete init ran.
+    [Theory]
+    [InlineData(JsEngine.Jint)]
+    [InlineData(JsEngine.V8)]
+    public async Task JsMode_GetClientRects_ReflectsConnectedness(JsEngine engine)
+    {
+        if (engine == JsEngine.V8)
+            Assert.SkipUnless(V8Support.IsAvailable, V8Support.UnavailableReason);
+
+        const string html = """
+            <html><body><div id="t"></div>
+            <script>
+            var connected = document.getElementById('t').getClientRects().length;
+            var detached = document.createElement('div').getClientRects().length;
+            var out = document.createElement('a');
+            out.setAttribute('href', '/probe?connected=' + connected + '&detached=' + detached);
+            document.getElementById('t').appendChild(out);
+            </script>
+            </body></html>
+            """;
+
+        var renderer = CreateJsRenderer(engine);
+        var result = await renderer.RenderAsync(Encoding.UTF8.GetBytes(html), "https://example.test/", new HttpClient(), CancellationToken.None);
+        var rendered = Encoding.UTF8.GetString(result);
+
+        Assert.Contains("connected=1", rendered);
+        Assert.Contains("detached=0", rendered);
+    }
+
     // <select> exposes an options collection (its <option> descendants) and each option reflects its value
     // (the `value` attribute, else the text) — react-dom's updateOptions does `node.options` then iterates
     // `.length`/`.value` to sync selection, so a missing options collection read undefined and aborted the

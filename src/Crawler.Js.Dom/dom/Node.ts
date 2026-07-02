@@ -1,13 +1,15 @@
 import { NodeType } from "../types/NodeType";
 import { documentRef } from "./documentRef";
 import { hideOwnFields } from "./utils";
+import { EventTarget } from "./eventTarget";
 
-export abstract class Node {
+export abstract class Node extends EventTarget {
     readonly nodeType: NodeType;
     parentNode: Node | null = null;
     childNodes: Node[] = [];
 
     protected constructor(type: NodeType) {
+        super();
         this.nodeType = type;
         hideOwnFields(this);
     }
