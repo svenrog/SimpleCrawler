@@ -6,6 +6,7 @@ import { applyUrl } from "../url/resolve";
 import { pumpTasks, pendingCount } from "../scheduler/taskQueue";
 import { takeResources, pendingResourceCount, fireResourceEvent } from "../dom/resourceLoader";
 import { setViewport } from "../browser/viewport";
+import { enableDomProfile, dumpDomProfile } from "../profiling/domProfiler";
 import { HTMLScriptElement } from "../dom/HTMLScriptElement";
 import type { ScriptDescriptor } from "../types/internal";
 import { NodeType } from "../types/NodeType";
@@ -120,4 +121,6 @@ export function installCrawlerApi(global: any): void {
     global.__crawlerPendingResources = () => pendingResourceCount();
     global.__crawlerFireResourceEvent = (id: number, type: string) => { fireResourceEvent(id, type); };
     global.__crawlerSerialize = () => doc.documentElement ? serializeNode(doc.documentElement) : "";
+    global.__crawlerEnableDomProfile = () => { enableDomProfile(); };
+    global.__crawlerDomProfileDump = () => dumpDomProfile();
 }

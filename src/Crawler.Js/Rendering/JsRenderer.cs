@@ -70,6 +70,10 @@ public sealed class JsRenderer
         engine.CallGlobal("__crawlerSetLocation", pageUrl);
         engine.CallGlobal("__crawlerSetViewport", (int)_options.Viewport.Width, (int)_options.Viewport.Height);
         ConfigureScriptLogging(engine);
+        if (_options.EnableIndexedDb)
+            RunPrelude(engine, JsPreludes.IndexedDb);
+        if (DomProfiler.Enabled)
+            engine.CallGlobal("__crawlerEnableDomProfile");
         RenderProfiler.Stop("phase.setupGlobals", setupTime);
 
         var parseTime = RenderProfiler.Start();
@@ -136,6 +140,8 @@ public sealed class JsRenderer
         var result = finalize(engine);
         RenderProfiler.Stop("phase.finalize", finalizeTime);
         RenderProfiler.Stop("phase.total", totalTime);
+        if (DomProfiler.Enabled)
+            DomProfiler.Add(engine.Evaluate<string>("__crawlerDomProfileDump()"));
         return result;
     }
 

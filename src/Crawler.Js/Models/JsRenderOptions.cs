@@ -14,6 +14,12 @@ public class JsRenderOptions
     public bool EnableFetch { get; set; }
 
     /// <summary>
+    /// Off by default: installs an in-memory <c>window.indexedDB</c> so sites that gate a runtime data
+    /// cache on its presence take their caching path instead of re-requesting every drain turn. 
+    /// </summary>
+    public bool EnableIndexedDb { get; set; }
+
+    /// <summary>
     /// Determines the dimensions of the window that should be communicated to the scripts
     /// 1920x1080 is the default window size
     /// </summary>

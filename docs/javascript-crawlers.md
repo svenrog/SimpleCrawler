@@ -49,6 +49,7 @@ Passed to `AddJintCrawler`/`AddV8Crawler`.
 | Option | Default | Effect |
 | ------ | ------- | ------ |
 | `EnableFetch` | `false` | Enables real network `fetch`/`XHR` for runtime-loaded content/links to render. |
+| `EnableIndexedDb` | `false` | Installs an in-memory `indexedDB`. Turn it on for SPA sites that rely on offline features. |
 | `Viewport` | 1920×1080 | Window/screen reported to scripts. Set a mobile screen size to crawl the mobile layout on responsive sites. |
 | `ScriptLogging` | `null` | `LogLevel` floor for forwarding page `console.*` to your logger. `Debug` to diagnose non-rendering pages. |
 | `MaxTaskDrainIterations` | `1000` | Cap on microtask/chunk-load drain iterations before giving up on a page. |

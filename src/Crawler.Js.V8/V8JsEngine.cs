@@ -14,6 +14,22 @@ internal sealed class V8JsEngine : IJsEngine
     private const int _moduleEvaluationTimeoutMs = 30000;
     private const int _stackTraceContextRadius = 48;
 
+    // AddPerformanceObject exposes a native high-resolution `Performance.now()` global (capital P; our
+    // lowercase `performance` shim stays ours) and SetTimerResolution sharpens it to ~100ns — enough to
+    // time individual DOM ops. Both are added only under JSRENDER_DOM_PROFILE so a normal crawl neither
+    // pays SetTimerResolution's process-wide timer bump nor exposes the extra global.
+    private static readonly V8ScriptEngineFlags _engineFlags = BuildEngineFlags();
+
+    private static V8ScriptEngineFlags BuildEngineFlags()
+    {
+        var flags = V8ScriptEngineFlags.EnableDynamicModuleImports | V8ScriptEngineFlags.EnableTaskPromiseConversion;
+
+        if (Environment.GetEnvironmentVariable("JSRENDER_DOM_PROFILE") is "1" or "true")
+            flags |= V8ScriptEngineFlags.AddPerformanceObject | V8ScriptEngineFlags.SetTimerResolution;
+
+        return flags;
+    }
+
     private readonly V8RuntimePool _pool;
     private readonly V8RuntimeLease _lease;
     private readonly V8ScriptEngine _engine;
@@ -29,7 +45,7 @@ internal sealed class V8JsEngine : IJsEngine
         // for lazy routes). EnableTaskPromiseConversion: lets us await the entry's import() as a Task.
         _pool = pool;
         _lease = pool.Rent();
-        _engine = _lease.Runtime.CreateScriptEngine(V8ScriptEngineFlags.EnableDynamicModuleImports | V8ScriptEngineFlags.EnableTaskPromiseConversion);
+        _engine = _lease.Runtime.CreateScriptEngine(_engineFlags);
         _loader = new V8ModuleLoader(fetcher, baseUri);
         _engine.DocumentSettings.AccessFlags = DocumentAccessFlags.EnableAllLoading;
         _engine.DocumentSettings.Loader = _loader;

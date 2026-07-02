@@ -32,7 +32,6 @@ import { Blob } from "./Blob";
 import { btoa, atob } from "./base64";
 import { documentRef } from "../dom/documentRef";
 import { installScrollApi } from "./scroll";
-import { indexedDB } from "../indexeddb";
 import { markPrototypeNative } from "./native";
 import { EventListenerMap, EventTarget, addListener, removeListener, fireEvent } from "../dom/eventTarget";
 
@@ -118,7 +117,6 @@ export function installDOM(global: any): void {
     global.performance = global.performance || performance;
     global.localStorage = createStorage();
     global.sessionStorage = createStorage();
-    global.indexedDB = global.indexedDB || indexedDB;
     installTimerGlobals(global);
     installScrollApi(global);
     for (const ctor of [EventTarget, Node, Element, CharacterData, Document, DocumentFragment, HTMLElement]) {
