@@ -23,11 +23,12 @@
     return String(v).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   }
   function collectByTag(node, tag, out) {
+    const all = tag === "*";
     const children = node.childNodes;
     for (let i = 0; i < children.length; i++) {
       const c = children[i];
       if (c.nodeType === 1 /* Element */) {
-        if (c.localName === tag) out.push(c);
+        if (all || c.localName === tag) out.push(c);
         collectByTag(c, tag, out);
       }
     }
@@ -737,6 +738,12 @@
     }
     getBoundingClientRect() {
       return { top: 0, left: 0, right: 0, bottom: 0, width: 0, height: 0, x: 0, y: 0 };
+    }
+    // jQuery gates .offset()/visibility on `getClientRects().length` before reading the box: a connected
+    // element has one (zero-sized) rect, a detached one has none — matching the browser so the "is this laid
+    // out?" branch takes the attached path instead of throwing on a missing method.
+    getClientRects() {
+      return this.isConnected ? [this.getBoundingClientRect()] : [];
     }
     // The viewport-sized box: jQuery's $(window).width() and many breakpoint helpers read the root element's
     // clientWidth/Height rather than window.innerWidth. Only the root (html/body) reports the viewport; every
@@ -2531,6 +2538,31 @@
     };
   }
 
+  // browser/native.ts
+  function markNative(fn, name) {
+    const label = "function " + name + "() { [native code] }";
+    try {
+      Object.defineProperty(fn, "toString", {
+        value: function() {
+          return label;
+        },
+        writable: true,
+        configurable: true,
+        enumerable: false
+      });
+    } catch {
+    }
+  }
+  function markPrototypeNative(ctor) {
+    const proto = ctor && ctor.prototype;
+    if (!proto) return;
+    for (const key of Object.getOwnPropertyNames(proto)) {
+      if (key === "constructor") continue;
+      const desc = Object.getOwnPropertyDescriptor(proto, key);
+      if (desc && typeof desc.value === "function") markNative(desc.value, key);
+    }
+  }
+
   // browser/globals.ts
   var doc = new Document(globalThis);
   documentRef.current = doc;
@@ -2635,6 +2667,9 @@
     global.sessionStorage = createStorage();
     installTimerGlobals(global);
     installScrollApi(global);
+    for (const ctor of [Node, Element, CharacterData, Document, DocumentFragment, HTMLElement]) {
+      markPrototypeNative(ctor);
+    }
   }
 
   // console/constants.ts
