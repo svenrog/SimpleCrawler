@@ -1,5 +1,4 @@
-﻿using Crawler.Core;
-using Crawler.Core.Browser;
+using Crawler.Core;
 using Crawler.Core.Helpers;
 using Crawler.Core.Models;
 using Crawler.Core.Robots;
@@ -7,83 +6,24 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Microsoft.Playwright;
 using System.Collections.Concurrent;
-using PlaywrightContext = Microsoft.Playwright.Playwright;
 
 namespace Crawler.Playwright;
 
-public abstract class PlaywrightCrawler<TResult> : AbstractRobotsCrawler<IPage, TResult>, IAsyncDisposable
+public abstract class PlaywrightCrawler<TResult> : AbstractRobotsCrawler<IPage, TResult>
     where TResult : IScrapeResult
 {
+    private readonly PlaywrightBrowserSession _session;
     private readonly HeadlessCrawlerOptions _options;
     private readonly ILogger _logger;
-    private readonly string? _initScript;
-
-    private IPlaywright? _playwright;
-    private IBrowser? _browser;
-    private IBrowserContext? _browserContext;
 
     private readonly ConcurrentQueue<IPage> _pagePool;
 
-    private bool _disposed;
-
-    protected PlaywrightCrawler(IRobotClient robotClient, IOptions<HeadlessCrawlerOptions> options, ILogger logger) : base(robotClient, options, logger)
+    protected PlaywrightCrawler(IRobotClient robotClient, PlaywrightBrowserSession session, IOptions<HeadlessCrawlerOptions> options, ILogger logger) : base(robotClient, options, logger)
     {
+        _session = session;
         _options = options.Value;
         _logger = logger;
         _pagePool = new ConcurrentQueue<IPage>();
-
-        if (_options.BrowserProfile.Impersonate)
-        {
-            _initScript = BrowserHelper.BuildInitScript(_options.BrowserProfile);
-        }
-    }
-
-    public override async Task<TResult> Start(string entry, CancellationToken cancellationToken = default)
-    {
-        _playwright ??= await PlaywrightContext.CreateAsync();
-        _browser ??= await LaunchBrowser(_playwright);
-
-        if (_browserContext is null)
-        {
-            _browserContext = await _browser.NewContextAsync(GetContextOptions());
-
-            if (_initScript != null)
-                await _browserContext.AddInitScriptAsync(_initScript);
-
-            if (_options.BlockNonEssentialResources)
-                await _browserContext.RouteAsync("**/*", BlockNonEssentialResource);
-        }
-
-        return await base.Start(entry, cancellationToken);
-    }
-
-    protected virtual Task<IBrowser> LaunchBrowser(IPlaywright playwright)
-    {
-        List<string> args = [.. Constants.DefaultArgs];
-
-        if (_options.BrowserProfile.Impersonate)
-            args.AddRange(Constants.UserImpersonationArgs);
-
-        return playwright.Chromium.LaunchAsync(new BrowserTypeLaunchOptions { Args = args });
-    }
-
-    private static Task BlockNonEssentialResource(IRoute route)
-    {
-        return route.Request.ResourceType is "image" or "media" or "font" or "stylesheet"
-            ? route.AbortAsync()
-            : route.ContinueAsync();
-    }
-
-    protected virtual BrowserNewContextOptions GetContextOptions()
-    {
-        var profile = _options.BrowserProfile;
-
-        return new BrowserNewContextOptions
-        {
-            UserAgent = profile.UserAgent,
-            Locale = profile.Locale,
-            ExtraHTTPHeaders = profile.AdditionalHeaders,
-        };
     }
 
     protected override async Task<IPage?> LoadResponse(string url, CancellationToken cancellationToken)
@@ -137,7 +77,7 @@ public abstract class PlaywrightCrawler<TResult> : AbstractRobotsCrawler<IPage, 
         if (_pagePool.TryDequeue(out var page))
             return page;
 
-        return await _browserContext!.NewPageAsync();
+        return await _session.NewPageAsync();
     }
 
     protected override Task DisposeResponse(IPage? response)
@@ -146,36 +86,5 @@ public abstract class PlaywrightCrawler<TResult> : AbstractRobotsCrawler<IPage, 
             _pagePool.Enqueue(response);
 
         return Task.CompletedTask;
-    }
-
-    public async ValueTask DisposeAsync()
-    {
-        await DisposeAsyncCore().ConfigureAwait(false);
-        GC.SuppressFinalize(this);
-    }
-
-    protected virtual async ValueTask DisposeAsyncCore()
-    {
-        if (!_disposed)
-        {
-            while (_pagePool.TryDequeue(out var page))
-                await page.CloseAsync().ConfigureAwait(false);
-
-            if (_browserContext is not null)
-            {
-                await _browserContext.DisposeAsync().ConfigureAwait(false);
-                _browserContext = null;
-            }
-
-            if (_browser is not null)
-            {
-                await _browser.DisposeAsync().ConfigureAwait(false);
-                _browser = null;
-            }
-
-            _playwright?.Dispose();
-            _playwright = null;
-            _disposed = true;
-        }
     }
 }

@@ -8,7 +8,7 @@ namespace Crawler.Puppeteer;
 
 public sealed class DefaultPuppeteerCrawler : PuppeteerCrawler<ScrapeResult>, ICrawler
 {
-    public DefaultPuppeteerCrawler(IRobotClient robotClient, IOptions<HeadlessCrawlerOptions> options, ILogger logger) : base(robotClient, options, logger)
+    public DefaultPuppeteerCrawler(IRobotClient robotClient, PuppeteerBrowserSession session, IOptions<HeadlessCrawlerOptions> options, ILogger<DefaultPuppeteerCrawler> logger) : base(robotClient, session, options, logger)
     {
     }
 

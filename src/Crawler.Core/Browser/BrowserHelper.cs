@@ -12,7 +12,6 @@ public static class BrowserHelper
 
         return
              "Object.defineProperty(navigator, 'webdriver', { get: () => undefined });\n" +
-            $"Object.defineProperty(navigator, 'languages', {{ get: () => {JsonSerializer.Serialize(languages)} }});" +
-             "Object.defineProperty(navigator, 'plugins', { get: () => [1, 2, 3, 4, 5] });";
+            $"Object.defineProperty(navigator, 'languages', {{ get: () => {JsonSerializer.Serialize(languages)} }});";
     }
 }
