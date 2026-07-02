@@ -60,34 +60,36 @@
 
   // network/types/Response.ts
   var Response = class _Response {
-    constructor(r) {
-      this._r = r;
-      this.ok = !!r.ok;
-      this.status = r.status;
-      this.statusText = r.statusText || "";
-      this.url = r.url || "";
+    constructor(body, init) {
+      init = init || {};
+      this._bodyText = body == null ? "" : String(body);
+      this.status = init.status === void 0 ? 200 : init.status;
+      this.ok = this.status >= 200 && this.status < 300;
+      this.statusText = init.statusText || "";
+      this.url = "";
       this.redirected = false;
-      this.type = "basic";
-      let parsed = {};
-      try {
-        parsed = JSON.parse(r.headersJson || "{}");
-      } catch (e) {
-      }
-      this.headers = new Headers(parsed);
+      this.type = "default";
+      this.headers = init.headers instanceof Headers ? init.headers : new Headers(init.headers);
       this.bodyUsed = false;
     }
     text() {
-      return Promise.resolve(this._r.body || "");
+      this.bodyUsed = true;
+      return Promise.resolve(this._bodyText);
     }
     json() {
       try {
-        return Promise.resolve(JSON.parse(this._r.body || "null"));
+        return Promise.resolve(JSON.parse(this._bodyText || "null"));
       } catch (e) {
         return Promise.reject(e);
       }
     }
     clone() {
-      return new _Response(this._r);
+      const c = new _Response(this._bodyText, { status: this.status, statusText: this.statusText, headers: this.headers });
+      c.ok = this.ok;
+      c.url = this.url;
+      c.type = this.type;
+      c.redirected = this.redirected;
+      return c;
     }
   };
 
@@ -109,7 +111,14 @@
     }
     const r = __http.request(url, method, JSON.stringify(toHeaderObject(headers)), body == null ? null : String(body));
     if (r.error) return Promise.reject(new TypeError(r.error));
-    return Promise.resolve(new Response(r));
+    let responseHeaders = {};
+    try {
+      responseHeaders = JSON.parse(r.headersJson || "{}");
+    } catch (e) {
+    }
+    const response = new Response(r.body, { status: r.status, statusText: r.statusText, headers: responseHeaders });
+    response.url = r.url || "";
+    return Promise.resolve(response);
   }
 
   // network/types/AbortSignal.ts

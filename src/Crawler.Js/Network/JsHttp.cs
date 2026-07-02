@@ -45,7 +45,6 @@ public sealed class JsHttp
 
             return new JsHttpResponse
             {
-                ok = response.IsSuccessStatusCode,
                 status = (int)response.StatusCode,
                 statusText = response.ReasonPhrase ?? string.Empty,
                 url = absolute.ToString(),

@@ -2,7 +2,6 @@
 
 public sealed class JsHttpResponse
 {
-    public bool ok { get; init; }
     public int status { get; init; }
     public string statusText { get; init; } = string.Empty;
     public string url { get; init; } = string.Empty;

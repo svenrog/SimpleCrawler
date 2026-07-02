@@ -1115,6 +1115,45 @@ public class JsDomRendererTests
         Assert.Contains("href=\"/media-true\"", rendered);
     }
 
+    // The global Response is a spec-compliant constructor the page's own bundle may call directly
+    // (new Response(body, init), or new Response() with no args) — not only the internal wrapper fetch
+    // builds. A bundle that did `new Response()` and read `.ok` crashed ("Cannot read properties of
+    // undefined (reading ok)") because the constructor treated its first arg as the host-fetch result.
+    // Default status is 200/ok, an explicit status drives ok, and json()/text() read the body.
+    [Theory]
+    [InlineData(JsEngine.Jint)]
+    [InlineData(JsEngine.V8)]
+    public async Task JsMode_ResponseConstructor_IsSpecCompliant(JsEngine engine)
+    {
+        if (engine == JsEngine.V8)
+            Assert.SkipUnless(V8Support.IsAvailable, V8Support.UnavailableReason);
+
+        const string html = """
+            <!doctype html><html><head></head>
+            <body><div id="t"></div>
+            <script>
+            (async function () {
+              try {
+                var empty = new Response();
+                var made = new Response('{"v":42}', { status: 404, statusText: 'Nope', headers: { 'Content-Type': 'application/json' } });
+                var body = await made.json();
+                var out = '/resp-' + empty.ok + '-' + empty.status + '-' + made.ok + '-' + made.status + '-' + body.v + '-' + made.headers.get('content-type');
+                var a = document.createElement('a'); a.setAttribute('href', out); document.getElementById('t').appendChild(a);
+              } catch (e) {
+                var b = document.createElement('a'); b.setAttribute('href', '/err-' + e.message); document.getElementById('t').appendChild(b);
+              }
+            })();
+            </script>
+            </body></html>
+            """;
+
+        var renderer = CreateJsRenderer(engine, new JsRenderOptions { EnableFetch = true });
+        var result = await renderer.RenderAsync(Encoding.UTF8.GetBytes(html), "https://example.test/", new HttpClient(), CancellationToken.None);
+        var rendered = Encoding.UTF8.GetString(result);
+
+        Assert.Contains("href=\"/resp-true-200-false-404-42-application/json\"", rendered);
+    }
+
     private sealed class FixedResponseHandler : HttpMessageHandler
     {
         protected override HttpResponseMessage Send(HttpRequestMessage request, CancellationToken cancellationToken)

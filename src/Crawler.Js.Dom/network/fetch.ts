@@ -18,5 +18,10 @@ export function fetch(input: any, init?: any): Promise<Response> {
     }
     const r = __http.request(url, method, JSON.stringify(toHeaderObject(headers)), body == null ? null : String(body));
     if (r.error) return Promise.reject(new TypeError(r.error));
-    return Promise.resolve(new Response(r));
+    // Response headers cross the host bridge as a JSON string (a live dictionary doesn't enumerate the
+    // same on Jint vs V8), and url isn't settable through the spec constructor, so fetch adapts both here.
+    let responseHeaders: any = {}; try { responseHeaders = JSON.parse(r.headersJson || "{}"); } catch (e) { }
+    const response = new Response(r.body, { status: r.status, statusText: r.statusText, headers: responseHeaders });
+    response.url = r.url || "";
+    return Promise.resolve(response);
 }
