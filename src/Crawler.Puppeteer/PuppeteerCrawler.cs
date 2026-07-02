@@ -1,5 +1,4 @@
-﻿using Crawler.Core;
-using Crawler.Core.Browser;
+using Crawler.Core;
 using Crawler.Core.Helpers;
 using Crawler.Core.Models;
 using Crawler.Core.Robots;
@@ -8,50 +7,21 @@ using Microsoft.Extensions.Options;
 using PuppeteerSharp;
 using System.Collections.Concurrent;
 using System.Text.Json;
-using PuppeteerController = PuppeteerSharp.Puppeteer;
 
 namespace Crawler.Puppeteer;
 
-public abstract class PuppeteerCrawler<TResult> : AbstractRobotsCrawler<IPage, TResult>, IAsyncDisposable
+public abstract class PuppeteerCrawler<TResult> : AbstractRobotsCrawler<IPage, TResult>
     where TResult : IScrapeResult
 {
-    private readonly HeadlessCrawlerOptions _options;
+    private readonly PuppeteerBrowserSession _session;
     private readonly ConcurrentQueue<IPage> _pagePool;
     private readonly ILogger _logger;
-    private readonly string? _initScript;
-    private readonly string[] _launchArgs;
 
-    private IBrowser? _browser;
-    private IBrowserContext? _browserContext;
-
-    private bool _disposed;
-
-    protected PuppeteerCrawler(IRobotClient robotClient, IOptions<HeadlessCrawlerOptions> options, ILogger logger) : base(robotClient, options, logger)
+    protected PuppeteerCrawler(IRobotClient robotClient, PuppeteerBrowserSession session, IOptions<HeadlessCrawlerOptions> options, ILogger logger) : base(robotClient, options, logger)
     {
-        _options = options.Value;
+        _session = session;
         _logger = logger;
         _pagePool = new ConcurrentQueue<IPage>();
-
-        if (_options.BrowserProfile.Impersonate)
-        {
-            _initScript = BrowserHelper.BuildInitScript(_options.BrowserProfile);
-            _launchArgs = Constants.UserImpersonationArgs;
-        }
-        else
-        {
-            _launchArgs = Constants.DefaultLaunchArgs;
-        }
-    }
-
-    public override async Task<TResult> Start(string entry, CancellationToken cancellationToken = default)
-    {
-        var fetcher = PuppeteerController.CreateBrowserFetcher(GetBrowserFetcherOptions());
-        await fetcher.DownloadAsync();
-
-        _browser ??= await PuppeteerController.LaunchAsync(GetLaunchOptions());
-        _browserContext ??= await _browser.CreateBrowserContextAsync(GetBrowserContextOptions());
-
-        return await base.Start(entry, cancellationToken);
     }
 
     protected override async Task<IPage?> LoadResponse(string url, CancellationToken cancellationToken)
@@ -85,46 +55,12 @@ public abstract class PuppeteerCrawler<TResult> : AbstractRobotsCrawler<IPage, T
         if (_pagePool.TryDequeue(out var page))
             return page;
 
-        page = await _browserContext!.NewPageAsync();
-        await ConfigurePage(page);
-
-        return page;
+        return await _session.NewPageAsync();
     }
 
     protected virtual NavigationOptions GetNavigationOptions()
     {
         return Constants.DefaultNavigationOptions;
-    }
-
-    protected virtual async ValueTask ConfigurePage(IPage page)
-    {
-        await page.SetUserAgentAsync(_options.BrowserProfile.UserAgent);
-        await page.SetExtraHttpHeadersAsync(_options.BrowserProfile.AdditionalHeaders);
-
-        if (_initScript != null)
-            await page.EvaluateExpressionOnNewDocumentAsync(_initScript);
-
-        if (_options.BlockNonEssentialResources)
-        {
-            await page.SetRequestInterceptionAsync(true);
-            page.Request += BlockNonEssentialResource;
-        }
-    }
-
-    private static async void BlockNonEssentialResource(object? sender, RequestEventArgs e)
-    {
-        try
-        {
-            var type = e.Request.ResourceType;
-            if (type is ResourceType.Image or ResourceType.Media or ResourceType.Font or ResourceType.StyleSheet)
-                await e.Request.AbortAsync();
-            else
-                await e.Request.ContinueAsync();
-        }
-        catch
-        {
-            // The request may already be handled by the time this fires; ignore the race.
-        }
     }
 
     protected override async ValueTask<PageExtract> ExtractPageData(IPage response)
@@ -135,61 +71,11 @@ public abstract class PuppeteerCrawler<TResult> : AbstractRobotsCrawler<IPage, T
         return new PageExtract(GetAbsoluteUrl(canonicalHref), IndexingHelper.ParseMetaRobots(robotsContent), linkHrefs);
     }
 
-    protected virtual BrowserFetcherOptions GetBrowserFetcherOptions()
-    {
-        return new BrowserFetcherOptions();
-    }
-
-    protected virtual BrowserContextOptions GetBrowserContextOptions()
-    {
-        return new BrowserContextOptions();
-    }
-
-    protected virtual LaunchOptions GetLaunchOptions()
-    {
-        var options = new LaunchOptions
-        {
-            Headless = true,
-            Args = _launchArgs
-        };
-
-        return options;
-    }
-
     protected override Task DisposeResponse(IPage? response)
     {
         if (response != null)
             _pagePool.Enqueue(response);
 
         return Task.CompletedTask;
-    }
-
-    public async ValueTask DisposeAsync()
-    {
-        await DisposeAsyncCore().ConfigureAwait(false);
-        GC.SuppressFinalize(this);
-    }
-
-    protected virtual async ValueTask DisposeAsyncCore()
-    {
-        if (!_disposed)
-        {
-            while (_pagePool.TryDequeue(out var page))
-                await page.DisposeAsync().ConfigureAwait(false);
-
-            if (_browserContext is not null)
-            {
-                await _browserContext.CloseAsync().ConfigureAwait(false);
-                _browserContext = null;
-            }
-
-            if (_browser is not null)
-            {
-                await _browser.DisposeAsync().ConfigureAwait(false);
-                _browser = null;
-            }
-
-            _disposed = true;
-        }
     }
 }

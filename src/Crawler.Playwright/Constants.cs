@@ -12,6 +12,7 @@ internal static class Constants
 
     public static readonly List<string> UserImpersonationArgs =
     [
-        "--disable-blink-features=AutomationControlled"
+        "--disable-blink-features=AutomationControlled",
+        "--headless=new"
     ];
 }
