@@ -22,15 +22,15 @@ o discovery." width="800">
 
 ## Tiers
 
-Trade fidelity for cost. Start at the cheapest tier that returns the links you need.
+Choosing a crawler implementation is a cost/fidelity tradeoff.
 
-| Tier         | Runs JS | Browser | Cost\* | Use when                                                |
+| Tier         | Runs JS | Is a browser | Cost\* | Use when                                                |
 | ------------ | ------- | ------- | ------ | ------------------------------------------------------- |
 | **Static**   | no      | no      | 1×     | links are in the server HTML (SSR, MPA, classic CMS)    |
 | **JS**       | yes     | no      | ~5–30× | client-only SPA builds links at runtime, standard APIs  |
 | **Headless** | yes     | yes     | ~50–100× | needs a real browser (RSC streaming, canvas, workers) |
 
-\* Per-page, relative to a static parse. Measured numbers found under [performance](./performance.md).
+\* Resource use (CPU time) per-page. Detailed numbers found under [performance](./performance.md).
 
 **Static** (`HtmlAgilityPack`, `AngleSharp`) crawlers do one HTTP request, then a HTML parse, they run no scripts and miss anything injected by client JS.
 
