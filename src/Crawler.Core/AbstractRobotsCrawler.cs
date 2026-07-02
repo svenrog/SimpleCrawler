@@ -10,7 +10,7 @@ public abstract class AbstractRobotsCrawler<TResponse, TResult> : AbstractCrawle
 {
     private readonly IRobotClient _robotClient;
     private readonly CrawlerOptions _options;
-    private readonly ProductToken _userAgent;
+    private readonly ProductToken _productToken;
     private readonly ILogger _logger;
 
     private IRobotRuleChecker? _robotRules;
@@ -23,10 +23,19 @@ public abstract class AbstractRobotsCrawler<TResponse, TResult> : AbstractCrawle
         _robotClient = robotClient;
         _options = options.Value;
         _logger = logger;
-        _userAgent = ProductToken.Wildcard;
+        _productToken = ProductToken.Wildcard;
 
         if (_options.UserAgent != null)
-            _userAgent = ProductToken.Parse(_options.UserAgent);
+            _productToken = DeriveProductToken(_options.UserAgent);
+    }
+
+    private static ProductToken DeriveProductToken(string userAgent)
+    {
+        var span = userAgent.AsSpan().Trim();
+        var end = span.IndexOfAny('/', ' ');
+        var name = (end >= 0 ? span[..end] : span).ToString();
+
+        return ProductToken.TryParse(name, out var token) ? token : ProductToken.Wildcard;
     }
 
     protected override async ValueTask InitializeCrawl(string entry, CancellationToken cancellationToken)
@@ -35,10 +44,10 @@ public abstract class AbstractRobotsCrawler<TResponse, TResult> : AbstractCrawle
         _siteAuthority = _entryUri.GetLeftPart(UriPartial.Authority);
         _robots = await _robotClient.LoadRobotsTxtAsync(_entryUri, cancellationToken);
 
-        if (_robots.TryGetCrawlDelay(_userAgent, out var crawlDelay) && _options.RespectRobotsTxt)
+        if (_robots.TryGetCrawlDelay(_productToken, out var crawlDelay) && _options.RespectRobotsTxt)
             _options.CrawlDelay = crawlDelay;
 
-        if (!_robots.TryGetRules(_userAgent, out _robotRules))
+        if (!_robots.TryGetRules(_productToken, out _robotRules))
             _robotRules = RobotRuleChecker.Empty;
 
         await base.InitializeCrawl(entry, cancellationToken);

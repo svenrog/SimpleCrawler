@@ -6,7 +6,7 @@ namespace Crawler.Puppeteer;
 
 public static class ServiceCollectionExtensions
 {
-    public static IServiceCollection AddPuppeteerCrawler(this IServiceCollection services, CrawlerOptions options)
+    public static IServiceCollection AddPuppeteerCrawler(this IServiceCollection services, HeadlessCrawlerOptions options)
     {
         services.AddSingleton(Options.Create(options));
         services.AddPuppeteerCrawler();

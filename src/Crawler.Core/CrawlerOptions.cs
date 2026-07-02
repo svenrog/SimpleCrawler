@@ -9,7 +9,6 @@ public class CrawlerOptions
     public double CrawlDelay { get; set; } = 0;
     public bool RespectMetaRobots { get; set; } = true;
     public bool RespectRobotsTxt { get; set; } = true;
-    public bool BlockNonEssentialResources { get; set; } = true;
     public bool EnableSitemapDiscovery { get; set; } = true;
 
     public int EffectiveConcurrency => Math.Max(1, Concurrency);

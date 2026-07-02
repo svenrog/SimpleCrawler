@@ -8,7 +8,7 @@ namespace Crawler.Playwright;
 
 public sealed class DefaultPlaywrightCrawler : PlaywrightCrawler<ScrapeResult>, ICrawler
 {
-    public DefaultPlaywrightCrawler(IRobotClient robotClient, IOptions<CrawlerOptions> options, ILogger<DefaultPlaywrightCrawler> logger) : base(robotClient, options, logger)
+    public DefaultPlaywrightCrawler(IRobotClient robotClient, IOptions<HeadlessCrawlerOptions> options, ILogger<DefaultPlaywrightCrawler> logger) : base(robotClient, options, logger)
     {
     }
 

@@ -13,7 +13,7 @@ namespace Crawler.Playwright;
 public abstract class PlaywrightCrawler<TResult> : AbstractRobotsCrawler<IPage, TResult>, IAsyncDisposable
     where TResult : IScrapeResult
 {
-    private readonly CrawlerOptions _options;
+    private readonly HeadlessCrawlerOptions _options;
     private readonly ILogger _logger;
 
     private IPlaywright? _playwright;
@@ -24,7 +24,7 @@ public abstract class PlaywrightCrawler<TResult> : AbstractRobotsCrawler<IPage, 
 
     private bool _disposed;
 
-    protected PlaywrightCrawler(IRobotClient robotClient, IOptions<CrawlerOptions> options, ILogger logger) : base(robotClient, options, logger)
+    protected PlaywrightCrawler(IRobotClient robotClient, IOptions<HeadlessCrawlerOptions> options, ILogger logger) : base(robotClient, options, logger)
     {
         _options = options.Value;
         _logger = logger;
@@ -79,7 +79,7 @@ public abstract class PlaywrightCrawler<TResult> : AbstractRobotsCrawler<IPage, 
     protected override async Task<IPage?> LoadResponse(string url, CancellationToken cancellationToken)
     {
         var page = await AcquirePage();
-        var response = await page.GotoAsync(url, new PageGotoOptions { WaitUntil = WaitUntilState.NetworkIdle });
+        var response = await page.GotoAsync(url, new PageGotoOptions { WaitUntil = WaitUntilState.Load });
 
         if (response == null)
         {
@@ -88,8 +88,9 @@ public abstract class PlaywrightCrawler<TResult> : AbstractRobotsCrawler<IPage, 
 
             return null;
         }
-        else if (response.Status < 300)
+        else if (response.Status >= 200 && response.Status < 300)
         {
+            await WaitForNetworkIdle(page);
             _logger.LogDebug("Response '{code}' from url '{url}'", response.Status, url);
             return page;
         }
@@ -108,6 +109,17 @@ public abstract class PlaywrightCrawler<TResult> : AbstractRobotsCrawler<IPage, 
         var (canonicalHref, robotsContent, linkHrefs) = RenderedPageExtractor.Parse(json.GetValueOrDefault());
 
         return new PageExtract(GetAbsoluteUrl(canonicalHref), IndexingHelper.ParseMetaRobots(robotsContent), linkHrefs);
+    }
+
+    private async Task WaitForNetworkIdle(IPage page)
+    {
+        try
+        {
+            await page.WaitForLoadStateAsync(LoadState.NetworkIdle, new PageWaitForLoadStateOptions { Timeout = _options.NetworkIdleGraceMs });
+        }
+        catch (System.TimeoutException)
+        {
+        }
     }
 
     private async ValueTask<IPage> AcquirePage()

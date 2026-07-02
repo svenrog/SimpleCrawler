@@ -14,7 +14,7 @@ namespace Crawler.Puppeteer;
 public abstract class PuppeteerCrawler<TResult> : AbstractRobotsCrawler<IPage, TResult>, IAsyncDisposable
     where TResult : IScrapeResult
 {
-    private readonly CrawlerOptions _options;
+    private readonly HeadlessCrawlerOptions _options;
     private readonly ILogger _logger;
 
     private IBrowser? _browser;
@@ -24,7 +24,7 @@ public abstract class PuppeteerCrawler<TResult> : AbstractRobotsCrawler<IPage, T
 
     private bool _disposed;
 
-    protected PuppeteerCrawler(IRobotClient robotClient, IOptions<CrawlerOptions> options, ILogger logger) : base(robotClient, options, logger)
+    protected PuppeteerCrawler(IRobotClient robotClient, IOptions<HeadlessCrawlerOptions> options, ILogger logger) : base(robotClient, options, logger)
     {
         _options = options.Value;
         _logger = logger;
