@@ -1,11 +1,11 @@
 ﻿using Crawler.AngleSharp;
+using Crawler.Core;
+using Crawler.Core.Models;
+using Crawler.HtmlAgilityPack;
 using Crawler.Js;
 using Crawler.Js.Jint;
 using Crawler.Js.Models;
 using Crawler.Js.V8;
-using Crawler.Core;
-using Crawler.Core.Models;
-using Crawler.HtmlAgilityPack;
 using Crawler.Playwright;
 using Crawler.Puppeteer;
 using Crawler.Tests.Common.Extensions;
@@ -29,6 +29,7 @@ public abstract class AbstractHostFixture : IAsyncDisposable
     {
         var services = new ServiceCollection();
         var options = CreateOptions();
+        var headlessOptions = CreateHeadlessOptions(options);
 
         var renderOptions = CreateRenderOptions();
 
@@ -36,8 +37,8 @@ public abstract class AbstractHostFixture : IAsyncDisposable
         services.AddJintCrawler(options, renderOptions);
         services.AddV8Crawler(options, renderOptions);
         services.AddHtmlAgilityPackCrawler(options);
-        services.AddPlaywrightCrawler(options);
-        services.AddPuppeteerCrawler(options);
+        services.AddPlaywrightCrawler(headlessOptions);
+        services.AddPuppeteerCrawler(headlessOptions);
 
         services.AddSingleton<ILogger>(NullLogger.Instance);
         services.AddSingleton(typeof(ILogger<>), typeof(NullLogger<>));
@@ -63,6 +64,15 @@ public abstract class AbstractHostFixture : IAsyncDisposable
             RespectMetaRobots = false,
             RespectRobotsTxt = false,
             EnableSitemapDiscovery = false,
+        };
+    }
+
+    protected virtual HeadlessCrawlerOptions CreateHeadlessOptions(CrawlerOptions options)
+    {
+        return new HeadlessCrawlerOptions(options)
+        {
+            BlockNonEssentialResources = true,
+            NetworkIdleGraceMs = 500,
         };
     }
 

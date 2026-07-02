@@ -2,6 +2,22 @@ namespace Crawler.Core;
 
 public sealed class HeadlessCrawlerOptions : CrawlerOptions
 {
+    public HeadlessCrawlerOptions()
+    {
+    }
+
+    public HeadlessCrawlerOptions(CrawlerOptions options)
+    {
+        UserAgent = options.UserAgent;
+        Concurrency = options.Concurrency;
+        ParseConcurrency = options.ParseConcurrency;
+        MaxPages = options.MaxPages;
+        CrawlDelay = options.CrawlDelay;
+        RespectMetaRobots = options.RespectMetaRobots;
+        RespectRobotsTxt = options.RespectRobotsTxt;
+        EnableSitemapDiscovery = options.EnableSitemapDiscovery;
+    }
+
     public bool BlockNonEssentialResources { get; set; } = true;
 
     /// <summary>

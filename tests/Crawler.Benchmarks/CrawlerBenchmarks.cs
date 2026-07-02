@@ -1,9 +1,9 @@
 ﻿using BenchmarkDotNet.Attributes;
 using Crawler.AngleSharp;
-using Crawler.Js.Jint;
-using Crawler.Js.V8;
 using Crawler.Core;
 using Crawler.HtmlAgilityPack;
+using Crawler.Js.Jint;
+using Crawler.Js.V8;
 using Crawler.Playwright;
 using Crawler.Puppeteer;
 using Crawler.TestHost.Infrastructure.Factories;
@@ -41,13 +41,14 @@ public class CrawlerBenchmarks
             CrawlDelay = 0,
             Concurrency = 8,
         };
+        var headlessOptions = new HeadlessCrawlerOptions(options);
 
         services.AddHtmlAgilityPackCrawler(options);
         services.AddAngleSharpCrawler(options);
         services.AddJintCrawler(options);
         services.AddV8Crawler(options);
-        services.AddPlaywrightCrawler(options);
-        services.AddPuppeteerCrawler(options);
+        services.AddPlaywrightCrawler(headlessOptions);
+        services.AddPuppeteerCrawler(headlessOptions);
         services.AddSingleton<ILogger>(NullLogger.Instance);
         services.AddScoped<CancellationTokenSource>();
 
