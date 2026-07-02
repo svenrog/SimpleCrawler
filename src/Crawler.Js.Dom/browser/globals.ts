@@ -32,6 +32,7 @@ import { Blob } from "./Blob";
 import { btoa, atob } from "./base64";
 import { documentRef } from "../dom/documentRef";
 import { installScrollApi } from "./scroll";
+import { markPrototypeNative } from "./native";
 
 export const doc = new Document(globalThis as any);
 documentRef.current = doc;
@@ -113,4 +114,7 @@ export function installDOM(global: any): void {
     global.sessionStorage = createStorage();
     installTimerGlobals(global);
     installScrollApi(global);
+    for (const ctor of [Node, Element, CharacterData, Document, DocumentFragment, HTMLElement]) {
+        markPrototypeNative(ctor);
+    }
 }

@@ -117,6 +117,13 @@ export class Element extends Node {
         return { top: 0, left: 0, right: 0, bottom: 0, width: 0, height: 0, x: 0, y: 0 };
     }
 
+    // jQuery gates .offset()/visibility on `getClientRects().length` before reading the box: a connected
+    // element has one (zero-sized) rect, a detached one has none — matching the browser so the "is this laid
+    // out?" branch takes the attached path instead of throwing on a missing method.
+    getClientRects(): any[] {
+        return this.isConnected ? [this.getBoundingClientRect()] : [];
+    }
+
     // The viewport-sized box: jQuery's $(window).width() and many breakpoint helpers read the root element's
     // clientWidth/Height rather than window.innerWidth. Only the root (html/body) reports the viewport; every
     // other element is unlaid-out and reports 0, as in the always-zero getBoundingClientRect.
