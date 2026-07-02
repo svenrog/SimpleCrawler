@@ -28,7 +28,9 @@ public abstract class AbstractCrawler<TResponse, TResult> : ICrawler<TResult>
     private Uri? _siteUri;
     private string? _siteAuthority;
 
-    private readonly TimeSpan _delay;
+    // Read live rather than snapshot: InitializeCrawl can raise CrawlDelay from robots.txt Crawl-delay
+    // after construction, and Throttle must honour the raised value.
+    private TimeSpan Delay => TimeSpan.FromSeconds(_options.CrawlDelay);
 
     protected readonly ConcurrentHashSet<string> Visited;
 
@@ -38,7 +40,6 @@ public abstract class AbstractCrawler<TResponse, TResult> : ICrawler<TResult>
         _logger = logger;
 
         _throttleGate = new SemaphoreSlim(1, 1);
-        _delay = TimeSpan.FromSeconds(_options.CrawlDelay);
 
         Visited = [];
         _discovered = [];
@@ -198,7 +199,8 @@ public abstract class AbstractCrawler<TResponse, TResult> : ICrawler<TResult>
 
     protected virtual async Task Throttle(CancellationToken cancellationToken)
     {
-        if (_delay <= TimeSpan.Zero)
+        var delay = Delay;
+        if (delay <= TimeSpan.Zero)
             return;
 
         await _throttleGate.WaitAsync(cancellationToken);
@@ -211,7 +213,7 @@ public abstract class AbstractCrawler<TResponse, TResult> : ICrawler<TResult>
                 await Task.Delay(wait, cancellationToken);
             }
 
-            _nextSlotTimestamp = Stopwatch.GetTimestamp() + (long)(_delay.TotalSeconds * Stopwatch.Frequency);
+            _nextSlotTimestamp = Stopwatch.GetTimestamp() + (long)(delay.TotalSeconds * Stopwatch.Frequency);
         }
         finally
         {

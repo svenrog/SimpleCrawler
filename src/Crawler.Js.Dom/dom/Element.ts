@@ -17,7 +17,6 @@ export class Element extends Node {
     readonly style: any;
 
     private readonly attrs = new Map<string, string>();
-    private readonly listeners: Record<string, Array<(...args: any[]) => void>> = {};
     cachedInnerHTML: string | null = null;
     private _sheet: any = null;
 
@@ -59,30 +58,18 @@ export class Element extends Node {
         return Array.from(this.attrs.keys());
     }
 
-    addEventListener(t: string, cb: (...args: any[]) => void): void {
-        (this.listeners[t] ||= []).push(cb);
-    }
-
-    removeEventListener(t: string, cb: (...args: any[]) => void): void {
-        const list = this.listeners[t];
-        if (!list) return;
-        const i = list.indexOf(cb);
-        if (i >= 0) list.splice(i, 1);
-    }
-
-    dispatchEvent(event: any): boolean {
-        const list = this.listeners[event.type];
-        if (!list || !list.length) return true;
-        event.target = this;
-        event.currentTarget = this;
-        const snapshot = list.slice();
-        for (let i = 0; i < snapshot.length; i++) {
-            try { snapshot[i](event); } catch { /* a failing listener must not abort dispatch */ }
-            if (event._stoppedImmediate) break;
+    // A NamedNodeMap-ish snapshot: custom-element upgrade code walks `el.attributes` by index reading
+    // `.length`/`[i].name`/`[i].value`, so it must be array-like with attr entries, not undefined.
+    get attributes(): any {
+        const list: any[] = [];
+        for (const [name, value] of this.attrs) {
+            list.push({ name, value, localName: name, namespaceURI: null, ownerElement: this });
         }
-        event.currentTarget = null;
-        return !event.defaultPrevented;
+        (list as any).getNamedItem = (name: string) => list.find((a) => a.name === name) || null;
+        (list as any).item = (i: number) => list[i] || null;
+        return list;
     }
+
     setAttributeNode(): void { }
 
     getElementsByTagName(tag: string): Element[] {
@@ -409,6 +396,19 @@ export class Element extends Node {
 
     get outerHTML(): string {
         return serializeNode(this);
+    }
+
+    // Replaces this element with the parsed markup in its parent (custom elements self-unwrap via
+    // `el.outerHTML = el.innerHTML`). A detached element has nowhere to go, so it's a no-op, matching the
+    // getter-only shape bundles otherwise trip over.
+    set outerHTML(v: unknown) {
+        const parent = this.parentNode;
+        if (!parent) return;
+        const html = v == null ? "" : String(v);
+        const parse = parserRef.parseFragment;
+        const nodes = parse ? parse(html) : [];
+        for (const node of nodes) parent.insertBefore(node, this);
+        parent.removeChild(this);
     }
 
     get sheet(): any {

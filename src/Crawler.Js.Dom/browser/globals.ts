@@ -33,6 +33,7 @@ import { btoa, atob } from "./base64";
 import { documentRef } from "../dom/documentRef";
 import { installScrollApi } from "./scroll";
 import { markPrototypeNative } from "./native";
+import { EventListenerMap, EventTarget, addListener, removeListener, fireEvent } from "../dom/eventTarget";
 
 export const doc = new Document(globalThis as any);
 documentRef.current = doc;
@@ -44,9 +45,12 @@ export function installDOM(global: any): void {
     global.navigator = navigator;
     global.location = createLocation();
     global.history = createHistory();
-    global.addEventListener = () => { };
-    global.removeEventListener = () => { };
-    global.dispatchEvent = () => true;
+    // window is an EventTarget with the same real dispatch as document/Element; browser events like load/resize
+    // are never synthesised in the single-pass render, so listeners only fire when a bundle dispatches explicitly.
+    const windowListeners: EventListenerMap = {};
+    global.addEventListener = (t: string, cb: (...args: any[]) => void) => addListener(windowListeners, t, cb);
+    global.removeEventListener = (t: string, cb: (...args: any[]) => void) => removeListener(windowListeners, t, cb);
+    global.dispatchEvent = (event: any) => fireEvent(global, windowListeners, event);
     // Handler props declared null so `'onX' in window` feature-detection passes and bundle assignments stick;
     // events never fire in the single-pass render, so the assigned handlers are only ever stored.
     for (const on of ["onresize", "onscroll", "onload", "onerror", "onunload", "onbeforeunload",
@@ -87,6 +91,7 @@ export function installDOM(global: any): void {
     (URL as any).revokeObjectURL = (URL as any).revokeObjectURL || (() => { });
     global.URL = URL;
     global.URLSearchParams = URLSearchParams;
+    global.EventTarget = EventTarget;
     global.Node = Node;
     global.NodeList = NodeList;
     global.Element = Element;
@@ -114,7 +119,7 @@ export function installDOM(global: any): void {
     global.sessionStorage = createStorage();
     installTimerGlobals(global);
     installScrollApi(global);
-    for (const ctor of [Node, Element, CharacterData, Document, DocumentFragment, HTMLElement]) {
+    for (const ctor of [EventTarget, Node, Element, CharacterData, Document, DocumentFragment, HTMLElement]) {
         markPrototypeNative(ctor);
     }
 }

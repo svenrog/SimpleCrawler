@@ -44,8 +44,8 @@ public abstract class AbstractRobotsCrawler<TResponse, TResult> : AbstractCrawle
         _siteAuthority = _entryUri.GetLeftPart(UriPartial.Authority);
         _robots = await _robotClient.LoadRobotsTxtAsync(_entryUri, cancellationToken);
 
-        if (_robots.TryGetCrawlDelay(_productToken, out var crawlDelay) && _options.RespectRobotsTxt)
-            _options.CrawlDelay = crawlDelay;
+        if (_options.RespectRobotsTxt && _robots.TryGetCrawlDelay(_productToken, out var crawlDelay))
+            _options.CrawlDelay = Math.Max(_options.CrawlDelay, crawlDelay);
 
         if (!_robots.TryGetRules(_productToken, out _robotRules))
             _robotRules = RobotRuleChecker.Empty;

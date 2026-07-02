@@ -59,9 +59,51 @@
     return null;
   }
 
+  // dom/eventTarget.ts
+  function addListener(map, type, cb) {
+    (map[type] || (map[type] = [])).push(cb);
+  }
+  function removeListener(map, type, cb) {
+    const list = map[type];
+    if (!list) return;
+    const i = list.indexOf(cb);
+    if (i >= 0) list.splice(i, 1);
+  }
+  function fireEvent(target, map, event) {
+    const list = map[event.type];
+    if (!list || !list.length) return true;
+    event.target = target;
+    event.currentTarget = target;
+    const snapshot = list.slice();
+    for (let i = 0; i < snapshot.length; i++) {
+      try {
+        snapshot[i](event);
+      } catch {
+      }
+      if (event._stoppedImmediate) break;
+    }
+    event.currentTarget = null;
+    return !event.defaultPrevented;
+  }
+  var EventTarget = class {
+    constructor() {
+      this._listeners = null;
+    }
+    addEventListener(type, cb) {
+      addListener(this._listeners || (this._listeners = {}), type, cb);
+    }
+    removeEventListener(type, cb) {
+      if (this._listeners) removeListener(this._listeners, type, cb);
+    }
+    dispatchEvent(event) {
+      return this._listeners ? fireEvent(this, this._listeners, event) : true;
+    }
+  };
+
   // dom/Node.ts
-  var Node = class {
+  var Node = class extends EventTarget {
     constructor(type) {
+      super();
       this.parentNode = null;
       this.childNodes = [];
       this.nodeType = type;
@@ -654,7 +696,6 @@
     constructor(tag, ns) {
       super(1 /* Element */);
       this.attrs = /* @__PURE__ */ new Map();
-      this.listeners = {};
       this.cachedInnerHTML = null;
       this._sheet = null;
       this.localName = String(tag).toLowerCase();
@@ -685,31 +726,16 @@
     getAttributeNames() {
       return Array.from(this.attrs.keys());
     }
-    addEventListener(t, cb) {
-      var _a;
-      ((_a = this.listeners)[t] || (_a[t] = [])).push(cb);
-    }
-    removeEventListener(t, cb) {
-      const list = this.listeners[t];
-      if (!list) return;
-      const i = list.indexOf(cb);
-      if (i >= 0) list.splice(i, 1);
-    }
-    dispatchEvent(event) {
-      const list = this.listeners[event.type];
-      if (!list || !list.length) return true;
-      event.target = this;
-      event.currentTarget = this;
-      const snapshot = list.slice();
-      for (let i = 0; i < snapshot.length; i++) {
-        try {
-          snapshot[i](event);
-        } catch {
-        }
-        if (event._stoppedImmediate) break;
+    // A NamedNodeMap-ish snapshot: custom-element upgrade code walks `el.attributes` by index reading
+    // `.length`/`[i].name`/`[i].value`, so it must be array-like with attr entries, not undefined.
+    get attributes() {
+      const list = [];
+      for (const [name, value] of this.attrs) {
+        list.push({ name, value, localName: name, namespaceURI: null, ownerElement: this });
       }
-      event.currentTarget = null;
-      return !event.defaultPrevented;
+      list.getNamedItem = (name) => list.find((a) => a.name === name) || null;
+      list.item = (i) => list[i] || null;
+      return list;
     }
     setAttributeNode() {
     }
@@ -1011,6 +1037,18 @@
     }
     get outerHTML() {
       return serializeNode(this);
+    }
+    // Replaces this element with the parsed markup in its parent (custom elements self-unwrap via
+    // `el.outerHTML = el.innerHTML`). A detached element has nowhere to go, so it's a no-op, matching the
+    // getter-only shape bundles otherwise trip over.
+    set outerHTML(v) {
+      const parent = this.parentNode;
+      if (!parent) return;
+      const html = v == null ? "" : String(v);
+      const parse = parserRef.parseFragment;
+      const nodes = parse ? parse(html) : [];
+      for (const node of nodes) parent.insertBefore(node, this);
+      parent.removeChild(this);
     }
     get sheet() {
       if (this.localName !== "style") return null;
@@ -1958,6 +1996,11 @@
     get location() {
       return this.defaultView ? this.defaultView.location : null;
     }
+    // Bundles read document.referrer as a string (analytics, `referrer.split('/')[2] !== location.host`);
+    // a single-pass render has no navigation history, so it's always the empty string.
+    get referrer() {
+      return "";
+    }
     // A real document.cookie is always a string. Bundles probe it (document.cookie.includes(...)) and set it;
     // we keep a name→value store, ignoring attributes (path/expires/domain) and expiry since rendering is a
     // single synchronous pass.
@@ -2018,10 +2061,6 @@
     }
     querySelectorAll(sel) {
       return querySelectorAll(this, sel);
-    }
-    addEventListener() {
-    }
-    removeEventListener() {
     }
     createEvent() {
       return { initEvent() {
@@ -2573,11 +2612,10 @@
     global.navigator = navigator;
     global.location = createLocation();
     global.history = createHistory();
-    global.addEventListener = () => {
-    };
-    global.removeEventListener = () => {
-    };
-    global.dispatchEvent = () => true;
+    const windowListeners = {};
+    global.addEventListener = (t, cb) => addListener(windowListeners, t, cb);
+    global.removeEventListener = (t, cb) => removeListener(windowListeners, t, cb);
+    global.dispatchEvent = (event) => fireEvent(global, windowListeners, event);
     for (const on of [
       "onresize",
       "onscroll",
@@ -2640,6 +2678,7 @@
     });
     global.URL = URL;
     global.URLSearchParams = URLSearchParams;
+    global.EventTarget = EventTarget;
     global.Node = Node;
     global.NodeList = NodeList;
     global.Element = Element;
@@ -2667,7 +2706,7 @@
     global.sessionStorage = createStorage();
     installTimerGlobals(global);
     installScrollApi(global);
-    for (const ctor of [Node, Element, CharacterData, Document, DocumentFragment, HTMLElement]) {
+    for (const ctor of [EventTarget, Node, Element, CharacterData, Document, DocumentFragment, HTMLElement]) {
       markPrototypeNative(ctor);
     }
   }
