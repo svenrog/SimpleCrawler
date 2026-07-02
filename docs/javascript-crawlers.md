@@ -1,5 +1,15 @@
 # JavaScript crawlers
 
+Since AngleSharp or any other library lacked the ability to render simpler JavaScript sites we added the `Crawler.Js` project that provides a rendering engine. There are 2 engine implementations, `Jint` and `ClearScript.V8`.
+
+Both are tested against the client-side frameworks and libraries below. The test do not cover the full featureset, a list of real sites have been used as a reference.
+
+- [React](https://react.dev/) 
+- [Preact](https://preactjs.com/)
+- [Solid](https://www.solidjs.com/)
+- [Svelte](https://svelte.dev/)
+- [Vue](https://vuejs.org/) (Jint can't run [Vue](./docs/javascript-crawlers.md))
+
 Using `Crawler.Js` crawlers requires 2 choices (engine and parser).
 
 ## Engine
@@ -11,15 +21,14 @@ Using `Crawler.Js` crawlers requires 2 choices (engine and parser).
 - Slower and more allocation-heavy than V8 (interpreter vs JIT).
 - Can't crawl Vue-driven sites due to a problem with ESM loading.
 
-Use for AOT, locked-down environments or just don't like dependencies.
+Use if memory management is needed or dependencies can't be installed.
 
 ### V8 (`Crawler.Js.V8`)
 
 - Much faster on render-heavy pages (optimising JIT).
-- Broadest compatibility, including Vue.
-- Lowest *managed* allocations.
+- Broadest compatibility.
 - **Memory lives outside the .NET heap.** The V8 isolate has its own native heap, so managed profilers understate real footprint, the low "Allocated" numbers in [performance](./performance.md) are misleading. Size host RAM for it, especially at high `ParseConcurrency`.
-- Ships a version-locked, per-platform native binary. AOT works but deployment is heavier than Jint.
+- Ships a version-locked, per-platform native binary.
 
 ## HTML parser
 
@@ -31,7 +40,7 @@ The HTML must become a DOM tree before scripts run. Native C# pre-parsing is far
 | `AddAngleSharpHtmlParser()`      | AngleSharp (spec-compliant)      | middle          |
 | `AddHtmlAgilityPackHtmlParser()` | HtmlAgilityPack                  | **fastest**     |
 
-Register HtmlAgilityPack unless you need AngleSharp's spec-compliant handling of pathological markup.
+HtmlAgilityPack is preferred unless you need spec-compliant parsing.
 
 ## JsRenderOptions
 

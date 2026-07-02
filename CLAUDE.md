@@ -12,7 +12,6 @@ A high-performance single-domain web crawler (CLI: `smpcrawl`) built to gather U
 - Run a single test: `dotnet test --filter "FullyQualifiedName~TestName"`.
 - Tests use **xUnit v3** (pre-release `xunit.v3`), FluentAssertions, and Moq — not xUnit v2 idioms.
 - Benchmarks are a runnable BenchmarkDotNet console app: `dotnet run -c Release --project tests/Crawler.Benchmarks`. Always run benchmarks in Release.
-- The CLI publishes with **NativeAOT** (`PublishAot`, `InvariantGlobalization`, `ServerGarbageCollection`). Keep new code in `SimpleCrawler`/`Crawler.Core` AOT-compatible — avoid unbounded reflection; `Program.cs` uses `DynamicDependency` where reflection is unavoidable.
 
 ## Architecture
 

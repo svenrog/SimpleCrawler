@@ -50,26 +50,6 @@ Wiring a backend into your own project [`docs/`](./docs/configuration.md):
 
 The Anglesharp maintainers claims the library handles JavaScript with AngleSharp.Js. In reality it only does so on an experimental level, complex libraries like React do not work.
 
-### Jint and V8
-
-Since AngleSharp or any other library lacked the ability to render simpler JavaScript sites we added the `Crawler.Js` project that provides a rendering engine. There are 2 engine implementations, `ClearScript.V8` and `Jint`.
-
-Both are tested against the major client-side frameworks and libraries below. The framework bundles are real client-only [Astro](https://astro.build/) islands. The test do not cover the full featureset, but a list of real sites have been used for battle testing.
-
-- [React](https://react.dev/) 
-- [Preact](https://preactjs.com/)
-- [Solid](https://www.solidjs.com/)
-- [Svelte](https://svelte.dev/)
-- [Vue](https://vuejs.org/) (Jint can't run [Vue](./docs/javascript-crawlers.md))
-
-#### Frameworks and technologies
-
-Other frameworks encountered during testing.
-
-- [jQuery](https://jquery.com/)
-- [React Router](https://reactrouter.com/)
-- [NextJs](https://nextjs.org/) (streaming is not supported)
-
 ### Selenium WebDriver
 
 This package isn't a good fit for this codebase and is dated. 
