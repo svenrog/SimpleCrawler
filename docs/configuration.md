@@ -44,14 +44,19 @@ choice (engine + parser): [JavaScript crawlers](./javascript-crawlers.md).
 Shared options object (see [CrawlerOptions](./crawler-options.md)):
 
 ```csharp
+using Crawler.Core.Browser;
+
 var options = new CrawlerOptions
 {
     Concurrency = 16,
     ParseConcurrency = 8,
     MaxPages = 5000,
-    UserAgent = "my-crawler/1.0",
+    BrowserProfile = new DefaultBrowserProfile { UserAgent = "my-crawler/1.0" },
 };
 ```
+
+Swap `BrowserProfile` for `new ChromeBrowserProfile()` to impersonate a real browser — see
+[BrowserProfile](./crawler-options.md#browserprofile).
 
 ### Static
 

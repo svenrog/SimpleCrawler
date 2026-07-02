@@ -9,6 +9,7 @@ This project stemmed from the need to crawl a single domain in preparation of lo
 | Parallel crawling | :heavy_check_mark: |
 | Meta robots | :heavy_check_mark: |
 | Robots.txt | :heavy_check_mark: |
+| Browser impersonation | :detective: |
 | Modern .NET features | :heavy_check_mark: |
 | Console colors | :rainbow: |
 
@@ -28,6 +29,12 @@ Executing the binary will crawl a single domain using the default `HtmlAgilityPa
 
 ```
 smpcrawl -e "<entry url>" -o "<output file>"
+```
+
+Some sites turn away the honest crawler agent. When you hit a `403`/`429`, `--impersonate chrome` presents a real Chrome identity (User-Agent + client-hint headers) instead:
+
+```
+smpcrawl -e "<entry url>" -o "<output file>" --impersonate chrome
 ```
 
 Full list of possible options can be found [here](./src/SimpleCrawler/Options.cs).

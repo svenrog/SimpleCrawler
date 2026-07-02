@@ -1,4 +1,5 @@
 ﻿using Crawler.Core;
+using Crawler.Core.Browser;
 using Crawler.Core.Helpers;
 using Crawler.Core.Models;
 using Crawler.Core.Robots;
@@ -15,6 +16,7 @@ public abstract class PlaywrightCrawler<TResult> : AbstractRobotsCrawler<IPage, 
 {
     private readonly HeadlessCrawlerOptions _options;
     private readonly ILogger _logger;
+    private readonly string? _initScript;
 
     private IPlaywright? _playwright;
     private IBrowser? _browser;
@@ -29,6 +31,11 @@ public abstract class PlaywrightCrawler<TResult> : AbstractRobotsCrawler<IPage, 
         _options = options.Value;
         _logger = logger;
         _pagePool = new ConcurrentQueue<IPage>();
+
+        if (_options.BrowserProfile.Impersonate)
+        {
+            _initScript = BrowserHelper.BuildInitScript(_options.BrowserProfile);
+        }
     }
 
     public override async Task<TResult> Start(string entry, CancellationToken cancellationToken = default)
@@ -40,6 +47,9 @@ public abstract class PlaywrightCrawler<TResult> : AbstractRobotsCrawler<IPage, 
         {
             _browserContext = await _browser.NewContextAsync(GetContextOptions());
 
+            if (_initScript != null)
+                await _browserContext.AddInitScriptAsync(_initScript);
+
             if (_options.BlockNonEssentialResources)
                 await _browserContext.RouteAsync("**/*", BlockNonEssentialResource);
         }
@@ -49,16 +59,12 @@ public abstract class PlaywrightCrawler<TResult> : AbstractRobotsCrawler<IPage, 
 
     protected virtual Task<IBrowser> LaunchBrowser(IPlaywright playwright)
     {
-        return playwright.Chromium.LaunchAsync(new BrowserTypeLaunchOptions
-        {
-            Args =
-            [
-                "--disable-gpu",
-                "--disable-dev-shm-usage",
-                "--disable-extensions",
-                "--disable-background-networking",
-            ]
-        });
+        List<string> args = [.. Constants.DefaultArgs];
+
+        if (_options.BrowserProfile.Impersonate)
+            args.AddRange(Constants.UserImpersonationArgs);
+
+        return playwright.Chromium.LaunchAsync(new BrowserTypeLaunchOptions { Args = args });
     }
 
     private static Task BlockNonEssentialResource(IRoute route)
@@ -70,9 +76,13 @@ public abstract class PlaywrightCrawler<TResult> : AbstractRobotsCrawler<IPage, 
 
     protected virtual BrowserNewContextOptions GetContextOptions()
     {
+        var profile = _options.BrowserProfile;
+
         return new BrowserNewContextOptions
         {
-            UserAgent = _options.UserAgent
+            UserAgent = profile.UserAgent,
+            Locale = profile.Locale,
+            ExtraHTTPHeaders = profile.AdditionalHeaders,
         };
     }
 

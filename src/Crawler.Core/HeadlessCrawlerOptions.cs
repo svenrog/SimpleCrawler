@@ -8,7 +8,6 @@ public sealed class HeadlessCrawlerOptions : CrawlerOptions
 
     public HeadlessCrawlerOptions(CrawlerOptions options)
     {
-        UserAgent = options.UserAgent;
         Concurrency = options.Concurrency;
         ParseConcurrency = options.ParseConcurrency;
         MaxPages = options.MaxPages;
@@ -16,6 +15,7 @@ public sealed class HeadlessCrawlerOptions : CrawlerOptions
         RespectMetaRobots = options.RespectMetaRobots;
         RespectRobotsTxt = options.RespectRobotsTxt;
         EnableSitemapDiscovery = options.EnableSitemapDiscovery;
+        BrowserProfile = options.BrowserProfile;
     }
 
     public bool BlockNonEssentialResources { get; set; } = true;

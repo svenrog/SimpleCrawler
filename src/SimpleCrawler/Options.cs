@@ -30,4 +30,7 @@ public sealed class Options
 
     [Option('a', "userAgent", Required = false, HelpText = "This sets the user agent of the browser.")]
     public string? UserAgent { get; set; }
+
+    [Option('i', "impersonate", Required = false, Default = BrowserImpersonation.None, HelpText = "Impersonate a real browser to reduce bot-detection blocks (e.g. 403). Values: none, chrome.")]
+    public BrowserImpersonation Impersonate { get; set; }
 }

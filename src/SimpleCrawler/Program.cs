@@ -20,7 +20,13 @@ internal static class Program
 
         builder.Logging.AddConsoleLogging();
 
-        var parseResult = Parser.Default.ParseArguments<Options>(arguments);
+        using var parser = new Parser(settings =>
+        {
+            settings.HelpWriter = Console.Error;
+            settings.CaseInsensitiveEnumValues = true;
+        });
+
+        var parseResult = parser.ParseArguments<Options>(arguments);
 
         await parseResult.WithParsedAsync(async options =>
         {

@@ -1,4 +1,5 @@
 ﻿using Crawler.Core;
+using Crawler.Core.Browser;
 using Crawler.Core.Helpers;
 using Crawler.Core.Models;
 using Crawler.Core.Robots;
@@ -15,12 +16,13 @@ public abstract class PuppeteerCrawler<TResult> : AbstractRobotsCrawler<IPage, T
     where TResult : IScrapeResult
 {
     private readonly HeadlessCrawlerOptions _options;
+    private readonly ConcurrentQueue<IPage> _pagePool;
     private readonly ILogger _logger;
+    private readonly string? _initScript;
+    private readonly string[] _launchArgs;
 
     private IBrowser? _browser;
     private IBrowserContext? _browserContext;
-
-    private readonly ConcurrentQueue<IPage> _pagePool;
 
     private bool _disposed;
 
@@ -29,6 +31,16 @@ public abstract class PuppeteerCrawler<TResult> : AbstractRobotsCrawler<IPage, T
         _options = options.Value;
         _logger = logger;
         _pagePool = new ConcurrentQueue<IPage>();
+
+        if (_options.BrowserProfile.Impersonate)
+        {
+            _initScript = BrowserHelper.BuildInitScript(_options.BrowserProfile);
+            _launchArgs = Constants.UserImpersonationArgs;
+        }
+        else
+        {
+            _launchArgs = Constants.DefaultLaunchArgs;
+        }
     }
 
     public override async Task<TResult> Start(string entry, CancellationToken cancellationToken = default)
@@ -86,10 +98,11 @@ public abstract class PuppeteerCrawler<TResult> : AbstractRobotsCrawler<IPage, T
 
     protected virtual async ValueTask ConfigurePage(IPage page)
     {
-        if (_options.UserAgent != null)
-        {
-            await page.SetUserAgentAsync(_options.UserAgent);
-        }
+        await page.SetUserAgentAsync(_options.BrowserProfile.UserAgent);
+        await page.SetExtraHttpHeadersAsync(_options.BrowserProfile.AdditionalHeaders);
+
+        if (_initScript != null)
+            await page.EvaluateExpressionOnNewDocumentAsync(_initScript);
 
         if (_options.BlockNonEssentialResources)
         {
@@ -134,10 +147,13 @@ public abstract class PuppeteerCrawler<TResult> : AbstractRobotsCrawler<IPage, T
 
     protected virtual LaunchOptions GetLaunchOptions()
     {
-        return new LaunchOptions
+        var options = new LaunchOptions
         {
-            Headless = true
+            Headless = true,
+            Args = _launchArgs
         };
+
+        return options;
     }
 
     protected override Task DisposeResponse(IPage? response)

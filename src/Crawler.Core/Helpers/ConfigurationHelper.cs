@@ -11,13 +11,25 @@ public static class ConfigurationHelper
         client.DefaultRequestVersion = HttpVersion.Version20;
         client.DefaultVersionPolicy = HttpVersionPolicy.RequestVersionOrLower;
 
-        if (string.IsNullOrEmpty(options.UserAgent))
+        var profile = options.BrowserProfile;
+
+        AddIfMissing(client, "User-Agent", profile.UserAgent);
+        AddIfMissing(client, "Accept", profile.Accept);
+        AddIfMissing(client, "Accept-Language", profile.AcceptLanguage);
+
+        foreach (var header in profile.AdditionalHeaders)
+            AddIfMissing(client, header.Key, header.Value);
+    }
+
+    private static void AddIfMissing(HttpClient client, string name, string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
             return;
 
-        if (client.DefaultRequestHeaders.Contains("User-Agent"))
+        if (client.DefaultRequestHeaders.Contains(name))
             return;
 
-        client.DefaultRequestHeaders.Add("User-Agent", options.UserAgent);
+        client.DefaultRequestHeaders.Add(name, value);
     }
 
     public static void ConfigureClient(HttpClient client, IOptions<CrawlerOptions> options)

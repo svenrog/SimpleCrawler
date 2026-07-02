@@ -25,8 +25,8 @@ public abstract class AbstractRobotsCrawler<TResponse, TResult> : AbstractCrawle
         _logger = logger;
         _productToken = ProductToken.Wildcard;
 
-        if (_options.UserAgent != null)
-            _productToken = DeriveProductToken(_options.UserAgent);
+        if (_options.BrowserProfile.UserAgent != null)
+            _productToken = DeriveProductToken(_options.BrowserProfile.UserAgent);
     }
 
     private static ProductToken DeriveProductToken(string userAgent)

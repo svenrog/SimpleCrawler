@@ -35,6 +35,24 @@ Honor `<meta name="robots">`. `noindex` pages are fetched for their links but ex
 
 Seed from `sitemap.xml` (via `robots.txt`) in addition to following links. Disable to crawl only what's reachable from the entry URL (this is used for testing mainly).
 
-## UserAgent
+## BrowserProfile
 
-`User-Agent` header, and the agent matched against `robots.txt`. Set something identifiable.
+The identity presented to the target: `User-Agent`, `Accept`/`Accept-Language`, `Locale`, and
+any extra request headers. The `User-Agent` is also the token matched against `robots.txt`.
+
+- `DefaultBrowserProfile` (default) — an honest, identifiable `SimpleCrawler/…` agent.
+- `ChromeBrowserProfile` — **browser impersonation**: a current Chrome `User-Agent` plus the
+  matching client-hint (`Sec-CH-UA*`) and fetch-metadata (`Sec-Fetch-*`) headers. On the headless
+  backends it additionally launches with `--disable-blink-features=AutomationControlled` and injects
+  an init script that masks `navigator.webdriver`/`languages`/`plugins`. Use it only when a site's
+  bot detection blocks the honest agent (e.g. a `403`/`429` on the entry request).
+
+```csharp
+var options = new CrawlerOptions
+{
+    BrowserProfile = new ChromeBrowserProfile(),   // or new DefaultBrowserProfile { UserAgent = "my-crawler/1.0" }
+};
+```
+
+`BrowserProfiles.Default` / `BrowserProfiles.Chrome` expose shared instances; the CLI selects
+between them with the `--impersonate` flag (`none` / `chrome`).
