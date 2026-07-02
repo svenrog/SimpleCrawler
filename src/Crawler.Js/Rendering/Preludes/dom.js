@@ -1558,6 +1558,31 @@
     }
   };
 
+  // dom/HTMLDialogElement.ts
+  var HTMLDialogElement = class extends HTMLElement {
+    constructor() {
+      super("dialog");
+      this.returnValue = "";
+    }
+    get open() {
+      return this.hasAttribute("open");
+    }
+    set open(value) {
+      if (value) this.setAttribute("open", "");
+      else this.removeAttribute("open");
+    }
+    show() {
+      this.setAttribute("open", "");
+    }
+    showModal() {
+      this.setAttribute("open", "");
+    }
+    close(returnValue) {
+      this.removeAttribute("open");
+      if (returnValue !== void 0) this.returnValue = String(returnValue);
+    }
+  };
+
   // dom/reflectedElements.ts
   var reflectedElementFactories = {
     a: () => new HTMLAnchorElement(),
@@ -1568,7 +1593,8 @@
     img: () => new HTMLImageElement(),
     iframe: () => new HTMLIFrameElement(),
     video: () => new HTMLVideoElement(),
-    audio: () => new HTMLAudioElement()
+    audio: () => new HTMLAudioElement(),
+    dialog: () => new HTMLDialogElement()
   };
 
   // html/entities.ts
@@ -2038,6 +2064,7 @@
     HTMLAudioElement: () => HTMLAudioElement,
     HTMLButtonElement: () => HTMLButtonElement,
     HTMLCanvasElement: () => HTMLCanvasElement,
+    HTMLDialogElement: () => HTMLDialogElement,
     HTMLFormElement: () => HTMLFormElement,
     HTMLIFrameElement: () => HTMLIFrameElement,
     HTMLImageElement: () => HTMLImageElement,

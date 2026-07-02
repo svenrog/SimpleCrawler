@@ -8,6 +8,7 @@ import { HTMLImageElement } from "./HTMLImageElement";
 import { HTMLIFrameElement } from "./HTMLIFrameElement";
 import { HTMLVideoElement } from "./HTMLVideoElement";
 import { HTMLAudioElement } from "./HTMLAudioElement";
+import { HTMLDialogElement } from "./HTMLDialogElement";
 
 // tag → factory for the element subclasses that reflect properties (anchor href, script/img src, select
 // options, ...). Shared by the string parser, the tree builder and document.createElement so every
@@ -22,4 +23,5 @@ export const reflectedElementFactories: Record<string, () => Element> = {
     iframe: () => new HTMLIFrameElement(),
     video: () => new HTMLVideoElement(),
     audio: () => new HTMLAudioElement(),
+    dialog: () => new HTMLDialogElement(),
 };

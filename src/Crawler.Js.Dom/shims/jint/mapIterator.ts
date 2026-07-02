@@ -1,8 +1,7 @@
 // Jint's Map.prototype.keys()/values() iterators enumerate the live backing list, so mutating the map
 // mid-iteration (e.g. `for (const k of map.keys()) map.delete(k)`, which a bundle is free to do) throws a
 // CLR "Collection was modified" that escapes the bundle. The entries iterator tolerates it, so route both
-// views through it; this keeps live semantics (added keys seen, deleted keys skipped) and stays a no-op
-// on V8, which has neither the bug nor this prelude.
+// views through it; this keeps live semantics (added keys seen, deleted keys skipped).
 
 const proto = Map.prototype;
 const entries = proto.entries;

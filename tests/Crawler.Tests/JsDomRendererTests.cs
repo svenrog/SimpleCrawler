@@ -1115,6 +1115,44 @@ public class JsDomRendererTests
         Assert.Contains("href=\"/media-true\"", rendered);
     }
 
+    // A modal component refs its <dialog> and calls showModal()/close() in a mount effect to sync visibility
+    // (open ? el.showModal() : el.close()). Those were missing on the generic element a <dialog> parsed into,
+    // so `el.close is not a function` threw and tripped the SPA error boundary. Dialogs now carry the inert
+    // open/show/showModal/close API and are instanceof HTMLDialogElement.
+    [Theory]
+    [InlineData(JsEngine.Jint)]
+    [InlineData(JsEngine.V8)]
+    public async Task JsMode_DialogElement_HasInertModalApi(JsEngine engine)
+    {
+        if (engine == JsEngine.V8)
+            Assert.SkipUnless(V8Support.IsAvailable, V8Support.UnavailableReason);
+
+        const string html = """
+            <!doctype html><html><body>
+            <script>
+              var out='/dialog';
+              try {
+                var d=document.createElement('dialog');
+                var isType = d instanceof HTMLDialogElement;
+                d.showModal();
+                var opened = d.open;
+                d.close('ok');
+                out='/dialog-'+isType+'-'+opened+'-'+d.open+'-'+d.returnValue;
+              } catch (e) { out='/err-'+e.message; }
+              var a=document.createElement('a');
+              a.setAttribute('href',out);
+              document.body.appendChild(a);
+            </script>
+            </body></html>
+            """;
+
+        var renderer = CreateJsRenderer(engine);
+        var result = await renderer.RenderAsync(Encoding.UTF8.GetBytes(html), "https://example.test/", new HttpClient(), CancellationToken.None);
+        var rendered = Encoding.UTF8.GetString(result);
+
+        Assert.Contains("href=\"/dialog-true-true-false-ok\"", rendered);
+    }
+
     // The global Response is a spec-compliant constructor the page's own bundle may call directly
     // (new Response(body, init), or new Response() with no args) — not only the internal wrapper fetch
     // builds. A bundle that did `new Response()` and read `.ok` crashed ("Cannot read properties of

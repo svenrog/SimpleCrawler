@@ -13,6 +13,7 @@ export { HTMLIFrameElement } from "./HTMLIFrameElement";
 export { HTMLMediaElement } from "./HTMLMediaElement";
 export { HTMLVideoElement } from "./HTMLVideoElement";
 export { HTMLAudioElement } from "./HTMLAudioElement";
+export { HTMLDialogElement } from "./HTMLDialogElement";
 
 // Marker interfaces for `instanceof` checks. Frameworks probe element types (React's getActiveElementDeep
 // does `node instanceof window.HTMLIFrameElement`, Vue references SVGElement) and a `instanceof undefined`
