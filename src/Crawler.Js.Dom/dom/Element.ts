@@ -54,6 +54,17 @@ export class Element extends Node {
         return this.attrs.has(name);
     }
 
+    toggleAttribute(name: string, force?: boolean): boolean {
+        const present = this.attrs.has(name);
+        const add = force === undefined ? !present : force;
+        if (add) {
+            if (!present) this.attrs.set(name, "");
+            return true;
+        }
+        this.attrs.delete(name);
+        return false;
+    }
+
     getAttributeNames(): string[] {
         return Array.from(this.attrs.keys());
     }

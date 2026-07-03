@@ -55,6 +55,16 @@ export class Document extends Node {
         return "";
     }
 
+    // document.domain mirrors the origin's hostname; scripts split/compare it and throw their own error when
+    // it's undefined. The setter (legacy same-origin relaxation) is accepted and ignored — a single-pass render
+    // never makes cross-origin calls that would consult it.
+    get domain(): string {
+        const loc = this.location;
+        return loc && loc.hostname ? String(loc.hostname) : "";
+    }
+
+    set domain(_value: unknown) { }
+
     // A real document.cookie is always a string. Bundles probe it (document.cookie.includes(...)) and set it;
     // we keep a name→value store, ignoring attributes (path/expires/domain) and expiry since rendering is a
     // single synchronous pass.

@@ -781,6 +781,98 @@ public class JsDomRendererTests
         Assert.Contains("href=\"/w375x812-screen375-client375-mobile\"", mobile);
     }
 
+    // Web APIs (custom elements, structuredClone, AbortController-shaped code) throw DOMException; a bundle that
+    // references the constructor for `new DOMException`, `instanceof`, or subclassing must find it as a global.
+    [Theory]
+    [InlineData(JsEngine.Jint)]
+    [InlineData(JsEngine.V8)]
+    public async Task JsMode_DOMExceptionConstructorAndProperties(JsEngine engine)
+    {
+        if (engine == JsEngine.V8)
+            Assert.SkipUnless(V8Support.IsAvailable, V8Support.UnavailableReason);
+
+        const string html = """
+            <html><body><div id="t"></div>
+            <script>
+            var e = new DOMException('nope', 'NotFoundError');
+            var ok = e instanceof Error && e.name === 'NotFoundError' && e.message === 'nope'
+                && e.code === 8 && DOMException.NOT_FOUND_ERR === 8;
+            var thrown = '';
+            try { throw new DOMException('stop', 'AbortError'); } catch (x) { thrown = x.name + x.code; }
+            var a = document.createElement('a');
+            a.setAttribute('href', '/' + (ok ? 'ok' : 'bad') + '-' + thrown);
+            document.getElementById('t').appendChild(a);
+            </script>
+            </body></html>
+            """;
+
+        var renderer = CreateJsRenderer(engine);
+        var result = await renderer.RenderAsync(Encoding.UTF8.GetBytes(html), "http://localhost:5000/", new HttpClient(), CancellationToken.None);
+        var rendered = Encoding.UTF8.GetString(result);
+
+        Assert.Contains("href=\"/ok-AbortError20\"", rendered);
+    }
+
+    // document.domain mirrors the page origin's hostname; behaviors code reads/splits it and throws its own
+    // "Unable to get document domain" when it's undefined. Assignment (legacy relaxation) is a tolerated no-op.
+    [Theory]
+    [InlineData(JsEngine.Jint)]
+    [InlineData(JsEngine.V8)]
+    public async Task JsMode_DocumentDomain_MirrorsLocationHostname(JsEngine engine)
+    {
+        if (engine == JsEngine.V8)
+            Assert.SkipUnless(V8Support.IsAvailable, V8Support.UnavailableReason);
+
+        const string html = """
+            <html><body><div id="t"></div>
+            <script>
+            document.domain = 'example.test';
+            var a = document.createElement('a');
+            a.setAttribute('href', '/' + document.domain);
+            document.getElementById('t').appendChild(a);
+            </script>
+            </body></html>
+            """;
+
+        var renderer = CreateJsRenderer(engine);
+        var result = await renderer.RenderAsync(Encoding.UTF8.GetBytes(html), "https://example.test/page", new HttpClient(), CancellationToken.None);
+        var rendered = Encoding.UTF8.GetString(result);
+
+        Assert.Contains("href=\"/example.test\"", rendered);
+    }
+
+    // Custom-element connectedCallbacks flip boolean attributes via el.toggleAttribute(name[, force]);
+    // returns the resulting presence, honours the optional force arg, and mutates the live attribute.
+    [Theory]
+    [InlineData(JsEngine.Jint)]
+    [InlineData(JsEngine.V8)]
+    public async Task JsMode_ToggleAttribute_FlipsAndHonoursForce(JsEngine engine)
+    {
+        if (engine == JsEngine.V8)
+            Assert.SkipUnless(V8Support.IsAvailable, V8Support.UnavailableReason);
+
+        const string html = """
+            <html><body><div id="t"></div>
+            <script>
+            var d = document.getElementById('t');
+            var on = d.toggleAttribute('hidden');            // absent -> add, returns true
+            var off = d.toggleAttribute('hidden');           // present -> remove, returns false
+            var forced = d.toggleAttribute('data-x', true);  // force add
+            d.toggleAttribute('data-x', true);               // idempotent
+            var a = document.createElement('a');
+            a.setAttribute('href', '/' + on + '-' + off + '-' + forced + '-has' + d.hasAttribute('data-x'));
+            d.appendChild(a);
+            </script>
+            </body></html>
+            """;
+
+        var renderer = CreateJsRenderer(engine);
+        var result = await renderer.RenderAsync(Encoding.UTF8.GetBytes(html), "http://localhost:5000/", new HttpClient(), CancellationToken.None);
+        var rendered = Encoding.UTF8.GetString(result);
+
+        Assert.Contains("href=\"/true-false-true-hastrue\"", rendered);
+    }
+
     private static async Task<string> RenderViewport(JsEngine engine, string html, JsRenderOptions? options)
     {
         var renderer = CreateJsRenderer(engine, options);
