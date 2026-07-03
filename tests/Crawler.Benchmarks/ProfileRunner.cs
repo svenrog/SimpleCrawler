@@ -2,6 +2,7 @@ using Crawler.Core;
 using Crawler.Js.AngleSharp;
 using Crawler.Js.HtmlAgilityPack;
 using Crawler.Js.Jint;
+using Crawler.Js.Models;
 using Crawler.Js.V8;
 using Crawler.TestHost.Infrastructure.Factories;
 using Microsoft.Extensions.DependencyInjection;
@@ -13,8 +14,9 @@ namespace Crawler.Benchmarks;
 
 // Temporary investigation harness (not a benchmark). Drives the real crawl/render path for a single
 // engine+parser combo so RenderProfiler (JSRENDER_PROFILE=1) prints a clean per-phase table at exit.
-// Usage: dotnet run -c Release --project tests/Crawler.Benchmarks -- profile <combo> <iterations>
-//   combo = jint-js | jint-as | jint-hap | v8-js | v8-as | v8-hap
+// Usage: dotnet run -c Release --project tests/Crawler.Benchmarks -- profile <combo> <iterations> [jintMaxUses]
+//   combo       = jint-js | jint-as | jint-hap | v8-js | v8-as | v8-hap
+//   jintMaxUses = optional Jint engine-pool cap for A/B runs (0 = fresh engine per page); omitted = default
 internal static class ProfileRunner
 {
     private const int _port = 5299;
@@ -28,14 +30,14 @@ internal static class ProfileRunner
         RespectRobotsTxt = false,
     };
 
-    public static async Task Run(string combo, int iterations)
+    public static async Task Run(string combo, int iterations, int? jintMaxUses = null)
     {
         var tokenSource = new CancellationTokenSource();
         var host = SpaWebApplicationFactory.Create(_entry, "preact");
         _ = host.StartAsync(tokenSource.Token);
         await Task.Delay(1500);
 
-        Func<CancellationToken, Task> crawl = BuildCrawl(combo);
+        Func<CancellationToken, Task> crawl = BuildCrawl(combo, jintMaxUses);
 
         await crawl(tokenSource.Token);
 
@@ -57,7 +59,7 @@ internal static class ProfileRunner
         await host.DisposeAsync();
     }
 
-    private static Func<CancellationToken, Task> BuildCrawl(string combo)
+    private static Func<CancellationToken, Task> BuildCrawl(string combo, int? jintMaxUses)
     {
         Action<IServiceCollection> parser = combo switch
         {
@@ -68,7 +70,11 @@ internal static class ProfileRunner
 
         if (combo.StartsWith("jint"))
         {
-            var crawler = Build(s => s.AddJintCrawler(_options), parser).GetRequiredService<DefaultJintCrawler>();
+            // jintMaxUses toggles the engine pool for A/B measurement: 0 = fresh engine per page (un-pooled
+            // baseline), >0 = reuse each engine for that many pages. Omitted keeps the production default.
+            var engineOptions = jintMaxUses is { } maxUses ? new JintEngineOptions { MaxUsesPerEngine = maxUses } : new JintEngineOptions();
+
+            var crawler = Build(s => s.AddJintCrawler(_options, new JsRenderOptions(), engineOptions), parser).GetRequiredService<DefaultJintCrawler>();
             return ct => crawler.Start(_entry, ct);
         }
         else

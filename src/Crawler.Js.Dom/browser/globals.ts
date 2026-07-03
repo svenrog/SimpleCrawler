@@ -38,6 +38,15 @@ import { EventListenerMap, EventTarget, addListener, removeListener, fireEvent }
 export const doc = new Document(globalThis as any);
 documentRef.current = doc;
 
+// window's own event listeners. Module-scoped (not local to installDOM) so resetGlobals can drop a previous
+// page's listeners when the realm is reused by the Jint engine pool.
+let _windowListeners: EventListenerMap = {};
+
+// The set of global keys present once the DOM/console/crawler API are installed but before any bundle runs.
+// snapshotBaseline captures it once; resetGlobals deletes everything a page's bundle added on top so a reused
+// realm doesn't leak globals (webpack chunk registries, framework singletons, __NEXT_DATA__, …) into the next.
+let _baseGlobals: Set<string> | null = null;
+
 export function installDOM(global: any): void {
     global.document = doc;
     global.window = global;
@@ -47,10 +56,9 @@ export function installDOM(global: any): void {
     global.history = createHistory();
     // window is an EventTarget with the same real dispatch as document/Element; browser events like load/resize
     // are never synthesised in the single-pass render, so listeners only fire when a bundle dispatches explicitly.
-    const windowListeners: EventListenerMap = {};
-    global.addEventListener = (t: string, cb: (...args: any[]) => void) => addListener(windowListeners, t, cb);
-    global.removeEventListener = (t: string, cb: (...args: any[]) => void) => removeListener(windowListeners, t, cb);
-    global.dispatchEvent = (event: any) => fireEvent(global, windowListeners, event);
+    global.addEventListener = (t: string, cb: (...args: any[]) => void) => addListener(_windowListeners, t, cb);
+    global.removeEventListener = (t: string, cb: (...args: any[]) => void) => removeListener(_windowListeners, t, cb);
+    global.dispatchEvent = (event: any) => fireEvent(global, _windowListeners, event);
     // Handler props declared null so `'onX' in window` feature-detection passes and bundle assignments stick;
     // events never fire in the single-pass render, so the assigned handlers are only ever stored.
     for (const on of ["onresize", "onscroll", "onload", "onerror", "onunload", "onbeforeunload",
@@ -121,5 +129,26 @@ export function installDOM(global: any): void {
     installScrollApi(global);
     for (const ctor of [EventTarget, Node, Element, CharacterData, Document, DocumentFragment, HTMLElement]) {
         markPrototypeNative(ctor);
+    }
+}
+
+// Records the clean set of globals after all preludes install, so resetGlobals knows the baseline. Called
+// once, after installDOM/installConsole/installCrawlerApi; host-embedded per-page functions (e.g. __crawlerLog)
+// are intentionally not in the baseline — the renderer re-embeds them each page, so scrubbing them is harmless.
+export function snapshotBaseline(global: any): void {
+    _baseGlobals = new Set(Object.keys(global));
+}
+
+// Restores window to its post-install baseline for a reused realm (Jint pool): drops the previous page's
+// window listeners, empties web storage, and deletes every own global the bundle added on top of the baseline.
+// Deleting only surplus own keys leaves the engine intrinsics and the DOM globals (all in the baseline) intact.
+export function resetGlobals(global: any): void {
+    _windowListeners = {};
+    if (global.localStorage && typeof global.localStorage.clear === "function") global.localStorage.clear();
+    if (global.sessionStorage && typeof global.sessionStorage.clear === "function") global.sessionStorage.clear();
+    if (!_baseGlobals) return;
+    for (const key of Object.keys(global)) {
+        if (_baseGlobals.has(key)) continue;
+        try { delete global[key]; } catch { /* a non-configurable global the bundle pinned just stays */ }
     }
 }

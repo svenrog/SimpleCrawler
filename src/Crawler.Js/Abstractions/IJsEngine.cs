@@ -4,6 +4,11 @@ namespace Crawler.Js.Abstractions;
 
 public interface IJsEngine : IDisposable
 {
+    // Begins a page on this engine. Returns true when the caller must install the DOM prelude (a fresh realm —
+    // always the case for V8, and the first use of a pooled Jint engine); returns false when the engine reused
+    // an existing realm and has already reset its per-page state, so the ~90KB dom.js re-eval can be skipped.
+    bool BeginPage();
+
     void EmbedHostObject(string name, object value);
 
     void EmbedHostType(string name, Type type);

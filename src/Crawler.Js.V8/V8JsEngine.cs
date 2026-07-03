@@ -51,6 +51,10 @@ internal sealed class V8JsEngine : IJsEngine
         _engine.DocumentSettings.Loader = _loader;
     }
 
+    // Every V8 page runs on a fresh context (isolated globals) even though the isolate is pooled, so the DOM
+    // prelude is always installed anew; there is no realm to reset.
+    public bool BeginPage() => true;
+
     public void EmbedHostObject(string name, object value)
     {
         _engine.AddHostObject(name, value);

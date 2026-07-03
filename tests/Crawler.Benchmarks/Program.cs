@@ -10,7 +10,9 @@ internal class Program
         {
             var combo = args.Length >= 2 ? args[1] : "jint-hap";
             var iterations = args.Length >= 3 ? int.Parse(args[2]) : 20;
-            await ProfileRunner.Run(combo, iterations);
+            // Optional Jint engine-pool cap for A/B runs (0 = fresh engine per page); omitted = production default.
+            int? jintMaxUses = args.Length >= 4 ? int.Parse(args[3]) : null;
+            await ProfileRunner.Run(combo, iterations, jintMaxUses);
             return;
         }
 

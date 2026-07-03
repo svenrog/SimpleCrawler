@@ -37,6 +37,16 @@ export class CustomElementRegistry {
         }
     }
 
+    // Forgets every definition and pending whenDefined waiter so a reused realm (Jint pool) starts the next
+    // page with an empty registry — otherwise a second page's `define` of the same tag would silently no-op
+    // against the previous page's constructor. _doc is kept: the singleton document is reused, not rebuilt.
+    reset(): void {
+        this._definitions.clear();
+        this._pending.clear();
+        this._nameStack.length = 0;
+        this._upgradeTarget = null;
+    }
+
     get(name: unknown): any {
         const def = this._definitions.get(String(name).toLowerCase());
         return def ? def.ctor : undefined;

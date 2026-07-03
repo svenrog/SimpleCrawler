@@ -1,10 +1,11 @@
-import { doc } from "../browser/globals";
+import { doc, resetGlobals } from "../browser/globals";
 import { parseHTML } from "../html/parser";
 import { buildDocumentFromTree } from "../html/treeBuilder";
 import { serializeNode } from "../html/serializer";
 import { applyUrl } from "../url/resolve";
-import { pumpTasks, pendingCount } from "../scheduler/taskQueue";
-import { takeResources, pendingResourceCount, fireResourceEvent } from "../dom/resourceLoader";
+import { pumpTasks, pendingCount, resetTasks } from "../scheduler/taskQueue";
+import { takeResources, pendingResourceCount, fireResourceEvent, resetResources } from "../dom/resourceLoader";
+import { customElements } from "../dom/customElements";
 import { setViewport } from "../browser/viewport";
 import { enableDomProfile, dumpDomProfile } from "../profiling/domProfiler";
 import { HTMLScriptElement } from "../dom/HTMLScriptElement";
@@ -106,7 +107,20 @@ function collectLinks(): { anchors: (string | null)[]; canonical: string | null;
     return { anchors, canonical, robots };
 }
 
+// Wipes all per-page state so the Jint engine pool can reuse a realm across pages without re-evaluating the
+// ~90KB dom.js (which is what "setupGlobals" costs). It resets the singleton document, the custom-element
+// registry, the timer and resource queues, window listeners/storage, and any globals the previous bundle set.
+// The DOM class definitions and the __crawler* API — the expensive parts of dom.js — are left in place.
+function resetDom(global: any): void {
+    doc.reset();
+    customElements.reset();
+    resetTasks();
+    resetResources();
+    resetGlobals(global);
+}
+
 export function installCrawlerApi(global: any): void {
+    global.__crawlerReset = () => { resetDom(global); };
     global.__crawlerSetLocation = (url: string) => { applyUrl(url); };
     global.__crawlerSetViewport = (width: number, height: number) => { setViewport(width, height); };
     global.__crawlerSetCurrentScript = (src: unknown) => { setCurrentScript(src); };
