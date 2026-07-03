@@ -91,6 +91,10 @@
             if (typeof btoa !== 'function' || typeof atob !== 'function') return false;
             return btoa('foobar') === 'Zm9vYmFy' && atob('Zm9vYmFy') === 'foobar';
         },
+        'scroll-offsets': function () {
+            return typeof window.scrollX === 'number' && typeof window.scrollY === 'number'
+                && typeof window.pageXOffset === 'number' && typeof window.pageYOffset === 'number';
+        },
         'document-referrer': function () {
             return typeof document.referrer === 'string'
                 && typeof document.referrer.split('/')[2] !== 'object';
