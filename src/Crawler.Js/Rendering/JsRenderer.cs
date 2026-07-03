@@ -409,6 +409,13 @@ public sealed class JsRenderer
         {
             _logger.LogWarning("Module execution error on '{url}': {message}\n{details}", pageUrl, ex.Message, ex.ErrorDetails);
         }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // Importing a module runs the engine's loader — host code (fetch, parse) that can throw raw CLR
+            // exceptions the engine never surfaces as a JsException. A single failed module must not abort the
+            // whole page render, so anything short of cancellation is logged and the page continues.
+            _logger.LogWarning("Module load error on '{url}': {message}", pageUrl, ex.Message);
+        }
     }
 
     private static bool ContainsScriptTag(ReadOnlySpan<byte> html)

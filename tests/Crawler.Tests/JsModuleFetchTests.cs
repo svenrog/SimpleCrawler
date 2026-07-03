@@ -8,6 +8,7 @@ using Crawler.Tests.Helpers;
 using Crawler.Tests.Models;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
+using System.Net;
 using System.Text;
 
 namespace Crawler.Tests;
@@ -43,6 +44,45 @@ public class JsModuleFetchTests
 
         Assert.Contains("href=\"/self\"", rendered);
         Assert.Contains("href=\"/module-ran\"", rendered);
+    }
+
+    // An external module whose URL serves the site's HTML catch-all instead of JS can't be parsed as a module —
+    // Jint's PrepareModule threw "Unexpected token <" from inside the loader, a raw CLR exception that killed the
+    // whole fetch (live-repro'd on ewheels.com). The module degrades to an empty module now, so the page's own
+    // static content still renders instead of the crawl aborting on the page.
+    [Theory]
+    [InlineData(JsEngine.Jint)]
+    [InlineData(JsEngine.V8)]
+    public async Task ExternalModuleReturningHtmlFallback_DegradesInsteadOfCrashing(JsEngine engine)
+    {
+        if (engine == JsEngine.V8)
+            Assert.SkipUnless(V8Support.IsAvailable, V8Support.UnavailableReason);
+
+        const string html = """
+            <!doctype html><html><head></head><body>
+            <a href="/self">s</a>
+            <script type="module" src="/entry.js"></script>
+            </body></html>
+            """;
+
+        using var client = new HttpClient(new HtmlFallbackHandler());
+        var renderer = CreateRenderer(engine);
+        var result = await renderer.RenderAsync(Encoding.UTF8.GetBytes(html), "https://www.example.com/", client, CancellationToken.None);
+        var rendered = Encoding.UTF8.GetString(result);
+
+        Assert.Contains("href=\"/self\"", rendered);
+    }
+
+    private sealed class HtmlFallbackHandler : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            // The SPA catch-all: every unmatched path (including a mis-resolved module URL) serves index.html.
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent("<!doctype html><html><body>not javascript</body></html>"),
+            });
+        }
     }
 
     private static JsRenderer CreateRenderer(JsEngine engine)
