@@ -15,12 +15,17 @@ internal sealed class JintEnginePool : IDisposable
 {
     private readonly ConcurrentBag<JintEngineLease> _leases = [];
     private readonly JintModuleCache _moduleCache;
+    private readonly bool _reuseEngines;
     private readonly int _maxUsesPerEngine;
 
     public JintEnginePool(JintEngineOptions options, JintModuleCache moduleCache)
     {
         _moduleCache = moduleCache;
-        _maxUsesPerEngine = options.MaxUsesPerEngine > 0 ? options.MaxUsesPerEngine : 0;
+        // Reuse hinges on the reflective per-page reset (JintRealmReset): without it a reused realm leaks its
+        // module registry and lexical record across pages. Disable reuse when the flag is off (trimmed/AOT
+        // builds) or the reflection didn't resolve, so every page gets a fresh, reset-free engine.
+        _reuseEngines = options.MaxUsesPerEngine > 0 && options.AllowReflectiveRealmReset && JintRealmReset.IsSupported;
+        _maxUsesPerEngine = options.MaxUsesPerEngine;
     }
 
     public JintEngineLease Rent()
@@ -50,7 +55,7 @@ internal sealed class JintEnginePool : IDisposable
     public void Return(JintEngineLease lease)
     {
         // The lease is owned exclusively by one wrapper between Rent and Return, so Uses is single-threaded.
-        if (++lease.Uses >= _maxUsesPerEngine)
+        if (!_reuseEngines || ++lease.Uses >= _maxUsesPerEngine)
         {
             (lease.Engine as IDisposable)?.Dispose();
             return;

@@ -1,3 +1,4 @@
+using Crawler.Core.Helpers;
 using Crawler.Js.Abstractions;
 using Crawler.Js.Errors;
 using Crawler.Js.Models;
@@ -5,7 +6,6 @@ using Microsoft.ClearScript;
 using Microsoft.ClearScript.JavaScript;
 using Microsoft.ClearScript.V8;
 using System.Globalization;
-using System.Text.Json;
 
 namespace Crawler.Js.V8;
 
@@ -104,7 +104,7 @@ internal sealed class V8JsEngine : IJsEngine
             var uri = new Uri(specifier);
             _loader.Seed(uri, source);
 
-            var promise = _engine.Evaluate($"import({JsonSerializer.Serialize(specifier)})");
+            var promise = _engine.Evaluate($"import({JsonLiteral.String(specifier)})");
             var task = (Task<object>)JavaScriptExtensions.ToTask(promise);
             task.Wait(_moduleEvaluationTimeoutMs);
         }
