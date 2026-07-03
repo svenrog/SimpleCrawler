@@ -1340,7 +1340,7 @@ public class JsDomRendererTests
             </body></html>
             """;
 
-        var renderer = CreateJsRenderer(engine);
+        var renderer = CreateJsRenderer(engine, new JsRenderOptions { EnableIndexedDb = true });
         var result = await renderer.RenderAsync(Encoding.UTF8.GetBytes(html), "https://example.test/", new HttpClient(), CancellationToken.None);
         var rendered = Encoding.UTF8.GetString(result);
 

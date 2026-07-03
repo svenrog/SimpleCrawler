@@ -11,6 +11,10 @@ internal static class JsPreludes
     // Network fetch/XHR shim, run only when EnableFetch is on.
     public static readonly PreludeEntry Fetch = Load("fetch.js");
 
+    // In-memory IndexedDB, run only when EnableIndexedDb is on. Kept out of dom.js so the default render
+    // neither evaluates its implementation nor exposes window.indexedDB.
+    public static readonly PreludeEntry IndexedDb = Load("indexeddb.js");
+
     private static PreludeEntry Load(string fileName)
     {
         var type = typeof(JsPreludes);

@@ -66,10 +66,18 @@ public sealed class JsRenderer
         using var engine = RenderProfiler.Enabled ? new ProfilingJsEngine(rawEngine) : rawEngine;
 
         var setupTime = RenderProfiler.Start();
-        RunPrelude(engine, JsPreludes.Dom);
+        // A reused pooled realm (Jint) resets its per-page state inside BeginPage and returns false, so the big
+        // dom.js prelude is only re-evaluated on a fresh realm. The smaller fetch/indexeddb preludes below are
+        // separate IIFEs the renderer still runs every page, so they stay correct on a reused realm.
+        if (engine.BeginPage())
+            RunPrelude(engine, JsPreludes.Dom);
         engine.CallGlobal("__crawlerSetLocation", pageUrl);
         engine.CallGlobal("__crawlerSetViewport", (int)_options.Viewport.Width, (int)_options.Viewport.Height);
         ConfigureScriptLogging(engine);
+        if (_options.EnableIndexedDb)
+            RunPrelude(engine, JsPreludes.IndexedDb);
+        if (DomProfiler.Enabled)
+            engine.CallGlobal("__crawlerEnableDomProfile");
         RenderProfiler.Stop("phase.setupGlobals", setupTime);
 
         var parseTime = RenderProfiler.Start();
@@ -136,6 +144,8 @@ public sealed class JsRenderer
         var result = finalize(engine);
         RenderProfiler.Stop("phase.finalize", finalizeTime);
         RenderProfiler.Stop("phase.total", totalTime);
+        if (DomProfiler.Enabled)
+            DomProfiler.Add(engine.Evaluate<string>("__crawlerDomProfileDump()"));
         return result;
     }
 

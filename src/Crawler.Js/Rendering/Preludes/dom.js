@@ -498,6 +498,11 @@
   function pendingResourceCount() {
     return _pending.length;
   }
+  function resetResources() {
+    _pending.length = 0;
+    _byId.clear();
+    _seen = /* @__PURE__ */ new WeakSet();
+  }
   function fireResourceEvent(id, type) {
     const node = _byId.get(id);
     if (!node) return;
@@ -1122,6 +1127,15 @@
         for (const w of waiters) w(ctor);
       }
     }
+    // Forgets every definition and pending whenDefined waiter so a reused realm (Jint pool) starts the next
+    // page with an empty registry — otherwise a second page's `define` of the same tag would silently no-op
+    // against the previous page's constructor. _doc is kept: the singleton document is reused, not rebuilt.
+    reset() {
+      this._definitions.clear();
+      this._pending.clear();
+      this._nameStack.length = 0;
+      this._upgradeTarget = null;
+    }
     get(name) {
       const def = this._definitions.get(String(name).toLowerCase());
       return def ? def.ctor : void 0;
@@ -1704,13 +1718,41 @@
   }
 
   // html/tokenizer.ts
-  function createTagScanners() {
-    return {
-      tagName: /[a-zA-Z][a-zA-Z0-9:_-]*/y,
-      ws: /[\t\n\f\r ]+/y,
-      attrName: /[^\t\n\f\r \/>"'<=]+/y,
-      bareVal: /[^\t\n\f\r >]*/y
-    };
+  function isHtmlSpace(c) {
+    return c === 32 || c === 9 || c === 10 || c === 13 || c === 12;
+  }
+  function skipSpace(src, i, len) {
+    while (i < len && isHtmlSpace(src.charCodeAt(i))) i++;
+    return i;
+  }
+  function isAlpha(c) {
+    return c >= 65 && c <= 90 || c >= 97 && c <= 122;
+  }
+  function matchTagName(src, start, len) {
+    if (start >= len || !isAlpha(src.charCodeAt(start))) return -1;
+    let i = start + 1;
+    while (i < len) {
+      const c = src.charCodeAt(i);
+      if (c >= 65 && c <= 90 || c >= 97 && c <= 122 || c >= 48 && c <= 57 || c === 45 || c === 58 || c === 95) i++;
+      else break;
+    }
+    return i;
+  }
+  function scanAttrName(src, i, len) {
+    while (i < len) {
+      const c = src.charCodeAt(i);
+      if (isHtmlSpace(c) || c === 47 || c === 62 || c === 34 || c === 39 || c === 60 || c === 61) break;
+      i++;
+    }
+    return i;
+  }
+  function scanBareValue(src, i, len) {
+    while (i < len) {
+      const c = src.charCodeAt(i);
+      if (isHtmlSpace(c) || c === 62) break;
+      i++;
+    }
+    return i;
   }
   function findRawTextClose(input, tag, from) {
     return indexOfCI(input, "</" + tag, from);
@@ -1720,6 +1762,10 @@
   function createLocalElement(tag) {
     const factory = reflectedElementFactories[tag];
     return factory ? factory() : new HTMLElement(tag);
+  }
+  function attachChild(parent, child) {
+    child.parentNode = parent;
+    parent.childNodes.push(child);
   }
   function wireDocument(doc2, root, head, body) {
     doc2.documentElement = root;
@@ -1731,50 +1777,98 @@
   function parseHTML(doc2, input) {
     const src = input == null ? "" : String(input);
     const len = src.length;
-    const sc = createTagScanners();
     const root = new HTMLElement("html");
     const head = new HTMLElement("head");
     const body = new HTMLElement("body");
-    root.appendChild(head);
-    root.appendChild(body);
+    attachChild(root, head);
+    attachChild(root, body);
     let open = [body];
-    const cur = () => open[open.length - 1];
     function appendText(parent, text) {
       const last = parent.childNodes[parent.childNodes.length - 1];
       if (last && last.nodeType === 3 /* Text */) last.data += text;
-      else parent.appendChild(new Text(text));
+      else attachChild(parent, new Text(text));
     }
     let i = 0;
     while (i < len) {
-      const ch = src.charAt(i);
-      if (ch !== "<") {
+      if (src.charCodeAt(i) !== 60) {
         let textEnd = src.indexOf("<", i);
         if (textEnd < 0) textEnd = len;
-        appendText(cur(), decodeEntities(src.slice(i, textEnd)));
+        appendText(open[open.length - 1], decodeEntities(src.slice(i, textEnd)));
         i = textEnd;
         continue;
       }
-      if (src.slice(i, i + 4) === "<!--") {
-        const cEnd = src.indexOf("-->", i + 4);
-        cur().appendChild(new Comment(src.slice(i + 4, cEnd < 0 ? len : cEnd)));
-        i = cEnd < 0 ? len : cEnd + 3;
+      const c1 = i + 1 < len ? src.charCodeAt(i + 1) : -1;
+      if (isAlpha(c1)) {
+        const nameEnd = matchTagName(src, i + 1, len);
+        const tag = src.slice(i + 1, nameEnd).toLowerCase();
+        let j = nameEnd;
+        const structural = tag === "html" || tag === "head" || tag === "body";
+        let el;
+        if (tag === "html") el = root;
+        else if (tag === "head") {
+          open = [head];
+          el = head;
+        } else if (tag === "body") {
+          open = [body];
+          el = body;
+        } else el = createLocalElement(tag);
+        let selfClosed = false;
+        while (j < len) {
+          j = skipSpace(src, j, len);
+          if (j >= len) break;
+          const c = src.charCodeAt(j);
+          if (c === 62) {
+            j++;
+            break;
+          }
+          if (c === 47 && src.charCodeAt(j + 1) === 62) {
+            selfClosed = true;
+            j += 2;
+            break;
+          }
+          const nameE = scanAttrName(src, j, len);
+          if (nameE === j) {
+            j++;
+            continue;
+          }
+          const an = src.slice(j, nameE).toLowerCase();
+          j = skipSpace(src, nameE, len);
+          let val = "";
+          if (src.charCodeAt(j) === 61) {
+            j = skipSpace(src, j + 1, len);
+            const q = src.charCodeAt(j);
+            if (q === 34 || q === 39) {
+              const qEnd = src.indexOf(src[j], j + 1);
+              val = decodeEntities(qEnd < 0 ? src.slice(j + 1) : src.slice(j + 1, qEnd));
+              j = qEnd < 0 ? len : qEnd + 1;
+            } else {
+              const vEnd = scanBareValue(src, j, len);
+              val = decodeEntities(src.slice(j, vEnd));
+              j = vEnd;
+            }
+          }
+          el.setAttribute(an, val);
+        }
+        i = j;
+        if (structural) continue;
+        if (RAWTEXT_ELEMENTS[tag]) {
+          const rawFrom = j;
+          const rawTo = findRawTextClose(src, tag, rawFrom);
+          const raw = rawTo < 0 ? src.slice(rawFrom) : src.slice(rawFrom, rawTo);
+          if (raw) attachChild(el, new Text(raw));
+          const rawGt = rawTo < 0 ? len : src.indexOf(">", rawTo);
+          i = rawGt < 0 ? len : rawGt + 1;
+          attachChild(open[open.length - 1], el);
+          continue;
+        }
+        attachChild(open[open.length - 1], el);
+        if (!VOID_ELEMENTS[tag] && !selfClosed) open.push(el);
         continue;
       }
-      if (src.charAt(i + 1) === "!" || src.charAt(i + 1) === "?") {
-        const declEnd = src.indexOf(">", i);
-        const end = declEnd < 0 ? len : declEnd;
-        const bang = src.charAt(i + 1) === "!";
-        const inner = src.slice(i + 2, end);
-        if (!bang) cur().appendChild(new Comment("?" + inner));
-        else if (!/^doctype/i.test(inner)) cur().appendChild(new Comment(inner));
-        i = declEnd < 0 ? len : declEnd + 1;
-        continue;
-      }
-      if (src.charAt(i + 1) === "/") {
-        sc.tagName.lastIndex = i + 2;
-        const tm = sc.tagName.exec(src);
-        if (tm) {
-          const closeName = tm[0].toLowerCase();
+      if (c1 === 47) {
+        const nameEnd = matchTagName(src, i + 2, len);
+        if (nameEnd >= 0) {
+          const closeName = src.slice(i + 2, nameEnd).toLowerCase();
           for (let k = open.length - 1; k > 0; k--) {
             if (open[k].localName === closeName) {
               open.length = k;
@@ -1782,96 +1876,27 @@
             }
           }
         }
-        const slashEnd = src.indexOf(">", i);
-        i = slashEnd < 0 ? len : slashEnd + 1;
+        const gt = src.indexOf(">", i);
+        i = gt < 0 ? len : gt + 1;
         continue;
       }
-      sc.tagName.lastIndex = i + 1;
-      const sm = sc.tagName.exec(src);
-      if (!sm) {
-        appendText(cur(), "<");
-        i++;
+      if (c1 === 33 && src.startsWith("<!--", i)) {
+        const cEnd = src.indexOf("-->", i + 4);
+        attachChild(open[open.length - 1], new Comment(src.slice(i + 4, cEnd < 0 ? len : cEnd)));
+        i = cEnd < 0 ? len : cEnd + 3;
         continue;
       }
-      const tag = sm[0].toLowerCase();
-      let j = sc.tagName.lastIndex;
-      let attrs = null;
-      let selfClosed = false;
-      while (j < len) {
-        sc.ws.lastIndex = j;
-        if (sc.ws.exec(src)) j = sc.ws.lastIndex;
-        if (j >= len) break;
-        const atC = src.charAt(j);
-        if (atC === ">") {
-          j++;
-          break;
-        }
-        if (atC === "/" && src.charAt(j + 1) === ">") {
-          selfClosed = true;
-          j += 2;
-          break;
-        }
-        sc.attrName.lastIndex = j;
-        const am = sc.attrName.exec(src);
-        if (!am) {
-          j++;
-          continue;
-        }
-        const an = am[0].toLowerCase();
-        j = sc.attrName.lastIndex;
-        sc.ws.lastIndex = j;
-        if (sc.ws.exec(src)) j = sc.ws.lastIndex;
-        let val = "";
-        if (src.charAt(j) === "=") {
-          j++;
-          sc.ws.lastIndex = j;
-          if (sc.ws.exec(src)) j = sc.ws.lastIndex;
-          const quote = src.charAt(j);
-          if (quote === '"' || quote === "'") {
-            const qEnd = src.indexOf(quote, j + 1);
-            val = decodeEntities(qEnd < 0 ? src.slice(j + 1) : src.slice(j + 1, qEnd));
-            j = qEnd < 0 ? len : qEnd + 1;
-          } else {
-            sc.bareVal.lastIndex = j;
-            const bm = sc.bareVal.exec(src);
-            val = decodeEntities(bm ? bm[0] : "");
-            j = sc.bareVal.lastIndex;
-          }
-        }
-        (attrs || (attrs = {}))[an] = val;
-      }
-      if (tag === "html") {
-        if (attrs) for (const ha in attrs) root.setAttribute(ha, attrs[ha]);
-        i = j;
+      if (c1 === 33 || c1 === 63) {
+        const declEnd = src.indexOf(">", i);
+        const end = declEnd < 0 ? len : declEnd;
+        const inner = src.slice(i + 2, end);
+        if (c1 === 63) attachChild(open[open.length - 1], new Comment("?" + inner));
+        else if (!/^doctype/i.test(inner)) attachChild(open[open.length - 1], new Comment(inner));
+        i = declEnd < 0 ? len : declEnd + 1;
         continue;
       }
-      if (tag === "head") {
-        open = [head];
-        if (attrs) for (const he in attrs) head.setAttribute(he, attrs[he]);
-        i = j;
-        continue;
-      }
-      if (tag === "body") {
-        open = [body];
-        if (attrs) for (const bo in attrs) body.setAttribute(bo, attrs[bo]);
-        i = j;
-        continue;
-      }
-      const el = createLocalElement(tag);
-      if (attrs) for (const key in attrs) el.setAttribute(key, attrs[key]);
-      if (RAWTEXT_ELEMENTS[tag]) {
-        const rawFrom = j;
-        const rawTo = findRawTextClose(src, tag, rawFrom);
-        const raw = rawTo < 0 ? src.slice(rawFrom) : src.slice(rawFrom, rawTo);
-        if (raw) el.appendChild(new Text(raw));
-        const rawGt = rawTo < 0 ? len : src.indexOf(">", rawTo);
-        i = rawGt < 0 ? len : rawGt + 1;
-        cur().appendChild(el);
-        continue;
-      }
-      cur().appendChild(el);
-      if (!VOID_ELEMENTS[tag] && !selfClosed) open.push(el);
-      i = j;
+      appendText(open[open.length - 1], "<");
+      i++;
     }
     wireDocument(doc2, root, head, body);
     return root;
@@ -1993,6 +2018,18 @@
     }
     // Browsers expose document.location as an alias of window.location; scripts (analytics, Clerk's CDN
     // loader) read document.location.protocol/href, which threw on undefined when only window.location existed.
+    // Clears per-page document state when the engine's realm is reused (Jint pool). The tree/head/body are
+    // reassigned wholesale by the next parse (wireDocument), but cookies, adopted stylesheets and a dangling
+    // currentScript would otherwise bleed into the next page, so they are dropped here.
+    reset() {
+      this.childNodes = [];
+      this.documentElement = null;
+      this.head = null;
+      this.body = null;
+      this.currentScript = null;
+      this.styleSheets.length = 0;
+      this._cookies.clear();
+    }
     get location() {
       return this.defaultView ? this.defaultView.location : null;
     }
@@ -2224,6 +2261,10 @@
   function pendingCount() {
     return _tasks.length;
   }
+  function resetTasks() {
+    _tasks.length = 0;
+    _byId2.clear();
+  }
   function pumpTasks() {
     if (!_tasks.length) return 0;
     const batch = _tasks.splice(0, _tasks.length);
@@ -2410,13 +2451,15 @@
   }
 
   // browser/Performance.ts
-  var startTime = Date.now();
+  var _hostPerf = globalThis.Performance;
+  var _hostNow = _hostPerf && typeof _hostPerf.now === "function" ? () => _hostPerf.now() : null;
+  var startTime = _hostNow ? _hostNow() : Date.now();
   var Performance = class {
     constructor() {
       this.timeOrigin = startTime;
     }
     now() {
-      return Date.now() - startTime;
+      return _hostNow ? _hostNow() - startTime : Date.now() - startTime;
     }
     mark() {
       return null;
@@ -2577,229 +2620,6 @@
     };
   }
 
-  // indexeddb/DomStringList.ts
-  var DomStringList = class extends Array {
-    contains(name) {
-      return this.indexOf(name) !== -1;
-    }
-    item(index) {
-      return index >= 0 && index < this.length ? this[index] : null;
-    }
-  };
-
-  // indexeddb/IdbRequest.ts
-  var IdbRequest = class {
-    constructor() {
-      this.result = void 0;
-      this.error = null;
-      this.readyState = "pending";
-      this.onsuccess = null;
-      this.onerror = null;
-      this.source = null;
-      this.transaction = null;
-    }
-    _succeed(value) {
-      this.result = value;
-      this.readyState = "done";
-      if (typeof this.onsuccess === "function") {
-        try {
-          this.onsuccess({ target: this, type: "success" });
-        } catch {
-        }
-      }
-    }
-    _fail(error) {
-      this.error = error;
-      this.readyState = "done";
-      if (typeof this.onerror === "function") {
-        try {
-          this.onerror({ target: this, type: "error" });
-        } catch {
-        }
-      }
-    }
-  };
-
-  // indexeddb/IdbObjectStore.ts
-  var IdbObjectStore = class {
-    constructor(name, store, tx) {
-      this.name = name;
-      this._store = store;
-      this._tx = tx;
-    }
-    _request(result) {
-      const req = new IdbRequest();
-      req.source = this;
-      req.transaction = this._tx;
-      req.result = result;
-      this._tx._enlist(req);
-      return req;
-    }
-    get(key) {
-      return this._request(this._store.has(key) ? this._store.get(key) : void 0);
-    }
-    getAll() {
-      return this._request(Array.from(this._store.values()));
-    }
-    getAllKeys() {
-      return this._request(Array.from(this._store.keys()));
-    }
-    put(value, key) {
-      this._store.set(key, value);
-      return this._request(key);
-    }
-    add(value, key) {
-      this._store.set(key, value);
-      return this._request(key);
-    }
-    delete(key) {
-      this._store.delete(key);
-      return this._request(void 0);
-    }
-    clear() {
-      this._store.clear();
-      return this._request(void 0);
-    }
-    count() {
-      return this._request(this._store.size);
-    }
-    openCursor() {
-      return this._request(null);
-    }
-  };
-
-  // indexeddb/IdbTransaction.ts
-  var IdbTransaction = class {
-    constructor(db, dbData, mode) {
-      this.error = null;
-      this.oncomplete = null;
-      this.onerror = null;
-      this.onabort = null;
-      this._aborted = false;
-      this._requests = [];
-      this.db = db;
-      this._db = dbData;
-      this.mode = mode;
-      enqueue(() => this._complete());
-    }
-    objectStore(name) {
-      let store = this._db.stores.get(name);
-      if (!store) {
-        store = /* @__PURE__ */ new Map();
-        this._db.stores.set(name, store);
-      }
-      return new IdbObjectStore(name, store, this);
-    }
-    _enlist(req) {
-      this._requests.push(req);
-    }
-    abort() {
-      this._aborted = true;
-      if (typeof this.onabort === "function") {
-        try {
-          this.onabort({ target: this, type: "abort" });
-        } catch {
-        }
-      }
-    }
-    _complete() {
-      if (this._aborted) return;
-      for (const req of this._requests) req._succeed(req.result);
-      if (typeof this.oncomplete === "function") {
-        try {
-          this.oncomplete({ target: this, type: "complete" });
-        } catch {
-        }
-      }
-    }
-  };
-
-  // indexeddb/IdbDatabase.ts
-  var IdbDatabase = class {
-    constructor(name, dbData) {
-      this.name = name;
-      this._db = dbData;
-      this.version = dbData.version;
-      this.objectStoreNames = new DomStringList(...dbData.stores.keys());
-    }
-    createObjectStore(name) {
-      if (!this._db.stores.has(name)) this._db.stores.set(name, /* @__PURE__ */ new Map());
-      this.objectStoreNames = new DomStringList(...this._db.stores.keys());
-      return new IdbObjectStore(name, this._db.stores.get(name), new IdbTransaction(this, this._db, "versionchange"));
-    }
-    deleteObjectStore(name) {
-      this._db.stores.delete(name);
-      this.objectStoreNames = new DomStringList(...this._db.stores.keys());
-    }
-    transaction(_names, mode) {
-      return new IdbTransaction(this, this._db, mode || "readonly");
-    }
-    close() {
-    }
-  };
-
-  // indexeddb/IdbOpenDbRequest.ts
-  var IdbOpenDbRequest = class extends IdbRequest {
-    constructor() {
-      super(...arguments);
-      this.onupgradeneeded = null;
-      this.onblocked = null;
-    }
-  };
-
-  // indexeddb/store.ts
-  var databaseRegistry = /* @__PURE__ */ new Map();
-
-  // indexeddb/index.ts
-  var indexedDB = {
-    open(name, version) {
-      const req = new IdbOpenDbRequest();
-      enqueue(() => {
-        let dbData = databaseRegistry.get(name);
-        const isNew = !dbData;
-        if (!dbData) {
-          dbData = { version: version || 1, stores: /* @__PURE__ */ new Map() };
-          databaseRegistry.set(name, dbData);
-        }
-        const db = new IdbDatabase(name, dbData);
-        req.result = db;
-        req.readyState = "done";
-        const needsUpgrade = isNew || typeof version === "number" && version > dbData.version;
-        if (needsUpgrade) {
-          dbData.version = version || dbData.version || 1;
-          db.version = dbData.version;
-          if (typeof req.onupgradeneeded === "function") {
-            try {
-              req.onupgradeneeded({ target: req, type: "upgradeneeded", oldVersion: 0, newVersion: db.version });
-            } catch {
-            }
-          }
-        }
-        if (typeof req.onsuccess === "function") {
-          try {
-            req.onsuccess({ target: req, type: "success" });
-          } catch {
-          }
-        }
-      });
-      return req;
-    },
-    deleteDatabase(name) {
-      const req = new IdbOpenDbRequest();
-      enqueue(() => {
-        databaseRegistry.delete(name);
-        req._succeed(void 0);
-      });
-      return req;
-    },
-    databases() {
-      return Promise.resolve(Array.from(databaseRegistry.entries()).map(([name, d]) => ({ name, version: d.version })));
-    },
-    cmp(a, b) {
-      return a < b ? -1 : a > b ? 1 : 0;
-    }
-  };
-
   // browser/native.ts
   function markNative(fn, name) {
     const label = "function " + name + "() { [native code] }";
@@ -2828,6 +2648,8 @@
   // browser/globals.ts
   var doc = new Document(globalThis);
   documentRef.current = doc;
+  var _windowListeners = {};
+  var _baseGlobals = null;
   function installDOM(global) {
     global.document = doc;
     global.window = global;
@@ -2835,10 +2657,9 @@
     global.navigator = navigator;
     global.location = createLocation();
     global.history = createHistory();
-    const windowListeners = {};
-    global.addEventListener = (t, cb) => addListener(windowListeners, t, cb);
-    global.removeEventListener = (t, cb) => removeListener(windowListeners, t, cb);
-    global.dispatchEvent = (event) => fireEvent(global, windowListeners, event);
+    global.addEventListener = (t, cb) => addListener(_windowListeners, t, cb);
+    global.removeEventListener = (t, cb) => removeListener(_windowListeners, t, cb);
+    global.dispatchEvent = (event) => fireEvent(global, _windowListeners, event);
     for (const on of [
       "onresize",
       "onscroll",
@@ -2927,11 +2748,26 @@
     global.performance = global.performance || performance;
     global.localStorage = createStorage();
     global.sessionStorage = createStorage();
-    global.indexedDB = global.indexedDB || indexedDB;
     installTimerGlobals(global);
     installScrollApi(global);
     for (const ctor of [EventTarget, Node, Element, CharacterData, Document, DocumentFragment, HTMLElement]) {
       markPrototypeNative(ctor);
+    }
+  }
+  function snapshotBaseline(global) {
+    _baseGlobals = new Set(Object.keys(global));
+  }
+  function resetGlobals(global) {
+    _windowListeners = {};
+    if (global.localStorage && typeof global.localStorage.clear === "function") global.localStorage.clear();
+    if (global.sessionStorage && typeof global.sessionStorage.clear === "function") global.sessionStorage.clear();
+    if (!_baseGlobals) return;
+    for (const key of Object.keys(global)) {
+      if (_baseGlobals.has(key)) continue;
+      try {
+        delete global[key];
+      } catch {
+      }
     }
   }
 
@@ -3109,7 +2945,7 @@
       }
       created[i] = node;
       const p = n.p;
-      if (p >= 0) created[p].appendChild(node);
+      if (p >= 0) attachChild(created[p], node);
     }
     if (nodes.length === 0) return;
     const root = created[0];
@@ -3124,6 +2960,93 @@
       else if (body === null && tag === "body") body = k;
     }
     wireDocument(doc2, root, head, body);
+  }
+
+  // profiling/domProfiler.ts
+  var counts = {};
+  var times = {};
+  var installed = false;
+  var _hostPerf2 = globalThis.Performance;
+  var _now = _hostPerf2 && typeof _hostPerf2.now === "function" ? () => _hostPerf2.now() : null;
+  var _stack = [];
+  function record(label, fn) {
+    counts[label] = (counts[label] || 0) + 1;
+    if (!_now) return fn();
+    const frame = { label, start: _now(), child: 0 };
+    _stack.push(frame);
+    try {
+      return fn();
+    } finally {
+      _stack.pop();
+      const elapsed = _now() - frame.start;
+      times[label] = (times[label] || 0) + (elapsed - frame.child);
+      const parent = _stack[_stack.length - 1];
+      if (parent) parent.child += elapsed;
+    }
+  }
+  function enableDomProfile() {
+    if (installed) return;
+    installed = true;
+    wrapMethods(Node, "Node", ["insertBefore", "removeChild", "cloneNode"]);
+    wrapMethods(Element, "Element", [
+      "setAttribute",
+      "getAttribute",
+      "removeAttribute",
+      "hasAttribute",
+      "querySelector",
+      "querySelectorAll",
+      "matches",
+      "closest",
+      "getElementsByTagName",
+      "getElementsByClassName",
+      "getBoundingClientRect",
+      "getClientRects"
+    ]);
+    wrapMethods(Document, "Document", [
+      "createElement",
+      "createElementNS",
+      "createTextNode",
+      "createComment",
+      "createDocumentFragment",
+      "createRange",
+      "getElementById",
+      "getElementsByTagName",
+      "getElementsByClassName",
+      "querySelector",
+      "querySelectorAll"
+    ]);
+    wrapMethods(EventTarget, "EventTarget", ["addEventListener", "removeEventListener", "dispatchEvent"]);
+    wrapSetter(Element, "innerHTML", "Element.set innerHTML");
+    wrapSetter(Element, "textContent", "Element.set textContent");
+    for (const ctor of [Node, Element, Document, EventTarget]) markPrototypeNative(ctor);
+  }
+  function dumpDomProfile() {
+    return installed ? JSON.stringify({ counts, timesMs: _now ? times : null }) : "";
+  }
+  function wrapMethods(ctor, group, names) {
+    const proto = ctor && ctor.prototype;
+    if (!proto) return;
+    for (const name of names) {
+      const orig = proto[name];
+      if (typeof orig !== "function") continue;
+      const label = group + "." + name;
+      proto[name] = function(...args) {
+        return record(label, () => orig.apply(this, args));
+      };
+    }
+  }
+  function wrapSetter(ctor, prop, label) {
+    const proto = ctor && ctor.prototype;
+    if (!proto) return;
+    const desc = Object.getOwnPropertyDescriptor(proto, prop);
+    if (!desc || typeof desc.set !== "function") return;
+    const origSet = desc.set;
+    desc.set = function(v) {
+      record(label, () => {
+        origSet.call(this, v);
+      });
+    };
+    Object.defineProperty(proto, prop, desc);
   }
 
   // crawler/api.ts
@@ -3206,7 +3129,17 @@
     walk(doc.documentElement);
     return { anchors, canonical, robots };
   }
+  function resetDom(global) {
+    doc.reset();
+    customElements.reset();
+    resetTasks();
+    resetResources();
+    resetGlobals(global);
+  }
   function installCrawlerApi(global) {
+    global.__crawlerReset = () => {
+      resetDom(global);
+    };
     global.__crawlerSetLocation = (url) => {
       applyUrl(url);
     };
@@ -3233,10 +3166,15 @@
       fireResourceEvent(id, type);
     };
     global.__crawlerSerialize = () => doc.documentElement ? serializeNode(doc.documentElement) : "";
+    global.__crawlerEnableDomProfile = () => {
+      enableDomProfile();
+    };
+    global.__crawlerDomProfileDump = () => dumpDomProfile();
   }
 
   // index.ts
   installDOM(globalThis);
   installConsole(globalThis);
   installCrawlerApi(globalThis);
+  snapshotBaseline(globalThis);
 })();

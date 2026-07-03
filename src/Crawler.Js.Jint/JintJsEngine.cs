@@ -11,27 +11,44 @@ namespace Crawler.Js.Jint;
 
 internal sealed class JintJsEngine : IJsEngine
 {
+    private readonly JintEnginePool _pool;
+    private readonly JintEngineLease _lease;
     private readonly Engine _engine;
     private readonly JintModuleCache _moduleCache;
     private readonly JintScriptCache _scriptCache;
 
-    public JintJsEngine(IModuleFetcher fetcher, Uri baseUri, JintModuleCache moduleCache, JintScriptCache scriptCache)
+    public JintJsEngine(JintEnginePool pool, JintModuleCache moduleCache, JintScriptCache scriptCache, IModuleFetcher fetcher, Uri baseUri)
     {
+        _pool = pool;
         _moduleCache = moduleCache;
         _scriptCache = scriptCache;
 
-        _engine = new Engine(options =>
-        {
-            // Convert exceptions thrown by host objects (e.g. `new URL('not-a-url')`, which a bundle wraps in
-            // a try/catch to probe validity) into catchable JS errors. Jint otherwise bubbles them straight to
-            // the CLR host, escaping the bundle's try/catch and aborting the whole render — ClearScript/V8
-            // already surface host exceptions as JS errors, so this matches that behaviour.
-            options
-                .EnableModules(new JintModuleLoader(fetcher, baseUri, moduleCache))
-                .CatchClrExceptions();
-        });
+        _lease = pool.Rent();
+        _engine = _lease.Engine;
+        _lease.Loader.Rebind(fetcher, baseUri);
+    }
 
-        _engine.Execute(Shim.Source);
+    // A fresh realm (first use of this engine) needs the DOM prelude installed, so returns true. A reused realm
+    // is reset in place — __crawlerReset wipes the document, registries, timers, storage and bundle globals —
+    // so the caller skips the dom.js re-eval. If the reset can't run (a first page that aborted before dom.js
+    // was installed, or a reset that itself throws), fall back to reinstalling: re-evaluating dom.js rebuilds
+    // every module singleton from scratch, so it is always a safe clean slate.
+    public bool BeginPage()
+    {
+        if (_lease.Initialized)
+        {
+            try
+            {
+                _engine.Invoke("__crawlerReset");
+                return false;
+            }
+            catch (JavaScriptException)
+            {
+            }
+        }
+
+        _lease.Initialized = true;
+        return true;
     }
 
     public void EmbedHostObject(string name, object value)
@@ -141,6 +158,6 @@ internal sealed class JintJsEngine : IJsEngine
 
     public void Dispose()
     {
-        (_engine as IDisposable)?.Dispose();
+        _pool.Return(_lease);
     }
 }

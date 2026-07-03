@@ -12,6 +12,8 @@ internal sealed class ProfilingJsEngine : IJsEngine
 
     public ProfilingJsEngine(IJsEngine inner) => _inner = inner;
 
+    public bool BeginPage() => Time("engine.BeginPage", () => _inner.BeginPage());
+
     public void EmbedHostObject(string name, object value) => Time("engine.EmbedHostObject", () => _inner.EmbedHostObject(name, value));
     public void EmbedHostType(string name, Type type) => Time("engine.EmbedHostType", () => _inner.EmbedHostType(name, type));
     public void EmbedFunction(string name, VFunc function) => Time("engine.EmbedFunction", () => _inner.EmbedFunction(name, function));

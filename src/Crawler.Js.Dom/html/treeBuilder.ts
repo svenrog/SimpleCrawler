@@ -2,7 +2,7 @@ import type { Document } from "../dom/Document";
 import { Element } from "../dom/Element";
 import { Text } from "../dom/Text";
 import { Comment } from "../dom/Comment";
-import { createLocalElement, wireDocument } from "./parser";
+import { createLocalElement, wireDocument, attachChild } from "./parser";
 
 // Builds the document from a pre-parsed, parent-indexed node list (JSON from a native C# parser) so dom.js
 // skips its own tokenizer. Mirrors parseHTML: nodes are created and attached while the tree is detached, and
@@ -28,7 +28,7 @@ export function buildDocumentFromTree(doc: Document, json: string): void {
 
         created[i] = node;
         const p = n.p;
-        if (p >= 0) created[p].appendChild(node);
+        if (p >= 0) attachChild(created[p], node);
     }
 
     if (nodes.length === 0) return;

@@ -8,7 +8,7 @@ import { Comment } from "../dom/Comment";
 import { NodeType } from "../types/NodeType";
 import { VOID_ELEMENTS, RAWTEXT_ELEMENTS } from "../constants";
 import { decodeEntities } from "./entities";
-import { createTagScanners, findRawTextClose } from "./tokenizer";
+import { isAlpha, skipSpace, matchTagName, scanAttrName, scanBareValue, findRawTextClose } from "./tokenizer";
 import { parserRef } from "./parserRef";
 
 // The element-class selection the string parser uses: known tag → reflected subclass, else a plain Element.
@@ -17,6 +17,15 @@ import { parserRef } from "./parserRef";
 export function createLocalElement(tag: string): Element {
     const factory = reflectedElementFactories[tag];
     return factory ? factory() : new HTMLElement(tag);
+}
+
+// Append a freshly created node to the end of a parent during construction. The child has no prior parent,
+// is never a DocumentFragment, and the tree is still detached from the document, so this skips appendChild's
+// reparent/fragment handling and — crucially — the isConnected walk that would climb to the root on every
+// insert (O(depth) per node). Connection-gated side effects run later, off wireDocument, exactly as before.
+export function attachChild(parent: any, child: any): void {
+    child.parentNode = parent;
+    parent.childNodes.push(child);
 }
 
 // Attaches a finished root tree to the document. Shared so the string parser and the tree builder produce the
@@ -32,143 +41,135 @@ export function wireDocument(doc: Document, root: Element, head: Element | null,
 export function parseHTML(doc: Document, input: unknown): Element {
     const src = input == null ? "" : String(input);
     const len = src.length;
-    const sc = createTagScanners();
 
     const root = new HTMLElement("html");
     const head = new HTMLElement("head");
     const body = new HTMLElement("body");
-    root.appendChild(head);
-    root.appendChild(body);
+    attachChild(root, head);
+    attachChild(root, body);
 
     let open: Element[] = [body];
 
-    const cur = () => open[open.length - 1];
     function appendText(parent: Element, text: string): void {
         const last = parent.childNodes[parent.childNodes.length - 1] as any;
         if (last && last.nodeType === NodeType.Text) last.data += text;
-        else parent.appendChild(new Text(text));
+        else attachChild(parent, new Text(text));
     }
 
     let i = 0;
     while (i < len) {
-        const ch = src.charAt(i);
-        if (ch !== "<") {
+        if (src.charCodeAt(i) !== 60 /* < */) {
             let textEnd = src.indexOf("<", i);
             if (textEnd < 0) textEnd = len;
-            appendText(cur(), decodeEntities(src.slice(i, textEnd)));
+            appendText(open[open.length - 1], decodeEntities(src.slice(i, textEnd)));
             i = textEnd;
             continue;
         }
 
-        if (src.slice(i, i + 4) === "<!--") {
-            const cEnd = src.indexOf("-->", i + 4);
-            cur().appendChild(new Comment(src.slice(i + 4, cEnd < 0 ? len : cEnd)));
-            i = cEnd < 0 ? len : cEnd + 3;
+        const c1 = i + 1 < len ? src.charCodeAt(i + 1) : -1;
+
+        // Opening tag — the common case, dispatched first so the branch predicts well.
+        if (isAlpha(c1)) {
+            const nameEnd = matchTagName(src, i + 1, len);
+            const tag = src.slice(i + 1, nameEnd).toLowerCase();
+            let j = nameEnd;
+
+            // Select the target element up front and apply attributes straight to it — no intermediate
+            // object, no second pass. html/head/body are structural (already under the root); everything
+            // else is a fresh element that gets appended (and pushed, unless void/self-closed) below.
+            const structural = tag === "html" || tag === "head" || tag === "body";
+            let el: Element;
+            if (tag === "html") el = root;
+            else if (tag === "head") { open = [head]; el = head; }
+            else if (tag === "body") { open = [body]; el = body; }
+            else el = createLocalElement(tag);
+
+            let selfClosed = false;
+            while (j < len) {
+                j = skipSpace(src, j, len);
+                if (j >= len) break;
+                const c = src.charCodeAt(j);
+                if (c === 62 /* > */) { j++; break; }
+                if (c === 47 /* / */ && src.charCodeAt(j + 1) === 62 /* > */) { selfClosed = true; j += 2; break; }
+
+                const nameE = scanAttrName(src, j, len);
+                if (nameE === j) { j++; continue; }
+                const an = src.slice(j, nameE).toLowerCase();
+                j = skipSpace(src, nameE, len);
+
+                let val = "";
+                if (src.charCodeAt(j) === 61 /* = */) {
+                    j = skipSpace(src, j + 1, len);
+                    const q = src.charCodeAt(j);
+                    if (q === 34 /* " */ || q === 39 /* ' */) {
+                        const qEnd = src.indexOf(src[j], j + 1);
+                        val = decodeEntities(qEnd < 0 ? src.slice(j + 1) : src.slice(j + 1, qEnd));
+                        j = qEnd < 0 ? len : qEnd + 1;
+                    } else {
+                        const vEnd = scanBareValue(src, j, len);
+                        val = decodeEntities(src.slice(j, vEnd));
+                        j = vEnd;
+                    }
+                }
+                el.setAttribute(an, val);
+            }
+
+            i = j;
+            if (structural) continue;
+
+            if (RAWTEXT_ELEMENTS[tag]) {
+                const rawFrom = j;
+                const rawTo = findRawTextClose(src, tag, rawFrom);
+                const raw = rawTo < 0 ? src.slice(rawFrom) : src.slice(rawFrom, rawTo);
+                if (raw) attachChild(el, new Text(raw));
+                const rawGt = rawTo < 0 ? len : src.indexOf(">", rawTo);
+                i = rawGt < 0 ? len : rawGt + 1;
+                attachChild(open[open.length - 1], el);
+                continue;
+            }
+
+            attachChild(open[open.length - 1], el);
+            if (!VOID_ELEMENTS[tag] && !selfClosed) open.push(el);
             continue;
         }
-        if (src.charAt(i + 1) === "!" || src.charAt(i + 1) === "?") {
-            const declEnd = src.indexOf(">", i);
-            const end = declEnd < 0 ? len : declEnd;
-            // <!doctype …> is a declaration with no node; every other <!…>/<?…> is a bogus comment that
-            // the HTML parser surfaces as a Comment. Solid/Svelte emit <!$>/<!/> markers and walk them.
-            const bang = src.charAt(i + 1) === "!";
-            const inner = src.slice(i + 2, end);
-            if (!bang) cur().appendChild(new Comment("?" + inner));
-            else if (!/^doctype/i.test(inner)) cur().appendChild(new Comment(inner));
-            i = declEnd < 0 ? len : declEnd + 1;
-            continue;
-        }
-        if (src.charAt(i + 1) === "/") {
-            sc.tagName.lastIndex = i + 2;
-            const tm = sc.tagName.exec(src);
-            if (tm) {
-                const closeName = tm[0].toLowerCase();
+
+        // Closing tag.
+        if (c1 === 47 /* / */) {
+            const nameEnd = matchTagName(src, i + 2, len);
+            if (nameEnd >= 0) {
+                const closeName = src.slice(i + 2, nameEnd).toLowerCase();
                 for (let k = open.length - 1; k > 0; k--) {
                     if (open[k].localName === closeName) { open.length = k; break; }
                 }
             }
-            const slashEnd = src.indexOf(">", i);
-            i = slashEnd < 0 ? len : slashEnd + 1;
+            const gt = src.indexOf(">", i);
+            i = gt < 0 ? len : gt + 1;
             continue;
         }
 
-        sc.tagName.lastIndex = i + 1;
-        const sm = sc.tagName.exec(src);
-        if (!sm) { appendText(cur(), "<"); i++; continue; }
-        const tag = sm[0].toLowerCase();
-        let j = sc.tagName.lastIndex;
-        let attrs: Record<string, string> | null = null;
-        let selfClosed = false;
-
-        while (j < len) {
-            sc.ws.lastIndex = j;
-            if (sc.ws.exec(src)) j = sc.ws.lastIndex;
-            if (j >= len) break;
-            const atC = src.charAt(j);
-            if (atC === ">") { j++; break; }
-            if (atC === "/" && src.charAt(j + 1) === ">") { selfClosed = true; j += 2; break; }
-            sc.attrName.lastIndex = j;
-            const am = sc.attrName.exec(src);
-            if (!am) { j++; continue; }
-            const an = am[0].toLowerCase();
-            j = sc.attrName.lastIndex;
-            sc.ws.lastIndex = j;
-            if (sc.ws.exec(src)) j = sc.ws.lastIndex;
-            let val = "";
-            if (src.charAt(j) === "=") {
-                j++;
-                sc.ws.lastIndex = j;
-                if (sc.ws.exec(src)) j = sc.ws.lastIndex;
-                const quote = src.charAt(j);
-                if (quote === '"' || quote === "'") {
-                    const qEnd = src.indexOf(quote, j + 1);
-                    val = decodeEntities(qEnd < 0 ? src.slice(j + 1) : src.slice(j + 1, qEnd));
-                    j = qEnd < 0 ? len : qEnd + 1;
-                } else {
-                    sc.bareVal.lastIndex = j;
-                    const bm = sc.bareVal.exec(src);
-                    val = decodeEntities(bm ? bm[0] : "");
-                    j = sc.bareVal.lastIndex;
-                }
-            }
-            (attrs ||= {})[an] = val;
-        }
-
-        if (tag === "html") {
-            if (attrs) for (const ha in attrs) root.setAttribute(ha, attrs[ha]);
-            i = j;
-            continue;
-        }
-        if (tag === "head") {
-            open = [head];
-            if (attrs) for (const he in attrs) head.setAttribute(he, attrs[he]);
-            i = j;
-            continue;
-        }
-        if (tag === "body") {
-            open = [body];
-            if (attrs) for (const bo in attrs) body.setAttribute(bo, attrs[bo]);
-            i = j;
+        // Comment.
+        if (c1 === 33 /* ! */ && src.startsWith("<!--", i)) {
+            const cEnd = src.indexOf("-->", i + 4);
+            attachChild(open[open.length - 1], new Comment(src.slice(i + 4, cEnd < 0 ? len : cEnd)));
+            i = cEnd < 0 ? len : cEnd + 3;
             continue;
         }
 
-        const el = createLocalElement(tag);
-        if (attrs) for (const key in attrs) el.setAttribute(key, attrs[key]);
-
-        if (RAWTEXT_ELEMENTS[tag]) {
-            const rawFrom = j;
-            const rawTo = findRawTextClose(src, tag, rawFrom);
-            const raw = rawTo < 0 ? src.slice(rawFrom) : src.slice(rawFrom, rawTo);
-            if (raw) el.appendChild(new Text(raw));
-            const rawGt = rawTo < 0 ? len : src.indexOf(">", rawTo);
-            i = rawGt < 0 ? len : rawGt + 1;
-            cur().appendChild(el);
+        // <!doctype …> is a declaration with no node; every other <!…>/<?…> is a bogus comment that the
+        // HTML parser surfaces as a Comment. Solid/Svelte emit <!$>/<!/> markers and walk them.
+        if (c1 === 33 /* ! */ || c1 === 63 /* ? */) {
+            const declEnd = src.indexOf(">", i);
+            const end = declEnd < 0 ? len : declEnd;
+            const inner = src.slice(i + 2, end);
+            if (c1 === 63) attachChild(open[open.length - 1], new Comment("?" + inner));
+            else if (!/^doctype/i.test(inner)) attachChild(open[open.length - 1], new Comment(inner));
+            i = declEnd < 0 ? len : declEnd + 1;
             continue;
         }
 
-        cur().appendChild(el);
-        if (!VOID_ELEMENTS[tag] && !selfClosed) open.push(el);
-        i = j;
+        // A '<' that starts nothing tag-like is literal text.
+        appendText(open[open.length - 1], "<");
+        i++;
     }
 
     wireDocument(doc, root, head, body);

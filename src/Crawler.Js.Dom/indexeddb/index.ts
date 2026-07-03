@@ -1,4 +1,4 @@
-import { enqueue } from "../scheduler/taskQueue";
+import { enqueue } from "./enqueue";
 import { IdbDatabase } from "./IdbDatabase";
 import { IdbOpenDbRequest } from "./IdbOpenDbRequest";
 import { databaseRegistry } from "./store";
