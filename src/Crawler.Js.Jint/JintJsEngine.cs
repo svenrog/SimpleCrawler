@@ -28,6 +28,23 @@ internal sealed class JintJsEngine : IJsEngine
         => typeof(Engine).GetNestedType("ModuleOperations", BindingFlags.Public | BindingFlags.NonPublic)?
             .GetField(name, BindingFlags.Instance | BindingFlags.NonPublic);
 
+    // A classic <script>'s top-level `let`/`const`/`class` binds into the realm's global lexical environment
+    // (Realm.GlobalEnv._declarativeRecord), not onto the global object, so __crawlerReset — which only drops
+    // global-object properties — can't reach it. A pooled engine re-running the same stable-URL chunk on the
+    // next page would then throw "X has already been declared" and abort that script. Jint exposes no public
+    // reset for the lexical record, so it is cleared reflectively between pages, mirroring ResetModuleRegistry.
+    // The whole chain to it (Engine.Realm, Realm.GlobalEnv, the record type) is internal, so UnsafeAccessor
+    // would have to name those types with version-pinned strings — brittle against the package's version range.
+    // Resolved once; a future Jint rename yields null and the clear is skipped (JintGlobalLexicalPoolTests guards it).
+    private static readonly PropertyInfo? _realmProperty =
+        typeof(Engine).GetProperty("Realm", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+    private static readonly PropertyInfo? _globalEnvProperty =
+        typeof(Realm).GetProperty("GlobalEnv", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+    private static readonly FieldInfo? _declarativeRecordField =
+        _globalEnvProperty?.PropertyType.GetField("_declarativeRecord", BindingFlags.Instance | BindingFlags.NonPublic);
+    private static readonly MethodInfo? _clearLexicalRecordMethod =
+        _declarativeRecordField?.FieldType.GetMethod("Clear", BindingFlags.Instance | BindingFlags.Public, null, Type.EmptyTypes, null);
+
     private readonly JintEnginePool _pool;
     private readonly JintEngineLease _lease;
     private readonly Engine _engine;
@@ -57,6 +74,7 @@ internal sealed class JintJsEngine : IJsEngine
             // Clear the module registry first so both the reset path and the dom.js-reinstall fallback below
             // start the page with an empty module table.
             ResetModuleRegistry();
+            ResetGlobalLexicalRecord();
             try
             {
                 _engine.Invoke("__crawlerReset");
@@ -79,6 +97,26 @@ internal sealed class JintJsEngine : IJsEngine
         var modules = _engine.Modules;
         (_modulesField.GetValue(modules) as IDictionary)?.Clear();
         (_buildersField.GetValue(modules) as IDictionary)?.Clear();
+    }
+
+    private void ResetGlobalLexicalRecord()
+    {
+        if (_realmProperty is null || _globalEnvProperty is null || _declarativeRecordField is null || _clearLexicalRecordMethod is null)
+            return;
+
+        var realm = _realmProperty.GetValue(_engine);
+        if (realm is null)
+            return;
+
+        var globalEnv = _globalEnvProperty.GetValue(realm);
+        if (globalEnv is null)
+            return;
+
+        var record = _declarativeRecordField.GetValue(globalEnv);
+        if (record is null)
+            return;
+
+        _clearLexicalRecordMethod.Invoke(record, null);
     }
 
     public void EmbedHostObject(string name, object value)
