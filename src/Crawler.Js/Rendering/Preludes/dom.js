@@ -728,6 +728,16 @@
     hasAttribute(name) {
       return this.attrs.has(name);
     }
+    toggleAttribute(name, force) {
+      const present = this.attrs.has(name);
+      const add = force === void 0 ? !present : force;
+      if (add) {
+        if (!present) this.attrs.set(name, "");
+        return true;
+      }
+      this.attrs.delete(name);
+      return false;
+    }
     getAttributeNames() {
       return Array.from(this.attrs.keys());
     }
@@ -2038,6 +2048,15 @@
     get referrer() {
       return "";
     }
+    // document.domain mirrors the origin's hostname; scripts split/compare it and throw their own error when
+    // it's undefined. The setter (legacy same-origin relaxation) is accepted and ignored — a single-pass render
+    // never makes cross-origin calls that would consult it.
+    get domain() {
+      const loc = this.location;
+      return loc && loc.hostname ? String(loc.hostname) : "";
+    }
+    set domain(_value) {
+    }
     // A real document.cookie is always a string. Bundles probe it (document.cookie.includes(...)) and set it;
     // we keep a name→value store, ignoring attributes (path/expires/domain) and expiry since rendering is a
     // single synchronous pass.
@@ -2568,6 +2587,63 @@
     }
   };
 
+  // browser/DOMException.ts
+  var _legacyCodes = {
+    IndexSizeError: 1,
+    HierarchyRequestError: 3,
+    WrongDocumentError: 4,
+    InvalidCharacterError: 5,
+    NoModificationAllowedError: 7,
+    NotFoundError: 8,
+    NotSupportedError: 9,
+    InUseAttributeError: 10,
+    InvalidStateError: 11,
+    SyntaxError: 12,
+    InvalidModificationError: 13,
+    NamespaceError: 14,
+    InvalidAccessError: 15,
+    SecurityError: 18,
+    NetworkError: 19,
+    AbortError: 20,
+    URLMismatchError: 21,
+    QuotaExceededError: 22,
+    TimeoutError: 23,
+    InvalidNodeTypeError: 24,
+    DataCloneError: 25
+  };
+  var DOMException = class extends Error {
+    constructor(message, name) {
+      super(message == null ? "" : String(message));
+      this.name = name == null ? "Error" : String(name);
+      this.code = _legacyCodes[this.name] || 0;
+    }
+  };
+  DOMException.INDEX_SIZE_ERR = 1;
+  DOMException.DOMSTRING_SIZE_ERR = 2;
+  DOMException.HIERARCHY_REQUEST_ERR = 3;
+  DOMException.WRONG_DOCUMENT_ERR = 4;
+  DOMException.INVALID_CHARACTER_ERR = 5;
+  DOMException.NO_DATA_ALLOWED_ERR = 6;
+  DOMException.NO_MODIFICATION_ALLOWED_ERR = 7;
+  DOMException.NOT_FOUND_ERR = 8;
+  DOMException.NOT_SUPPORTED_ERR = 9;
+  DOMException.INUSE_ATTRIBUTE_ERR = 10;
+  DOMException.INVALID_STATE_ERR = 11;
+  DOMException.SYNTAX_ERR = 12;
+  DOMException.INVALID_MODIFICATION_ERR = 13;
+  DOMException.NAMESPACE_ERR = 14;
+  DOMException.INVALID_ACCESS_ERR = 15;
+  DOMException.VALIDATION_ERR = 16;
+  DOMException.TYPE_MISMATCH_ERR = 17;
+  DOMException.SECURITY_ERR = 18;
+  DOMException.NETWORK_ERR = 19;
+  DOMException.ABORT_ERR = 20;
+  DOMException.URL_MISMATCH_ERR = 21;
+  DOMException.QUOTA_EXCEEDED_ERR = 22;
+  DOMException.TIMEOUT_ERR = 23;
+  DOMException.INVALID_NODE_TYPE_ERR = 24;
+  DOMException.DATA_CLONE_ERR = 25;
+
   // browser/base64.ts
   var _chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
   function btoa(input) {
@@ -2719,6 +2795,7 @@
     };
     global.structuredClone = global.structuredClone || ((value) => value == null ? value : JSON.parse(JSON.stringify(value)));
     global.Blob = Blob;
+    global.DOMException = global.DOMException || DOMException;
     global.btoa = global.btoa || btoa;
     global.atob = global.atob || atob;
     URL.createObjectURL = URL.createObjectURL || (() => "blob:" + Math.random().toString(36).slice(2));
