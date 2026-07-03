@@ -13,20 +13,34 @@ namespace Crawler.Js.Jint;
 internal sealed class JintModuleCache
 {
     private const int _capacity = 512;
+    private const string _emptyModule = "export {};";
 
     private readonly BoundedLruCache<string, Prepared<Module>> _modules = new(_capacity);
 
     public Prepared<Module> GetOrPrepare(string key, string source)
     {
-        return _modules.GetOrAdd(key, source, static (location, code) => Engine.PrepareModule(code, location));
+        return _modules.GetOrAdd(key, source, static (location, code) => PrepareOrEmpty(code, location));
     }
 
     public Prepared<Module> GetOrPrepare(Uri uri, IModuleFetcher fetcher)
     {
         return _modules.GetOrAdd(uri.AbsoluteUri, (uri, fetcher), static (location, state) =>
+            PrepareOrEmpty(state.fetcher.Fetch(state.uri) ?? _emptyModule, location));
+    }
+
+    // A fetched module URL that returns the site's HTML catch-all (or any non-JS/malformed source) can't be
+    // parsed as a module — Jint throws ScriptPreparationException from inside the loader, which would abort the
+    // whole importing page. Degrade to an empty module so one unresolvable dependency doesn't take the rest of
+    // the module graph down with it.
+    private static Prepared<Module> PrepareOrEmpty(string source, string location)
+    {
+        try
         {
-            var source = state.fetcher.Fetch(state.uri) ?? "export {};";
             return Engine.PrepareModule(source, location);
-        });
+        }
+        catch (ScriptPreparationException)
+        {
+            return Engine.PrepareModule(_emptyModule, location);
+        }
     }
 }
