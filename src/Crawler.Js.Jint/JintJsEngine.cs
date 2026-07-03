@@ -5,12 +5,29 @@ using Jint;
 using Jint.Native;
 using Jint.Runtime;
 using Jint.Runtime.Interop;
+using System.Collections;
 using System.Globalization;
+using System.Reflection;
 
 namespace Crawler.Js.Jint;
 
 internal sealed class JintJsEngine : IJsEngine
 {
+    // Jint keeps evaluated modules and their builders in two dictionaries on the (internal) Engine.Modules,
+    // keyed by specifier, for the life of the realm. A fresh engine starts empty, but a pooled engine reused
+    // across pages would keep them: re-adding a stable-URL module (a shared _astro/webpack chunk that recurs
+    // on many pages) throws "an item with the same key has already been added", and even a bare re-import would
+    // hand back the previous page's already-evaluated instance instead of running its side effects against the
+    // new document. There is no public reset, so the two dictionaries are cleared reflectively between pages.
+    // Fields resolved once; if a future Jint renames them this yields null and module reuse is left as-is (the
+    // JintModulePoolTests regression guards that path). The parsed-AST cache (JintModuleCache) is untouched.
+    private static readonly FieldInfo? _modulesField = ResolveModuleField("_modules");
+    private static readonly FieldInfo? _buildersField = ResolveModuleField("_builders");
+
+    private static FieldInfo? ResolveModuleField(string name)
+        => typeof(Engine).GetNestedType("ModuleOperations", BindingFlags.Public | BindingFlags.NonPublic)?
+            .GetField(name, BindingFlags.Instance | BindingFlags.NonPublic);
+
     private readonly JintEnginePool _pool;
     private readonly JintEngineLease _lease;
     private readonly Engine _engine;
@@ -37,6 +54,9 @@ internal sealed class JintJsEngine : IJsEngine
     {
         if (_lease.Initialized)
         {
+            // Clear the module registry first so both the reset path and the dom.js-reinstall fallback below
+            // start the page with an empty module table.
+            ResetModuleRegistry();
             try
             {
                 _engine.Invoke("__crawlerReset");
@@ -49,6 +69,16 @@ internal sealed class JintJsEngine : IJsEngine
 
         _lease.Initialized = true;
         return true;
+    }
+
+    private void ResetModuleRegistry()
+    {
+        if (_modulesField is null || _buildersField is null)
+            return;
+
+        var modules = _engine.Modules;
+        (_modulesField.GetValue(modules) as IDictionary)?.Clear();
+        (_buildersField.GetValue(modules) as IDictionary)?.Clear();
     }
 
     public void EmbedHostObject(string name, object value)
