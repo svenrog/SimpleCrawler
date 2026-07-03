@@ -2618,6 +2618,10 @@
     };
     global.scrollByPages = () => {
     };
+    global.scrollX = 0;
+    global.scrollY = 0;
+    global.pageXOffset = 0;
+    global.pageYOffset = 0;
   }
 
   // browser/native.ts

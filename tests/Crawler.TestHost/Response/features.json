@@ -80,6 +80,11 @@
     "name": "Base64"
   },
   {
+    "key": "scroll-offsets",
+    "href": "/features/scroll-offsets",
+    "name": "Scroll offsets"
+  },
+  {
     "key": "document-referrer",
     "href": "/features/document-referrer",
     "name": "Document referrer"
