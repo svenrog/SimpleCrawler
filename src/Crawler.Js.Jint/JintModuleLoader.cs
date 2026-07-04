@@ -7,18 +7,12 @@ namespace Crawler.Js.Jint;
 internal sealed class JintModuleLoader : IModuleLoader
 {
     private readonly JintModuleCache _cache;
-    private IModuleFetcher _fetcher = null!;
-    private Uri _baseUri = null!;
+    private readonly IModuleFetcher _fetcher;
+    private readonly Uri _baseUri;
 
-    public JintModuleLoader(JintModuleCache cache)
+    public JintModuleLoader(JintModuleCache cache, IModuleFetcher fetcher, Uri baseUri)
     {
         _cache = cache;
-    }
-
-    // The loader outlives a single page when its engine is pooled, so the per-page fetcher (page HttpClient +
-    // cancellation) and base URI are rebound before each page rather than fixed at construction.
-    public void Rebind(IModuleFetcher fetcher, Uri baseUri)
-    {
         _fetcher = fetcher;
         _baseUri = baseUri;
     }

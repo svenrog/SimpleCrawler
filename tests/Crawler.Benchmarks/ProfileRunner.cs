@@ -21,7 +21,7 @@ namespace Crawler.Benchmarks;
 // Temporary investigation harness (not a benchmark). Drives the real crawl/render path for a single
 // engine+parser combo against one framework's test-host SPA.
 //
-//   profile <combo> <iterations> [framework] [jintMaxUses]
+//   profile <combo> <iterations> [framework]
 //     Crawls the SPA repeatedly so RenderProfiler (JSRENDER_PROFILE=1) prints a per-phase table at exit.
 //   rendersize <combo> [framework]
 //     Renders the SPA once, prints element/anchor counts + size, and dumps the serialized HTML to disk
@@ -29,7 +29,6 @@ namespace Crawler.Benchmarks;
 //
 //   combo       = jint-js | jint-as | jint-hap | v8-js | v8-as | v8-hap
 //   framework   = react | preact | vue | svelte | solid (default preact)
-//   jintMaxUses = optional Jint engine-pool cap for A/B runs (0 = fresh engine per page); omitted = default
 internal static class ProfileRunner
 {
     private const int _port = 5299;
@@ -49,14 +48,14 @@ internal static class ProfileRunner
         EnableSitemapDiscovery = false,
     };
 
-    public static async Task Run(string combo, int iterations, string framework, int? jintMaxUses = null)
+    public static async Task Run(string combo, int iterations, string framework)
     {
         var tokenSource = new CancellationTokenSource();
         var host = SpaWebApplicationFactory.Create(_entry, framework);
         _ = host.StartAsync(tokenSource.Token);
         await Task.Delay(1500);
 
-        Func<CancellationToken, Task> crawl = BuildCrawl(combo, jintMaxUses);
+        Func<CancellationToken, Task> crawl = BuildCrawl(combo);
 
         await crawl(tokenSource.Token);
 
@@ -85,7 +84,7 @@ internal static class ProfileRunner
         _ = host.StartAsync(tokenSource.Token);
         await Task.Delay(1500);
 
-        var provider = BuildProvider(combo, jintMaxUses: null, out var engineKey);
+        var provider = BuildProvider(combo, out var engineKey);
         var factory = provider.GetRequiredKeyedService<IJsEngineFactory>(engineKey);
         var parser = provider.GetService<IHtmlParser>();
         var renderOptions = provider.GetRequiredService<IOptions<JsRenderOptions>>().Value;
@@ -111,9 +110,9 @@ internal static class ProfileRunner
         await host.DisposeAsync();
     }
 
-    private static Func<CancellationToken, Task> BuildCrawl(string combo, int? jintMaxUses)
+    private static Func<CancellationToken, Task> BuildCrawl(string combo)
     {
-        var provider = BuildProvider(combo, jintMaxUses, out _);
+        var provider = BuildProvider(combo, out _);
 
         if (combo.StartsWith("jint"))
         {
@@ -127,7 +126,7 @@ internal static class ProfileRunner
         }
     }
 
-    private static ServiceProvider BuildProvider(string combo, int? jintMaxUses, out string engineKey)
+    private static ServiceProvider BuildProvider(string combo, out string engineKey)
     {
         Action<IServiceCollection> parser = combo switch
         {
@@ -139,10 +138,7 @@ internal static class ProfileRunner
         if (combo.StartsWith("jint"))
         {
             engineKey = _jintEngineKey;
-            // jintMaxUses toggles the engine pool for A/B measurement: 0 = fresh engine per page (un-pooled
-            // baseline), >0 = reuse each engine for that many pages. Omitted keeps the production default.
-            var engineOptions = jintMaxUses is { } maxUses ? new JintEngineOptions { MaxUsesPerEngine = maxUses } : new JintEngineOptions();
-            return Build(s => s.AddJintCrawler(_options, new JsRenderOptions(), engineOptions), parser);
+            return Build(s => s.AddJintCrawler(_options, new JsRenderOptions()), parser);
         }
         else
         {
