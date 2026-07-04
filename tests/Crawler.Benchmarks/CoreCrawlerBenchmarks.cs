@@ -10,7 +10,7 @@ public class CoreCrawlerBenchmarks
 {
     private const int _pageCount = 20000;
 
-    private SyntheticCrawler _crawler;
+    private SyntheticCrawler _crawler = null!;
 
     [Params(8, 32)]
     public int Concurrency;

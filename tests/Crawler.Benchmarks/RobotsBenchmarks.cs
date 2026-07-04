@@ -69,7 +69,7 @@ public class RobotsBenchmarks
         "INDEX, FOLLOW",
     ];
 
-    private RobotRuleChecker _checker;
+    private RobotRuleChecker _checker = null!;
 
     [GlobalSetup]
     public void Setup()
