@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="CommandLineParser" Version="2.9.1" />
+    <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" Version="10.0.8" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Crawler.TestHost\Crawler.TestHost.csproj" />
+    <ProjectReference Include="..\Crawler.Tests.Common\Crawler.Tests.Common.csproj" />
+    <ProjectReference Include="..\..\src\Crawler.Js.AngleSharp\Crawler.Js.AngleSharp.csproj" />
+    <ProjectReference Include="..\..\src\Crawler.Js.HtmlAgilityPack\Crawler.Js.HtmlAgilityPack.csproj" />
+  </ItemGroup>
+</Project>

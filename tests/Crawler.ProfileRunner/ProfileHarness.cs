@@ -16,20 +16,11 @@ using System.Diagnostics;
 using System.Text;
 using System.Text.RegularExpressions;
 
-namespace Crawler.Benchmarks;
+namespace Crawler.ProfileRunner;
 
-// Temporary investigation harness (not a benchmark). Drives the real crawl/render path for a single
+// Investigation harness (not a benchmark). Drives the real crawl/render path for a single
 // engine+parser combo against one framework's test-host SPA.
-//
-//   profile <combo> <iterations> [framework]
-//     Crawls the SPA repeatedly so RenderProfiler (JSRENDER_PROFILE=1) prints a per-phase table at exit.
-//   rendersize <combo> [framework]
-//     Renders the SPA once, prints element/anchor counts + size, and dumps the serialized HTML to disk
-//     (used to confirm every framework renders at production weight — a few thousand elements).
-//
-//   combo       = jint-js | jint-as | jint-hap | v8-js | v8-as | v8-hap
-//   framework   = react | preact | vue | svelte | solid (default preact)
-internal static class ProfileRunner
+internal static class ProfileHarness
 {
     private const int _port = 5299;
     private static readonly string _entry = $"http://localhost:{_port}/";
@@ -128,7 +119,7 @@ internal static class ProfileRunner
 
     private static ServiceProvider BuildProvider(string combo, out string engineKey)
     {
-        Action<IServiceCollection> parser = combo switch
+        Action<IServiceCollection>? parser = combo switch
         {
             "jint-as" or "v8-as" => s => s.AddAngleSharpHtmlParser(),
             "jint-hap" or "v8-hap" => s => s.AddHtmlAgilityPackHtmlParser(),
@@ -147,7 +138,7 @@ internal static class ProfileRunner
         }
     }
 
-    private static ServiceProvider Build(Action<IServiceCollection> engine, Action<IServiceCollection> parser)
+    private static ServiceProvider Build(Action<IServiceCollection> engine, Action<IServiceCollection>? parser)
     {
         var services = new ServiceCollection();
         engine(services);
