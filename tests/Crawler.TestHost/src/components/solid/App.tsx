@@ -1,73 +1,43 @@
-import { createMemo, createSignal, onMount, For, Show } from 'solid-js';
-import { pages, getPage } from '../../shared/pages';
+import { createMemo, createSignal, onMount } from 'solid-js';
+import { getPage } from '../../shared/pages';
+import { getCatalog, getFacets } from '../../shared/catalog';
 import { currentPath, start, subscribe } from '../../shared/router';
-import {
-    enterClassName,
-    exitClassName,
-    initialClassName,
-    pageTransitionDuration,
-} from '../../shared/transition';
+import Header from './Header';
+import Sidebar from './Sidebar';
+import Catalog from './Catalog';
+import Footer from './Footer';
 import '../../styles/global.css';
 
-function PageView(props: { path: string }) {
+function CatalogPage(props: { path: string }) {
     const page = createMemo(() => getPage(props.path));
+    const products = createMemo(() => getCatalog(props.path));
+    const facets = createMemo(() => getFacets(products()));
+
     return (
-        <div class="wrapper" style={{ 'background-color': page().color }}>
-            <nav class="container">
-                <h1 class="title" innerHTML={page().titleHtml} />
-                <p class="description">{page().body}</p>
-                <Show when={page().found}>
-                    <ul class="nav">
-                        <For each={pages}>
-                            {(entry) => (
-                                <li>
-                                    <a href={entry.href}>{entry.name}</a>
-                                </li>
-                            )}
-                        </For>
-                    </ul>
-                </Show>
-            </nav>
+        <div class="page">
+            <Header current={props.path} />
+            <section class="hero" style={{ 'background-color': page().color }}>
+                <div class="hero__inner">
+                    <h1 class="hero__title" innerHTML={page().titleHtml} />
+                    <p class="hero__body">{page().body}</p>
+                </div>
+            </section>
+            <main class="shell">
+                <Sidebar facets={facets()} />
+                <Catalog products={products()} />
+            </main>
+            <Footer />
         </div>
     );
 }
 
 export default function App() {
     const [path, setPath] = createSignal(currentPath());
-    const [previous, setPrevious] = createSignal<string | null>(null);
-    const [initial, setInitial] = createSignal(true);
 
     onMount(() => {
         start();
-        subscribe((next) => {
-            const prev = path();
-            if (prev === next) return;
-            setInitial(false);
-            setPath(next);
-            setPrevious(prev);
-            window.setTimeout(
-                () => setPrevious((current) => (current === prev ? null : current)),
-                pageTransitionDuration
-            );
-        });
+        subscribe((next) => setPath((prev) => (prev === next ? prev : next)));
     });
 
-    return (
-        <div class="transition-group">
-            <Show keyed when={path()}>
-                {(value) => (
-                    <div class={initial() ? initialClassName : enterClassName}>
-                        <PageView path={value} />
-                    </div>
-                )}
-            </Show>
-            <Show keyed when={previous()}>
-                {(value) => (
-                    <div class={exitClassName}>
-                        <PageView path={value} />
-                    </div>
-                )}
-            </Show>
-        </div>
-    );
+    return <CatalogPage path={path()} />;
 }

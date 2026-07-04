@@ -1,45 +1,38 @@
 <script lang="ts">
 import { onMount } from 'svelte';
-import PageView from './PageView.svelte';
+import { getPage } from '../../shared/pages';
+import { getCatalog, getFacets } from '../../shared/catalog';
 import { currentPath, start, subscribe } from '../../shared/router';
-import {
-    enterClassName,
-    exitClassName,
-    initialClassName,
-    pageTransitionDuration,
-} from '../../shared/transition';
+import Header from './Header.svelte';
+import Sidebar from './Sidebar.svelte';
+import Catalog from './Catalog.svelte';
+import Footer from './Footer.svelte';
 import '../../styles/global.css';
 
 let path = $state(currentPath());
-let previous = $state<string | null>(null);
-let initial = $state(true);
+const page = $derived(getPage(path));
+const products = $derived(getCatalog(path));
+const facets = $derived(getFacets(products));
 
 onMount(() => {
     start();
     return subscribe((next) => {
-        const prev = path;
-        if (prev === next) return;
-        initial = false;
-        path = next;
-        previous = prev;
-        window.setTimeout(() => {
-            if (previous === prev) previous = null;
-        }, pageTransitionDuration);
+        if (path !== next) path = next;
     });
 });
 </script>
 
-<div class="transition-group">
-    {#key path}
-        <div class={initial ? initialClassName : enterClassName}>
-            <PageView {path} />
+<div class="page">
+    <Header current={path} />
+    <section class="hero" style="background-color: {page.color}">
+        <div class="hero__inner">
+            <h1 class="hero__title">{@html page.titleHtml}</h1>
+            <p class="hero__body">{page.body}</p>
         </div>
-    {/key}
-    {#if previous !== null}
-        {#key previous}
-            <div class={exitClassName}>
-                <PageView path={previous} />
-            </div>
-        {/key}
-    {/if}
+    </section>
+    <main class="shell">
+        <Sidebar {facets} />
+        <Catalog {products} />
+    </main>
+    <Footer />
 </div>
