@@ -1,7 +1,7 @@
 <script lang="ts">
 import { onMount } from 'svelte';
-import { getPage } from '../../shared/pages';
-import { getCatalog, getFacets } from '../../shared/catalog';
+import { getPage, pages } from '../../shared/pages';
+import { getCatalog, getFacets, bucketProducts, PAGE_SIZE } from '../../shared/catalog';
 import { currentPath, start, subscribe } from '../../shared/router';
 import Header from './Header.svelte';
 import Sidebar from './Sidebar.svelte';
@@ -11,8 +11,10 @@ import '../../styles/global.css';
 
 let path = $state(currentPath());
 const page = $derived(getPage(path));
-const products = $derived(getCatalog(path));
-const facets = $derived(getFacets(products));
+const catalog = getCatalog(pages.length * PAGE_SIZE);
+const facets = getFacets(catalog);
+const index = $derived(pages.findIndex((entry) => entry.href === path));
+const products = $derived(bucketProducts(catalog, index));
 
 onMount(() => {
     start();
@@ -32,7 +34,7 @@ onMount(() => {
     </section>
     <main class="shell">
         <Sidebar {facets} />
-        <Catalog {products} />
+        <Catalog products={products} total={catalog.length} {path} />
     </main>
     <Footer />
 </div>

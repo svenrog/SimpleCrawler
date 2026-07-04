@@ -1,13 +1,14 @@
 <script lang="ts">
 import type { Product } from '../../shared/catalog';
 import ProductCard from './ProductCard.svelte';
+import Pagination from './Pagination.svelte';
 
-let { products }: { products: Product[] } = $props();
+let { products, total, path }: { products: Product[]; total: number; path: string } = $props();
 </script>
 
 <section class="catalog" aria-label="Products">
     <div class="catalog__toolbar">
-        <p class="catalog__count">{products.length} products</p>
+        <p class="catalog__count">{total} products</p>
         <label class="catalog__sort">
             Sort
             <select>
@@ -23,4 +24,5 @@ let { products }: { products: Product[] } = $props();
             <ProductCard {product} />
         {/each}
     </div>
+    <Pagination {path} />
 </section>

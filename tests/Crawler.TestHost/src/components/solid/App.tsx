@@ -1,6 +1,6 @@
 import { createMemo, createSignal, onMount } from 'solid-js';
-import { getPage } from '../../shared/pages';
-import { getCatalog, getFacets } from '../../shared/catalog';
+import { getPage, pages } from '../../shared/pages';
+import { getCatalog, getFacets, bucketProducts, PAGE_SIZE } from '../../shared/catalog';
 import { currentPath, start, subscribe } from '../../shared/router';
 import Header from './Header';
 import Sidebar from './Sidebar';
@@ -10,8 +10,10 @@ import '../../styles/global.css';
 
 function CatalogPage(props: { path: string }) {
     const page = createMemo(() => getPage(props.path));
-    const products = createMemo(() => getCatalog(props.path));
-    const facets = createMemo(() => getFacets(products()));
+    const catalog = createMemo(() => getCatalog(pages.length * PAGE_SIZE));
+    const facets = createMemo(() => getFacets(catalog()));
+    const index = createMemo(() => pages.findIndex((entry) => entry.href === props.path));
+    const products = createMemo(() => bucketProducts(catalog(), index()));
 
     return (
         <div class="page">
@@ -24,7 +26,7 @@ function CatalogPage(props: { path: string }) {
             </section>
             <main class="shell">
                 <Sidebar facets={facets()} />
-                <Catalog products={products()} />
+                <Catalog products={products()} total={catalog().length} path={props.path} />
             </main>
             <Footer />
         </div>

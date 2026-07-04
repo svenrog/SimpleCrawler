@@ -17,7 +17,8 @@ public sealed class SpaHostFixture : AbstractHostFixture
     }
 
     // The page links come from the same JSON the frontend itself consumes; this fixture covers real
-    // framework rendering only. The browser-API capability checks live in ProbeHostFixture (BrowserApis).
+    // framework rendering only. Paging navigates between these nav routes (each route is one catalog
+    // bucket), so the crawlable URL set is exactly the nav set — no extra pagination URLs to expect.
     public static IReadOnlyList<string> LinksFor(string framework)
     {
         var baseUri = new Uri(HostName(framework));
