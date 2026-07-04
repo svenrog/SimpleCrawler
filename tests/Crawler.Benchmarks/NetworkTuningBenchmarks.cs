@@ -26,10 +26,10 @@ public class NetworkTuningBenchmarks
 
     private static readonly string _payload = BuildPayload();
 
-    private WebApplication _host;
-    private HttpClient _http11;
-    private HttpClient _http2;
-    private string _baseUrl;
+    private WebApplication _host = null!;
+    private HttpClient _http11 = null!;
+    private HttpClient _http2 = null!;
+    private string _baseUrl = null!;
 
     [GlobalSetup]
     public async Task Setup()

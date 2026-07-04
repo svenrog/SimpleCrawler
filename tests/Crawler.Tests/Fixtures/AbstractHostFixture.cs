@@ -34,8 +34,8 @@ public abstract class AbstractHostFixture : IAsyncDisposable
         var renderOptions = CreateRenderOptions();
 
         services.AddAngleSharpCrawler(options);
-        services.AddJintCrawler(options, renderOptions);
-        services.AddV8Crawler(options, renderOptions);
+        services.AddJintCrawler(options, renderOptions ?? new());
+        services.AddV8Crawler(options, renderOptions ?? new());
         services.AddHtmlAgilityPackCrawler(options);
         services.AddPlaywrightCrawler(headlessOptions);
         services.AddPuppeteerCrawler(headlessOptions);

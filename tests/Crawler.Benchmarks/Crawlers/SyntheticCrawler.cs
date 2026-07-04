@@ -48,9 +48,9 @@ public sealed class SyntheticCrawler : AbstractCrawler<string, ScrapeResult>
         return graph;
     }
 
-    protected override Task<string> LoadResponse(string url, CancellationToken cancellationToken)
+    protected override Task<string?> LoadResponse(string url, CancellationToken cancellationToken)
     {
-        return Task.FromResult(url);
+        return Task.FromResult<string?>(url);
     }
 
     protected override ValueTask<PageExtract> ExtractPageData(string response)

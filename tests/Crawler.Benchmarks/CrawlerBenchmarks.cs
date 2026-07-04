@@ -20,16 +20,16 @@ public class CrawlerBenchmarks
 {
     private const string _entry = "http://localhost:5228/";
 
-    private WebApplication _host;
-    private CancellationTokenSource _tokenSource;
-    private ServiceProvider _serviceProvider;
+    private WebApplication _host = null!;
+    private CancellationTokenSource _tokenSource = null!;
+    private ServiceProvider _serviceProvider = null!;
 
-    private DefaultHtmlAgilityPackCrawler _htmlAgilityPackCrawler;
-    private DefaultAngleSharpCrawler _angleSharpCrawler;
-    private DefaultJintCrawler _angleSharpJintCrawler;
-    private DefaultV8Crawler _angleSharpV8Crawler;
-    private DefaultPlaywrightCrawler _playwrightCrawler;
-    private DefaultPuppeteerCrawler _puppeteerCrawler;
+    private DefaultHtmlAgilityPackCrawler _htmlAgilityPackCrawler = null!;
+    private DefaultAngleSharpCrawler _angleSharpCrawler = null!;
+    private DefaultJintCrawler _angleSharpJintCrawler = null!;
+    private DefaultV8Crawler _angleSharpV8Crawler = null!;
+    private DefaultPlaywrightCrawler _playwrightCrawler = null!;
+    private DefaultPuppeteerCrawler _puppeteerCrawler = null!;
 
 
     [GlobalSetup]
@@ -59,7 +59,7 @@ public class CrawlerBenchmarks
         _angleSharpJintCrawler = _serviceProvider.GetRequiredService<DefaultJintCrawler>();
         _angleSharpV8Crawler = _serviceProvider.GetRequiredService<DefaultV8Crawler>();
         _playwrightCrawler = _serviceProvider.GetRequiredService<DefaultPlaywrightCrawler>();
-        _puppeteerCrawler = _serviceProvider.GetService<DefaultPuppeteerCrawler>();
+        _puppeteerCrawler = _serviceProvider.GetRequiredService<DefaultPuppeteerCrawler>();
 
         _tokenSource = _serviceProvider.GetRequiredService<CancellationTokenSource>();
 
@@ -111,7 +111,5 @@ public class CrawlerBenchmarks
         await _host.DisposeAsync();
 
         await _serviceProvider.DisposeAsync();
-        _serviceProvider = null;
-        _tokenSource = null;
     }
 }

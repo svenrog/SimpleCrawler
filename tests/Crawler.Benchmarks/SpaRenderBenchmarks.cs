@@ -24,16 +24,16 @@ public class SpaRenderBenchmarks
     private const int _port = 5290;
     private static readonly string _entry = $"http://localhost:{_port}/";
 
-    private WebApplication _host;
-    private CancellationTokenSource _tokenSource;
+    private WebApplication _host = null!;
+    private CancellationTokenSource _tokenSource = null!;
     private readonly List<ServiceProvider> _providers = new();
 
-    private DefaultJintCrawler _jintJsParser;
-    private DefaultJintCrawler _jintAngleSharp;
-    private DefaultJintCrawler _jintHtmlAgilityPack;
-    private DefaultV8Crawler _v8JsParser;
-    private DefaultV8Crawler _v8AngleSharp;
-    private DefaultV8Crawler _v8HtmlAgilityPack;
+    private DefaultJintCrawler _jintJsParser = null!;
+    private DefaultJintCrawler _jintAngleSharp = null!;
+    private DefaultJintCrawler _jintHtmlAgilityPack = null!;
+    private DefaultV8Crawler _v8JsParser = null!;
+    private DefaultV8Crawler _v8AngleSharp = null!;
+    private DefaultV8Crawler _v8HtmlAgilityPack = null!;
 
     [GlobalSetup]
     public void Setup()
@@ -52,13 +52,13 @@ public class SpaRenderBenchmarks
 
     // One IHtmlParser is registered per provider so the renderer's parsers.FirstOrDefault() selects it; a null
     // parser action leaves the set empty and the renderer falls back to dom.js's __crawlerLoadHtml tokenizer.
-    private DefaultJintCrawler ResolveJint(Action<IServiceCollection> parser)
+    private DefaultJintCrawler ResolveJint(Action<IServiceCollection>? parser)
         => Build(s => s.AddJintCrawler(_options), parser).GetRequiredService<DefaultJintCrawler>();
 
-    private DefaultV8Crawler ResolveV8(Action<IServiceCollection> parser)
+    private DefaultV8Crawler ResolveV8(Action<IServiceCollection>? parser)
         => Build(s => s.AddV8Crawler(_options), parser).GetRequiredService<DefaultV8Crawler>();
 
-    private ServiceProvider Build(Action<IServiceCollection> engine, Action<IServiceCollection> parser)
+    private ServiceProvider Build(Action<IServiceCollection> engine, Action<IServiceCollection>? parser)
     {
         var services = new ServiceCollection();
         engine(services);
@@ -109,6 +109,5 @@ public class SpaRenderBenchmarks
 
         _providers.Clear();
         _tokenSource.Dispose();
-        _tokenSource = null;
     }
 }

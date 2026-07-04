@@ -24,11 +24,11 @@ public class PipelineBenchmarks
     private const int _pageCount = 500;
     private const int _fanout = 8;
 
-    private WebApplication _host;
-    private ServiceProvider _serviceProvider;
-    private DefaultHtmlAgilityPackCrawler _crawler;
-    private string _entry;
-    private string[] _pages;
+    private WebApplication _host = null!;
+    private ServiceProvider _serviceProvider = null!;
+    private DefaultHtmlAgilityPackCrawler _crawler = null!;
+    private string _entry = null!;
+    private string[] _pages = null!;
 
     public enum Mode
     {
