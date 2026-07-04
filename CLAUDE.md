@@ -12,7 +12,7 @@ A high-performance single-domain web crawler (CLI: `smpcrawl`) built to gather U
 - Run a single test: `dotnet test --filter "FullyQualifiedName~TestName"`.
 - Tests use **xUnit v3** (pre-release `xunit.v3`), FluentAssertions, and Moq — not xUnit v2 idioms.
 - Benchmarks are a runnable BenchmarkDotNet console app: `dotnet run -c Release --project tests/Crawler.Benchmarks`. Always run benchmarks in Release.
-- The JS-render profiling harness is a separate console app, `tests/Crawler.ProfileRunner` (CommandLineParser verbs, not a benchmark). It drives the real crawl/render path against a test-host SPA: `dotnet run --project tests/Crawler.ProfileRunner -- profile <combo> <iterations> [framework]` (crawls repeatedly so `RenderProfiler` with `JSRENDER_PROFILE=1` prints a per-phase table), or `-- rendersize <combo> [framework]` (renders once, dumps element/anchor counts + serialized HTML). `combo` = `jint-hap|jint-as|jint-js|v8-hap|v8-as|v8-js`; `framework` = `react|preact|vue|svelte|solid`. Pass `--help` or `profile --help` for defaults.
+- The JS-render profiling harness is a separate console app, `tests/Crawler.ProfileRunner` (CommandLineParser verbs, not a benchmark). It drives the real crawl/render path against a test-host SPA: `dotnet run --project tests/Crawler.ProfileRunner -- profile <combo> <iterations> [framework]` (crawls repeatedly so `RenderProfiler` with `JSRENDER_PROFILE=1` prints a per-phase table), or `-- rendersize <combo> [framework]` (renders once, dumps element/anchor counts + serialized HTML). `combo` = `jint|v8`; `framework` = `react|preact|vue|svelte|solid`. Pass `--help` or `profile --help` for defaults.
 
 ## Architecture
 

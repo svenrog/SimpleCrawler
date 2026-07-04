@@ -4,8 +4,6 @@
     <Project Path="src/Crawler.Js/Crawler.Js.csproj" />
     <Project Path="src/Crawler.Js.Jint/Crawler.Js.Jint.csproj" />
     <Project Path="src/Crawler.Js.V8/Crawler.Js.V8.csproj" />
-    <Project Path="src/Crawler.Js.AngleSharp/Crawler.Js.AngleSharp.csproj" />
-    <Project Path="src/Crawler.Js.HtmlAgilityPack/Crawler.Js.HtmlAgilityPack.csproj" />
     <Project Path="src/Crawler.HtmlAgilityPack/Crawler.HtmlAgilityPack.csproj" Id="835175c9-97b5-4ced-9d3b-3f68bfd07018" />
     <Project Path="src/Crawler.Playwright/Crawler.Playwright.csproj" Id="cc0b2ae3-66e6-47b9-8762-8f62bff5c582" />
     <Project Path="src/Crawler.Puppeteer/Crawler.Puppeteer.csproj" Id="a3091394-7cad-4616-80b2-12a5a168df4e" />
