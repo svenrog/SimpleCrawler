@@ -1,66 +1,43 @@
-import { useEffect, useState } from 'react';
-import { pages, getPage } from '../../shared/pages';
+import { useEffect, useMemo, useState } from 'react';
+import { getPage } from '../../shared/pages';
+import { getCatalog, getFacets } from '../../shared/catalog';
 import { currentPath, start, subscribe } from '../../shared/router';
-import {
-    enterClassName,
-    exitClassName,
-    initialClassName,
-    pageTransitionDuration,
-} from '../../shared/transition';
+import Header from './Header';
+import Sidebar from './Sidebar';
+import Catalog from './Catalog';
+import Footer from './Footer';
 import '../../styles/global.css';
 
-function PageView({ path }: { path: string }) {
+function CatalogPage({ path }: { path: string }) {
     const page = getPage(path);
+    const products = useMemo(() => getCatalog(path), [path]);
+    const facets = useMemo(() => getFacets(products), [products]);
+
     return (
-        <div className="wrapper" style={{ backgroundColor: page.color }}>
-            <nav className="container">
-                <h1 className="title" dangerouslySetInnerHTML={{ __html: page.titleHtml }} />
-                <p className="description">{page.body}</p>
-                {page.found && (
-                    <ul className="nav">
-                        {pages.map((entry, index) => (
-                            <li key={index}>
-                                <a href={entry.href}>{entry.name}</a>
-                            </li>
-                        ))}
-                    </ul>
-                )}
-            </nav>
+        <div className="page">
+            <Header current={path} />
+            <section className="hero" style={{ backgroundColor: page.color }}>
+                <div className="hero__inner">
+                    <h1 className="hero__title" dangerouslySetInnerHTML={{ __html: page.titleHtml }} />
+                    <p className="hero__body">{page.body}</p>
+                </div>
+            </section>
+            <main className="shell">
+                <Sidebar facets={facets} />
+                <Catalog products={products} />
+            </main>
+            <Footer />
         </div>
     );
 }
 
 export default function App() {
     const [path, setPath] = useState(currentPath());
-    const [previous, setPrevious] = useState<string | null>(null);
-    const [initial, setInitial] = useState(true);
 
     useEffect(() => {
         start();
-        return subscribe((next) => {
-            setPath((prev) => {
-                if (prev === next) return prev;
-                setInitial(false);
-                setPrevious(prev);
-                window.setTimeout(
-                    () => setPrevious((current) => (current === prev ? null : current)),
-                    pageTransitionDuration
-                );
-                return next;
-            });
-        });
+        return subscribe((next) => setPath((prev) => (prev === next ? prev : next)));
     }, []);
 
-    return (
-        <div className="transition-group">
-            <div key={path} className={initial ? initialClassName : enterClassName}>
-                <PageView path={path} />
-            </div>
-            {previous !== null && (
-                <div key={previous} className={exitClassName}>
-                    <PageView path={previous} />
-                </div>
-            )}
-        </div>
-    );
+    return <CatalogPage path={path} />;
 }
