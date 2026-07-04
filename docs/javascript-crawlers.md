@@ -54,14 +54,12 @@ Passed to `AddJintCrawler`/`AddV8Crawler`.
 | `ScriptLogging` | `null` | `LogLevel` floor for forwarding page `console.*` to your logger. `Debug` to diagnose non-rendering pages. |
 | `MaxTaskDrainIterations` | `1000` | Cap on microtask/chunk-load drain iterations before giving up on a page. |
 
-## Engine pooling
+## Engine reuse
 
-Both engines keep a pool of render engines sized to the crawl's `Concurrency` — set `Concurrency` to 8 and the pool holds up to 8 engines. An engine is rented for each page and returned when the page finishes, so the cost of building an engine is amortised across the crawl instead of paid per page. What is pooled differs between the engines:
+The two engines handle per-page setup differently.
 
-- **V8** pools the *isolate* (its native heap and compilation cache). Every page still renders in a fresh context, so per-page globals are always clean; the pool only amortises isolate spin-up.
-- **Jint** has no isolate/context split, so it pools the whole *realm*: a reused engine keeps its globals and the installed DOM. Between pages it resets per-page state — the document, custom-element registry, timers, storage, and any globals a bundle added — instead of re-evaluating the ~90&nbsp;KB `dom.js` shim, which is the bulk of a Jint render's setup. This is what roughly halves Jint render time and allocation on setup-dominated pages ([performance](./performance.md)).
-
-A pooled engine accumulates over its lifetime — V8's native heap grows with every distinct script it compiles, and a reused Jint realm can leak state past the reset — so each engine is retired and rebuilt after a fixed number of pages (`MaxUsesPerRuntime` / `MaxUsesPerEngine`).
+- **V8** pools the *isolate* (its native heap and compilation cache) sized to the crawl's `Concurrency` — set `Concurrency` to 8 and the pool holds up to 8 isolates. An isolate is rented per page and returned when the page finishes, so isolate spin-up is amortised across the crawl. Every page still renders in a fresh context, so per-page globals are always clean. Because a pooled isolate's native heap grows with every distinct script it compiles, each isolate is retired and rebuilt after `MaxUsesPerRuntime` pages.
+- **Jint** builds a **fresh engine per page** and disposes it when the page finishes — no pool, no realm reuse, no reflection. On current Jint this is deliberate: `new Engine()` costs ~1–2&nbsp;ms and evaluating the ~90&nbsp;KB `dom.js` shim (from a cached prepared script) another ~6–7&nbsp;ms, so the whole engine build is **~8–9&nbsp;ms/page** — around 0.3&nbsp;% of a production-weight SPA render (~2.7–3.5&nbsp;s/page). Pooling the realm only ever amortised that setup, and after netting out the between-page reset it saved ~1–2&nbsp;%, so the pooling machinery was measured away in favour of the simpler, AOT-friendly fresh-engine path. See [performance](./performance.md).
 
 ### V8EngineOptions
 
@@ -70,9 +68,3 @@ A pooled engine accumulates over its lifetime — V8's native heap grows with ev
 | `MaxHeapSizeMb` | `256` | Sets the max heap allocation of each isolate. This value should be multiplied by the number of threads (by default 2048 MiB) |
 | `MaxUsesPerRuntime` | `50` | The maximum number of uses for each engine, the heap will grow uncontrollably during crawl (depending on client scripts encountered) and this can be used as a safety valve |
 | `HeapSampleInterval` | `250&nbsp;ms` | The interval at which to sample memory use, lower values use more system resources. |
-
-### JintEngineOptions
-
-| Option | Default | Effect |
-| ------ | ------- | ------ |
-| `MaxUsesPerEngine` | `50` | The number of pages an engine renders before it is disposed and rebuilt with a fresh realm. Bounds any per-page state that survives the between-page reset of a reused realm. `0` disables reuse (a fresh engine per page). |

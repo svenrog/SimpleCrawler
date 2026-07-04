@@ -13,25 +13,25 @@ One full render pass of the `SpaRenderBenchmarks` site (client-only Preact Astro
 
 \* V8 allocations understate real memory, the heap is native, off the .NET GC.
 
-Both engines pool render engines across the crawl ([engine pooling](./javascript-crawlers.md#engine-pooling)).
-Jint's pool reuses the realm and skips the per-page DOM-shim setup, which roughly halved the Jint rows
-above versus reconstructing the shim every page — so the two engines are now ~2–2.7× apart rather than ~4×.
+V8 pools its isolate across the crawl; Jint builds a fresh engine per page
+([engine reuse](./javascript-crawlers.md#engine-reuse)). Jint's per-page setup — constructing the engine
+and evaluating the DOM shim from a cached prepared script — is a small fixed cost (~8–9&nbsp;ms/page, a few
+percent of a Jint render on these rows and a fraction of a percent on a production-weight SPA), so pooling
+the realm was measured away rather than kept. V8 stays ~2–2.7× faster on render-heavy pages regardless.
 
 Static backends parse the same page in low tens of ms / ~30 MB, no scripting. Prefer static when links are in the server HTML.
 Drop to JS (V8 + HtmlAgilityPack, or Jint + HtmlAgilityPack) when not.
 Use headless only when the shim can't render.
 
-The HTML parser is a real lever on both engines. Because pooling amortises the per-page DOM-shim setup that
-used to dominate a Jint render, HTML parsing is again a meaningful share of the time — HtmlAgilityPack is
-~15–20% faster than the JS tokenizer on Jint (it was a wash before pooling), and on V8 it shaves ~10% and
-cuts allocations ~2×. Prefer V8 for JS crawling; Jint is the fallback when native dependencies can't be
-installed or the managed heap must be accountable.
+The HTML parser is a real lever on both engines: HtmlAgilityPack is ~15–20% faster than the JS tokenizer on
+Jint, and on V8 it shaves ~10% and cuts allocations ~2×. Prefer V8 for JS crawling; Jint is the fallback
+when native dependencies can't be installed or the managed heap must be accountable.
 
 ## Rules of thumb
 
 - Start static, climb a tier only when a cheaper one misses links.
 - When using a JS crawler: register HtmlAgilityPack. It is the fastest, lowest-allocation option on
-  both engines now that pooling makes the parser a meaningful share of a Jint render.
+  both engines.
 - High `Concurrency` but set `ParseConcurrency` to core count on render-heavy crawls
   ([why?](./crawler-options.md#parseconcurrency)).
 
