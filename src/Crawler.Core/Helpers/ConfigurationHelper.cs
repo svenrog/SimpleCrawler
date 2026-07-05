@@ -46,6 +46,7 @@ public static class ConfigurationHelper
             PooledConnectionLifetime = TimeSpan.FromMinutes(10),
             PooledConnectionIdleTimeout = TimeSpan.FromMinutes(1),
             AutomaticDecompression = DecompressionMethods.All,
+            Proxy = options.Proxy,
         };
     }
 
