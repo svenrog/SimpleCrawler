@@ -6,7 +6,7 @@ using Microsoft.Extensions.Options;
 
 namespace Crawler.Core;
 
-public abstract class AbstractStaticHtmlCrawler<TResult> : AbstractRobotsCrawler<byte[], TResult>
+public abstract class AbstractStaticHtmlCrawler<TDocument, TResult> : AbstractRobotsCrawler<byte[], TDocument, TResult>
     where TResult : IScrapeResult
 {
     private readonly HttpClient _client;
@@ -36,13 +36,20 @@ public abstract class AbstractStaticHtmlCrawler<TResult> : AbstractRobotsCrawler
         }
     }
 
-    protected override ValueTask<PageExtract> ExtractPageData(byte[] response)
+    protected override ValueTask<TDocument> ParseResponse(byte[] response)
     {
-        var (canonicalHref, robotsContent, hrefs) = ExtractStatic(response);
+        return new ValueTask<TDocument>(ParseDocument(response));
+    }
+
+    protected override ValueTask<PageExtract> ExtractPageData(TDocument document)
+    {
+        var (canonicalHref, robotsContent, hrefs) = ExtractStatic(document);
 
         var extract = new PageExtract(GetAbsoluteUrl(canonicalHref), IndexingHelper.ParseMetaRobots(robotsContent), hrefs);
         return new ValueTask<PageExtract>(extract);
     }
 
-    protected abstract (string? CanonicalHref, string? RobotsContent, IReadOnlyList<string?> LinkHrefs) ExtractStatic(byte[] response);
+    protected abstract TDocument ParseDocument(byte[] response);
+
+    protected abstract (string? CanonicalHref, string? RobotsContent, IReadOnlyList<string?> LinkHrefs) ExtractStatic(TDocument document);
 }

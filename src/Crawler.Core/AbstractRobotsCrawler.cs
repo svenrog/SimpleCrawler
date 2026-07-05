@@ -5,7 +5,7 @@ using Microsoft.Extensions.Options;
 
 namespace Crawler.Core;
 
-public abstract class AbstractRobotsCrawler<TResponse, TResult> : AbstractCrawler<TResponse, TResult>
+public abstract class AbstractRobotsCrawler<TResponse, TDocument, TResult> : AbstractCrawler<TResponse, TDocument, TResult>
     where TResult : IScrapeResult
 {
     private readonly IRobotClient _robotClient;
@@ -15,8 +15,6 @@ public abstract class AbstractRobotsCrawler<TResponse, TResult> : AbstractCrawle
 
     private IRobotRuleChecker? _robotRules;
     private IRobotsTxt? _robots;
-    private Uri? _entryUri;
-    private string? _siteAuthority;
 
     protected AbstractRobotsCrawler(IRobotClient robotClient, IOptions<CrawlerOptions> options, ILogger logger) : base(options, logger)
     {
@@ -40,9 +38,10 @@ public abstract class AbstractRobotsCrawler<TResponse, TResult> : AbstractCrawle
 
     protected override async ValueTask InitializeCrawl(string entry, CancellationToken cancellationToken)
     {
-        _entryUri = new Uri(entry);
-        _siteAuthority = _entryUri.GetLeftPart(UriPartial.Authority);
-        _robots = await _robotClient.LoadRobotsTxtAsync(_entryUri, cancellationToken);
+        // Rules must be ready before base.InitializeCrawl enqueues the entry (Enqueue consults IsCrawlAllowed),
+        // so prime the site identity here and load robots.txt before delegating.
+        SetSiteIdentity(entry);
+        _robots = await _robotClient.LoadRobotsTxtAsync(SiteUri, cancellationToken);
 
         if (_options.RespectRobotsTxt && _robots.TryGetCrawlDelay(_productToken, out var crawlDelay))
             _options.CrawlDelay = Math.Max(_options.CrawlDelay, crawlDelay);
@@ -60,7 +59,7 @@ public abstract class AbstractRobotsCrawler<TResponse, TResult> : AbstractCrawle
 
         try
         {
-            var sitemap = _robots!.LoadSitemapAsync(_entryUri!, null, cancellationToken);
+            var sitemap = _robots!.LoadSitemapAsync(SiteUri, null, cancellationToken);
             await foreach (var item in sitemap)
             {
                 var url = item.Location.ToString();
@@ -84,7 +83,7 @@ public abstract class AbstractRobotsCrawler<TResponse, TResult> : AbstractCrawle
 
     private string GetSitePath(string url)
     {
-        var authority = _siteAuthority!;
+        var authority = SiteAuthority;
         if (url.Length > authority.Length && url.StartsWith(authority, StringComparison.OrdinalIgnoreCase))
             return url[authority.Length..];
 

@@ -10,7 +10,7 @@ using System.Text.Json;
 
 namespace Crawler.Puppeteer;
 
-public abstract class PuppeteerCrawler<TResult> : AbstractRobotsCrawler<IPage, TResult>
+public abstract class PuppeteerCrawler<TResult> : AbstractRobotsCrawler<IPage, IPage, TResult>
     where TResult : IScrapeResult
 {
     private readonly PuppeteerBrowserSession _session;
@@ -61,6 +61,11 @@ public abstract class PuppeteerCrawler<TResult> : AbstractRobotsCrawler<IPage, T
     protected virtual NavigationOptions GetNavigationOptions()
     {
         return Constants.DefaultNavigationOptions;
+    }
+
+    protected override ValueTask<IPage> ParseResponse(IPage response)
+    {
+        return new ValueTask<IPage>(response);
     }
 
     protected override async ValueTask<PageExtract> ExtractPageData(IPage response)

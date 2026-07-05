@@ -6,7 +6,7 @@ using Microsoft.Extensions.Options;
 
 namespace Crawler.Benchmarks;
 
-public sealed class SyntheticCrawler : AbstractCrawler<string, ScrapeResult>
+public sealed class SyntheticCrawler : AbstractCrawler<string, string, ScrapeResult>
 {
     private const string _authority = "http://synthetic";
 
@@ -53,10 +53,15 @@ public sealed class SyntheticCrawler : AbstractCrawler<string, ScrapeResult>
         return Task.FromResult<string?>(url);
     }
 
-    protected override ValueTask<PageExtract> ExtractPageData(string response)
+    protected override ValueTask<string> ParseResponse(string response)
     {
-        var lastSlash = response.LastIndexOf('/');
-        var id = int.Parse(response.AsSpan(lastSlash + 1));
+        return new ValueTask<string>(response);
+    }
+
+    protected override ValueTask<PageExtract> ExtractPageData(string document)
+    {
+        var lastSlash = document.LastIndexOf('/');
+        var id = int.Parse(document.AsSpan(lastSlash + 1));
 
         var robots = IndexingHelper.ParseMetaRobots(_robotsContent);
 

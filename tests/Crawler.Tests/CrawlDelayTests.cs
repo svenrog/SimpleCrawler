@@ -75,7 +75,7 @@ public class CrawlDelayTests
         return new InMemoryRobotsCrawler(client, Options.Create(options), NullLogger.Instance, links);
     }
 
-    private sealed class InMemoryRobotsCrawler : AbstractRobotsCrawler<string, ScrapeResult>
+    private sealed class InMemoryRobotsCrawler : AbstractRobotsCrawler<string, string, ScrapeResult>
     {
         private readonly IReadOnlyDictionary<string, IReadOnlyList<string?>> _links;
 
@@ -92,9 +92,12 @@ public class CrawlDelayTests
         protected override Task<string?> LoadResponse(string url, CancellationToken cancellationToken)
             => Task.FromResult<string?>(url);
 
-        protected override ValueTask<PageExtract> ExtractPageData(string response)
+        protected override ValueTask<string> ParseResponse(string response)
+            => new(response);
+
+        protected override ValueTask<PageExtract> ExtractPageData(string document)
         {
-            var hrefs = _links.TryGetValue(response, out var links) ? links : [];
+            var hrefs = _links.TryGetValue(document, out var links) ? links : [];
             return ValueTask.FromResult(new PageExtract(null, RobotsRules.All, hrefs));
         }
 
