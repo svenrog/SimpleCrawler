@@ -2,7 +2,6 @@ using Crawler.Core;
 using Crawler.Js.Abstractions;
 using Crawler.Js.Jint;
 using Crawler.Js.Models;
-using Crawler.Js.Parsing;
 using Crawler.Js.Rendering;
 using Crawler.Js.V8;
 using Crawler.Tests.Helpers;
@@ -20,7 +19,7 @@ namespace Crawler.Tests;
 // Theory'd over both engines since the JS DOM is the single code path for Jint + V8.
 public class JsDomRendererTests
 {
-    private static JsRenderer CreateJsRenderer(JsEngine engine, JsRenderOptions? options = null, ILogger? logger = null, IHtmlParser? htmlParser = null)
+    private static JsRenderer CreateJsRenderer(JsEngine engine, JsRenderOptions? options = null, ILogger? logger = null)
     {
         var services = new ServiceCollection();
         var key = engine == JsEngine.V8 ? "js-v8" : "js-jint";
@@ -30,7 +29,7 @@ public class JsDomRendererTests
             services.AddJintCrawler(new CrawlerOptions());
         var provider = services.BuildServiceProvider();
         var factory = provider.GetRequiredKeyedService<IJsEngineFactory>(key);
-        return new JsRenderer(factory, options ?? new JsRenderOptions(), htmlParser, logger ?? NullLogger.Instance);
+        return new JsRenderer(factory, options ?? new JsRenderOptions(), logger ?? NullLogger.Instance);
     }
 
     [Theory]

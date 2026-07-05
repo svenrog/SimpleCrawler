@@ -95,6 +95,6 @@ public class JsModuleFetchTests
             services.AddJintCrawler(new CrawlerOptions());
         var provider = services.BuildServiceProvider();
         var factory = provider.GetRequiredKeyedService<IJsEngineFactory>(key);
-        return new JsRenderer(factory, new JsRenderOptions(), null, NullLogger.Instance);
+        return new JsRenderer(factory, new JsRenderOptions(), NullLogger.Instance);
     }
 }
