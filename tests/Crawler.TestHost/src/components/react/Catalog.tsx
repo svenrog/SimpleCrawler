@@ -1,11 +1,12 @@
 import type { Product } from '../../shared/catalog';
 import ProductCard from './ProductCard';
+import Pagination from './Pagination';
 
-export default function Catalog({ products }: { products: Product[] }) {
+export default function Catalog({ products, total, path }: { products: Product[]; total: number; path: string }) {
     return (
         <section className="catalog" aria-label="Products">
             <div className="catalog__toolbar">
-                <p className="catalog__count">{products.length} products</p>
+                <p className="catalog__count">{total} products</p>
                 <label className="catalog__sort">
                     Sort
                     <select defaultValue="popular">
@@ -21,6 +22,7 @@ export default function Catalog({ products }: { products: Product[] }) {
                     <ProductCard key={product.id} product={product} />
                 ))}
             </div>
+            <Pagination path={path} />
         </section>
     );
 }

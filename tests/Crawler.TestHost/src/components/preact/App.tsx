@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'preact/hooks';
-import { getPage } from '../../shared/pages';
-import { getCatalog, getFacets } from '../../shared/catalog';
+import { getPage, pages } from '../../shared/pages';
+import { getCatalog, getFacets, bucketProducts, PAGE_SIZE } from '../../shared/catalog';
 import { currentPath, start, subscribe } from '../../shared/router';
 import Header from './Header';
 import Sidebar from './Sidebar';
@@ -10,8 +10,10 @@ import '../../styles/global.css';
 
 function CatalogPage({ path }: { path: string }) {
     const page = getPage(path);
-    const products = useMemo(() => getCatalog(path), [path]);
-    const facets = useMemo(() => getFacets(products), [products]);
+    const catalog = useMemo(() => getCatalog(pages.length * PAGE_SIZE), []);
+    const facets = useMemo(() => getFacets(catalog), [catalog]);
+    const index = pages.findIndex((entry) => entry.href === path);
+    const products = useMemo(() => bucketProducts(catalog, index), [catalog, index]);
 
     return (
         <div className="page">
@@ -24,7 +26,7 @@ function CatalogPage({ path }: { path: string }) {
             </section>
             <main className="shell">
                 <Sidebar facets={facets} />
-                <Catalog products={products} />
+                <Catalog products={products} total={catalog.length} path={path} />
             </main>
             <Footer />
         </div>

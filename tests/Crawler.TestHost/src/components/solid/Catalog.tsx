@@ -1,12 +1,13 @@
 import { For } from 'solid-js';
 import type { Product } from '../../shared/catalog';
 import ProductCard from './ProductCard';
+import Pagination from './Pagination';
 
-export default function Catalog(props: { products: Product[] }) {
+export default function Catalog(props: { products: Product[]; total: number; path: string }) {
     return (
         <section class="catalog" aria-label="Products">
             <div class="catalog__toolbar">
-                <p class="catalog__count">{props.products.length} products</p>
+                <p class="catalog__count">{props.total} products</p>
                 <label class="catalog__sort">
                     Sort
                     <select value="popular">
@@ -20,6 +21,7 @@ export default function Catalog(props: { products: Product[] }) {
             <div class="catalog__grid">
                 <For each={props.products}>{(product) => <ProductCard product={product} />}</For>
             </div>
+            <Pagination path={props.path} />
         </section>
     );
 }

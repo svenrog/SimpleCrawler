@@ -1,14 +1,15 @@
 <script setup lang="ts">
 import type { Product } from '../../shared/catalog';
 import ProductCard from './ProductCard.vue';
+import Pagination from './Pagination.vue';
 
-defineProps<{ products: Product[] }>();
+defineProps<{ products: Product[]; total: number; path: string }>();
 </script>
 
 <template>
     <section class="catalog" aria-label="Products">
         <div class="catalog__toolbar">
-            <p class="catalog__count">{{ products.length }} products</p>
+            <p class="catalog__count">{{ total }} products</p>
             <label class="catalog__sort">
                 Sort
                 <select>
@@ -22,5 +23,6 @@ defineProps<{ products: Product[] }>();
         <div class="catalog__grid">
             <ProductCard v-for="product in products" :key="product.id" :product="product" />
         </div>
+        <Pagination :path="path" />
     </section>
 </template>

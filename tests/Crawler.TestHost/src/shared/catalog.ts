@@ -50,8 +50,19 @@ function pick<T>(rng: () => number, items: T[]): T {
     return items[Math.floor(rng() * items.length)];
 }
 
-export function getCatalog(path: string, count = 240): Product[] {
-    const rng = mulberry32(hashSeed(path));
+// The store's catalog is one deterministic list split into PAGE_SIZE-sized buckets — one bucket per
+// route. The nav routes double as the catalog's pages, so paging navigates between routes rather than
+// minting ?page=N URLs (see each framework's Pagination component).
+export const PAGE_SIZE = 32;
+
+export function bucketProducts(products: Product[], index: number): Product[] {
+    if (index < 0) return [];
+    const start = index * PAGE_SIZE;
+    return products.slice(start, start + PAGE_SIZE);
+}
+
+export function getCatalog(count: number): Product[] {
+    const rng = mulberry32(hashSeed('catalog'));
     const products: Product[] = [];
 
     for (let i = 0; i < count; i++) {

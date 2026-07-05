@@ -10,7 +10,7 @@ Both are tested against the client-side frameworks and libraries below. The test
 - [Svelte](https://svelte.dev/)
 - [Vue](https://vuejs.org/) (Jint can't run [Vue](./docs/javascript-crawlers.md))
 
-Using `Crawler.Js` crawlers requires 2 choices (engine and parser).
+Using `Crawler.Js` crawlers requires choosing an engine (`Jint` or `V8`).
 
 ## Engine
 
@@ -32,15 +32,11 @@ Use if memory management is needed or dependencies can't be installed.
 
 ## HTML parser
 
-The HTML must become a DOM tree before scripts run. Native C# pre-parsing is far less resource intensive than the JS tokenizer.
-
-| Registration                     | Shell parsed by                  | Speed           |
-| -------------------------------- | -------------------------------- | --------------- |
-| *(none)*                         | `dom.js` JS tokenizer            | slowest         |
-| `AddAngleSharpHtmlParser()`      | AngleSharp (spec-compliant)      | middle          |
-| `AddHtmlAgilityPackHtmlParser()` | HtmlAgilityPack                  | **fastest**     |
-
-HtmlAgilityPack is preferred unless you need spec-compliant parsing.
+The shell HTML is tokenised into the DOM by `dom.js` before scripts run — there is no parser to choose.
+Pluggable native C# pre-parsers (AngleSharp, HtmlAgilityPack) feeding the tree in via `__crawlerLoadTree`
+were tried and removed: on a realistic render the parse is a rounding error next to bundle execution, so
+they measured no faster and, on V8, allocated *more* (they build a managed DOM tree to marshal across).
+The `IHtmlParser` seam remains if a future backend ever needs it. See [performance](./performance.md).
 
 ## JsRenderOptions
 

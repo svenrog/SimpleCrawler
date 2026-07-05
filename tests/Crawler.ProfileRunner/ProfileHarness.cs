@@ -1,10 +1,7 @@
 using Crawler.Core;
 using Crawler.Js.Abstractions;
-using Crawler.Js.AngleSharp;
-using Crawler.Js.HtmlAgilityPack;
 using Crawler.Js.Jint;
 using Crawler.Js.Models;
-using Crawler.Js.Parsing;
 using Crawler.Js.Rendering;
 using Crawler.Js.V8;
 using Crawler.TestHost.Infrastructure.Factories;
@@ -77,9 +74,8 @@ internal static class ProfileHarness
 
         var provider = BuildProvider(combo, out var engineKey);
         var factory = provider.GetRequiredKeyedService<IJsEngineFactory>(engineKey);
-        var parser = provider.GetService<IHtmlParser>();
         var renderOptions = provider.GetRequiredService<IOptions<JsRenderOptions>>().Value;
-        var renderer = new JsRenderer(factory, renderOptions, parser, NullLogger.Instance);
+        var renderer = new JsRenderer(factory, renderOptions, null, NullLogger.Instance);
 
         using var client = new HttpClient();
         var shell = await client.GetByteArrayAsync(_entry, tokenSource.Token);
@@ -119,30 +115,22 @@ internal static class ProfileHarness
 
     private static ServiceProvider BuildProvider(string combo, out string engineKey)
     {
-        Action<IServiceCollection>? parser = combo switch
-        {
-            "jint-as" or "v8-as" => s => s.AddAngleSharpHtmlParser(),
-            "jint-hap" or "v8-hap" => s => s.AddHtmlAgilityPackHtmlParser(),
-            _ => null,
-        };
-
         if (combo.StartsWith("jint"))
         {
             engineKey = _jintEngineKey;
-            return Build(s => s.AddJintCrawler(_options, new JsRenderOptions()), parser);
+            return Build(s => s.AddJintCrawler(_options, new JsRenderOptions()));
         }
         else
         {
             engineKey = _v8EngineKey;
-            return Build(s => s.AddV8Crawler(_options), parser);
+            return Build(s => s.AddV8Crawler(_options));
         }
     }
 
-    private static ServiceProvider Build(Action<IServiceCollection> engine, Action<IServiceCollection>? parser)
+    private static ServiceProvider Build(Action<IServiceCollection> engine)
     {
         var services = new ServiceCollection();
         engine(services);
-        parser?.Invoke(services);
         services.AddSingleton<ILogger>(NullLogger.Instance);
         return services.BuildServiceProvider();
     }

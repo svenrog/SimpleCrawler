@@ -398,6 +398,38 @@ em:before {
     font-size: 0.85rem;
 }
 
+/* Pagination */
+.pagination {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    margin-top: 32px;
+}
+
+.pagination__link {
+    background-color: #0003;
+    border-radius: 4px;
+    min-width: 40px;
+    padding: 8px 12px;
+    text-align: center;
+}
+
+.pagination__link:hover {
+    background-color: #0006;
+    text-decoration: none;
+}
+
+.pagination__link.is-current {
+    background-color: #06846c;
+    font-weight: 700;
+}
+
+.pagination__link.is-disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
 /* Footer */
 .footer {
     background-color: #111;
