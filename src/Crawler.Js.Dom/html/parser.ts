@@ -11,9 +11,8 @@ import { decodeEntities } from "./entities";
 import { isAlpha, skipSpace, matchTagName, scanAttrName, scanBareValue, findRawTextClose } from "./tokenizer";
 import { parserRef } from "./parserRef";
 
-// The element-class selection the string parser uses: known tag → reflected subclass, else a plain Element.
-// Shared with the tree builder so a C#-parsed tree instantiates the same node types as the tokenizer path
-// (deliberately not document.createElement, which would consult customElements during initial parse).
+// The element-class selection the parser uses: known tag → reflected subclass, else a plain Element.
+// Deliberately not document.createElement, which would consult customElements during the initial parse.
 export function createLocalElement(tag: string): Element {
     const factory = reflectedElementFactories[tag];
     return factory ? factory() : new HTMLElement(tag);
@@ -28,8 +27,7 @@ export function attachChild(parent: any, child: any): void {
     parent.childNodes.push(child);
 }
 
-// Attaches a finished root tree to the document. Shared so the string parser and the tree builder produce the
-// same documentElement/head/body wiring.
+// Attaches a finished root tree to the document, wiring documentElement/head/body.
 export function wireDocument(doc: Document, root: Element, head: Element | null, body: Element | null): void {
     doc.documentElement = root;
     doc.head = head;

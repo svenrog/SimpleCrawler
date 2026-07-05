@@ -75,19 +75,17 @@ The `(provider, client)` hook is where custom auth, cookies, and headers go — 
 [HttpClient configuration](./httpclient-configuration.md).
 
 
-### JS (engine + parser)
+### JS (engine)
 
-Register one engine and at most one `IHtmlParser` (if no parser is configured `dom.js`'s own tokenizer is used).
+Register one engine. `dom.js` tokenises the shell HTML into the DOM itself — there is no parser to configure.
 
 ```csharp
 using Crawler.Js.V8;                 // engine: or Crawler.Js.Jint
-using Crawler.Js.HtmlAgilityPack;    // parser: or Crawler.Js.AngleSharp, or omit
 
 var renderOptions = new JsRenderOptions { EnableFetch = true };
 
 var services = new ServiceCollection();
 services.AddV8Crawler(options, renderOptions);
-services.AddHtmlAgilityPackHtmlParser();
 
 var crawler = services.BuildServiceProvider().GetRequiredService<ICrawler>();
 var result = await crawler.Start("https://example.com/");

@@ -75,7 +75,7 @@ internal static class ProfileHarness
         var provider = BuildProvider(combo, out var engineKey);
         var factory = provider.GetRequiredKeyedService<IJsEngineFactory>(engineKey);
         var renderOptions = provider.GetRequiredService<IOptions<JsRenderOptions>>().Value;
-        var renderer = new JsRenderer(factory, renderOptions, null, NullLogger.Instance);
+        var renderer = new JsRenderer(factory, renderOptions, NullLogger.Instance);
 
         using var client = new HttpClient();
         var shell = await client.GetByteArrayAsync(_entry, tokenSource.Token);

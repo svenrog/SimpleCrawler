@@ -33,10 +33,9 @@ Use if memory management is needed or dependencies can't be installed.
 ## HTML parser
 
 The shell HTML is tokenised into the DOM by `dom.js` before scripts run — there is no parser to choose.
-Pluggable native C# pre-parsers (AngleSharp, HtmlAgilityPack) feeding the tree in via `__crawlerLoadTree`
-were tried and removed: on a realistic render the parse is a rounding error next to bundle execution, so
-they measured no faster and, on V8, allocated *more* (they build a managed DOM tree to marshal across).
-The `IHtmlParser` seam remains if a future backend ever needs it. See [performance](./performance.md).
+Pluggable native C# pre-parsers (AngleSharp, HtmlAgilityPack) feeding the tree in were tried and removed:
+on a realistic render the parse is a rounding error next to bundle execution, so they measured no faster
+and, on V8, allocated *more* (they build a managed DOM tree to marshal across). See [performance](./performance.md).
 
 ## JsRenderOptions
 

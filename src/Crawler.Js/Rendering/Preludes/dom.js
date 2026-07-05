@@ -3009,40 +3009,6 @@
     };
   }
 
-  // html/treeBuilder.ts
-  function buildDocumentFromTree(doc2, json) {
-    const nodes = JSON.parse(json);
-    const created = new Array(nodes.length);
-    for (let i = 0; i < nodes.length; i++) {
-      const n = nodes[i];
-      let node;
-      if (n.k === 0) {
-        node = createLocalElement(n.t);
-        const a = n.a;
-        if (a) for (let j = 0; j < a.length; j++) node.setAttribute(a[j][0], a[j][1]);
-      } else {
-        const data = n.d == null ? "" : String(n.d);
-        node = n.k === 1 ? new Text(data) : new Comment(data);
-      }
-      created[i] = node;
-      const p = n.p;
-      if (p >= 0) attachChild(created[p], node);
-    }
-    if (nodes.length === 0) return;
-    const root = created[0];
-    let head = null;
-    let body = null;
-    const kids = root.childNodes;
-    for (let i = 0; i < kids.length; i++) {
-      const k = kids[i];
-      if (k.nodeType !== 1) continue;
-      const tag = k.localName;
-      if (head === null && tag === "head") head = k;
-      else if (body === null && tag === "body") body = k;
-    }
-    wireDocument(doc2, root, head, body);
-  }
-
   // profiling/domProfiler.ts
   var counts = {};
   var times = {};
@@ -3232,9 +3198,6 @@
     };
     global.__crawlerLoadHtml = (html) => {
       parseHTML(doc, html);
-    };
-    global.__crawlerLoadTree = (json) => {
-      buildDocumentFromTree(doc, String(json));
     };
     global.__crawlerCollectScripts = () => JSON.stringify(collectScripts());
     global.__crawlerGetBaseHref = () => getBaseHref();
