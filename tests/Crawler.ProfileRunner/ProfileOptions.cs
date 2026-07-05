@@ -8,8 +8,8 @@ public sealed class ProfileOptions
     [Value(0, MetaName = "combo", Default = "jint", HelpText = "engine: jint | v8")]
     public string Combo { get; set; } = "jint";
 
-    [Value(1, MetaName = "iterations", Default = 20, HelpText = "How many times to crawl the SPA.")]
-    public int Iterations { get; set; } = 20;
+    [Value(1, MetaName = "iterations", Default = 5, HelpText = "How many times to crawl the SPA.")]
+    public int Iterations { get; set; } = 5;
 
     [Value(2, MetaName = "framework", Default = "preact", HelpText = "SPA framework: react | preact | vue | svelte | solid")]
     public string Framework { get; set; } = "preact";

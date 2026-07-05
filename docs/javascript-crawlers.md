@@ -1,6 +1,6 @@
 # JavaScript crawlers
 
-Since AngleSharp or any other library lacked the ability to render simpler JavaScript sites we added the `Crawler.Js` project that provides a rendering engine. There are 2 engine implementations, `Jint` and `ClearScript.V8`.
+Since AngleSharp or any other library lacked the ability to render simpler JavaScript sites, the `Crawler.Js` project that provides a rendering engine was added. There are 2 engine implementations, `Jint` and `ClearScript.V8`.
 
 Both are tested against the client-side frameworks and libraries below. The test do not cover the full featureset, a list of real sites have been used as a reference.
 
@@ -54,7 +54,7 @@ Passed to `AddJintCrawler`/`AddV8Crawler`.
 The two engines handle per-page setup differently.
 
 - **V8** pools the *isolate* (its native heap and compilation cache) sized to the crawl's `Concurrency` — set `Concurrency` to 8 and the pool holds up to 8 isolates. An isolate is rented per page and returned when the page finishes, so isolate spin-up is amortised across the crawl. Every page still renders in a fresh context, so per-page globals are always clean. Because a pooled isolate's native heap grows with every distinct script it compiles, each isolate is retired and rebuilt after `MaxUsesPerRuntime` pages.
-- **Jint** builds a **fresh engine per page** and disposes it when the page finishes — no pool, no realm reuse, no reflection. On current Jint this is deliberate: `new Engine()` costs ~1–2&nbsp;ms and evaluating the ~90&nbsp;KB `dom.js` shim (from a cached prepared script) another ~6–7&nbsp;ms, so the whole engine build is **~8–9&nbsp;ms/page** — around 0.3&nbsp;% of a production-weight SPA render (~2.7–3.5&nbsp;s/page). Pooling the realm only ever amortised that setup, and after netting out the between-page reset it saved ~1–2&nbsp;%, so the pooling machinery was measured away in favour of the simpler, AOT-friendly fresh-engine path. See [performance](./performance.md).
+- **Jint** builds a **fresh engine per page** and disposes it when the page finishes. On current Jint this is deliberate: `new Engine()` is a negligible cost. See [performance](./performance.md).
 
 ### V8EngineOptions
 

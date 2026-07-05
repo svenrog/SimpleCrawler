@@ -31,12 +31,6 @@ Executing the binary will crawl a single domain using the default `HtmlAgilityPa
 smpcrawl -e "<entry url>" -o "<output file>"
 ```
 
-Some sites turn away the honest crawler agent. When you hit a `403`/`429`, `--impersonate chrome` presents a real Chrome identity (User-Agent + client-hint headers) instead:
-
-```
-smpcrawl -e "<entry url>" -o "<output file>" --impersonate chrome
-```
-
 Full list of possible options can be found [here](./src/SimpleCrawler/Options.cs).
 
 Adjusting which implementation is used can be done by referencing another implementation project and switching service collection extension [here](./src/SimpleCrawler/Extensions/ServiceCollectionExtensions.cs).
@@ -49,7 +43,7 @@ Project overview and details on how to wire up your own backend are found under 
 
 ### Anglesharp
 
-The Anglesharp maintainers claims the library handles JavaScript with AngleSharp.Js. In reality it only does so on an experimental level, complex libraries like React do not work.
+The Anglesharp maintainers claims the library handles JavaScript with AngleSharp.Js. In reality it only does so on an experimental level, complex libraries like React do not work. This is why there are two [JavaScript implementations](./docs/javascript-crawlers.md).
 
 ### Selenium WebDriver
 
