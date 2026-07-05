@@ -1,3 +1,4 @@
+using AngleSharp.Dom;
 using AngleSharp.Html.Parser;
 using Crawler.Core;
 using Crawler.Core.Models;
@@ -7,7 +8,7 @@ using Microsoft.Extensions.Options;
 
 namespace Crawler.AngleSharp;
 
-public abstract class AngleSharpCrawler<TResult> : AbstractStaticHtmlCrawler<TResult>
+public abstract class AngleSharpCrawler<TResult> : AbstractStaticHtmlCrawler<IDocument, TResult>
     where TResult : IScrapeResult
 {
     private static readonly HtmlParser _parser = new();
@@ -16,11 +17,14 @@ public abstract class AngleSharpCrawler<TResult> : AbstractStaticHtmlCrawler<TRe
     {
     }
 
-    protected override (string? CanonicalHref, string? RobotsContent, IReadOnlyList<string?> LinkHrefs) ExtractStatic(byte[] response)
+    protected override IDocument ParseDocument(byte[] response)
     {
         using var stream = new MemoryStream(response, writable: false);
-        using var document = _parser.ParseDocument(stream);
+        return _parser.ParseDocument(stream);
+    }
 
+    protected override (string? CanonicalHref, string? RobotsContent, IReadOnlyList<string?> LinkHrefs) ExtractStatic(IDocument document)
+    {
         var anchors = document.QuerySelectorAll("a");
 
         var hrefs = new List<string?>(anchors.Length);
@@ -31,5 +35,11 @@ public abstract class AngleSharpCrawler<TResult> : AbstractStaticHtmlCrawler<TRe
         var robotsContent = document.QuerySelector("meta[name='robots']")?.GetAttribute("content");
 
         return (canonicalHref, robotsContent, hrefs);
+    }
+
+    protected override Task DisposeDocument(IDocument document)
+    {
+        document.Dispose();
+        return Task.CompletedTask;
     }
 }

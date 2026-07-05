@@ -10,7 +10,7 @@ using Microsoft.Extensions.Options;
 
 namespace Crawler.Js;
 
-public abstract class JsCrawler<TResult> : AbstractRobotsCrawler<JsExtract, TResult>
+public abstract class JsCrawler<TResult> : AbstractRobotsCrawler<JsExtract, JsExtract, TResult>
     where TResult : IScrapeResult
 {
     private readonly HttpClient _client;
@@ -41,9 +41,14 @@ public abstract class JsCrawler<TResult> : AbstractRobotsCrawler<JsExtract, TRes
         return await _renderer.ExtractAsync(shell, url, _client, cancellationToken);
     }
 
-    protected override ValueTask<PageExtract> ExtractPageData(JsExtract response)
+    protected override ValueTask<JsExtract> ParseResponse(JsExtract response)
     {
-        var extract = new PageExtract(GetAbsoluteUrl(response.CanonicalHref), IndexingHelper.ParseMetaRobots(response.RobotsContent), response.LinkHrefs);
+        return new ValueTask<JsExtract>(response);
+    }
+
+    protected override ValueTask<PageExtract> ExtractPageData(JsExtract document)
+    {
+        var extract = new PageExtract(GetAbsoluteUrl(document.CanonicalHref), IndexingHelper.ParseMetaRobots(document.RobotsContent), document.LinkHrefs);
         return new ValueTask<PageExtract>(extract);
     }
 }

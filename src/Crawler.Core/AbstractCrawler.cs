@@ -11,7 +11,7 @@ using System.Threading.Channels;
 
 namespace Crawler.Core;
 
-public abstract class AbstractCrawler<TResponse, TResult> : ICrawler<TResult>
+public abstract class AbstractCrawler<TResponse, TDocument, TResult> : ICrawler<TResult>
     where TResult : IScrapeResult
 {
     private readonly CrawlerOptions _options;
@@ -31,6 +31,9 @@ public abstract class AbstractCrawler<TResponse, TResult> : ICrawler<TResult>
     // Read live rather than snapshot: InitializeCrawl can raise CrawlDelay from robots.txt Crawl-delay
     // after construction, and Throttle must honour the raised value.
     private TimeSpan Delay => TimeSpan.FromSeconds(_options.CrawlDelay);
+
+    protected Uri SiteUri => _siteUri!;
+    protected string SiteAuthority => _siteAuthority!;
 
     protected readonly ConcurrentHashSet<string> Visited;
 
@@ -80,12 +83,10 @@ public abstract class AbstractCrawler<TResponse, TResult> : ICrawler<TResult>
         return await GetResult(cancellationToken);
     }
 
+    // Fully resets per-crawl state so a single crawler instance can be reused across Start calls.
     protected virtual ValueTask InitializeCrawl(string entry, CancellationToken cancellationToken)
     {
-        var entryUri = new Uri(entry);
-
-        _siteAuthority = entryUri.GetLeftPart(UriPartial.Authority);
-        _siteUri = new Uri(_siteAuthority);
+        SetSiteIdentity(entry);
 
         Visited.Clear();
         _discovered.Clear();
@@ -99,6 +100,14 @@ public abstract class AbstractCrawler<TResponse, TResult> : ICrawler<TResult>
         Enqueue(entry);
 
         return ValueTask.CompletedTask;
+    }
+
+    protected void SetSiteIdentity(string entry)
+    {
+        var entryUri = new Uri(entry);
+
+        _siteAuthority = entryUri.GetLeftPart(UriPartial.Authority);
+        _siteUri = new Uri(_siteAuthority);
     }
 
     private static Channel<string> CreateUrlChannel()
@@ -245,14 +254,24 @@ public abstract class AbstractCrawler<TResponse, TResult> : ICrawler<TResult>
         return ValueTask.CompletedTask;
     }
 
-    protected virtual ValueTask AnalyzeDocument(string url, TResponse response)
+    // Override to collect data beyond links from the already-parsed document. Runs on the parse workers,
+    // so any shared state it touches must be thread-safe, and any exception it throws is logged by
+    // ProcessPage rather than propagated - it will not stop the crawl.
+    protected virtual ValueTask AnalyzeDocument(string url, TDocument document)
     {
         return ValueTask.CompletedTask;
     }
 
     protected abstract Task<TResponse?> LoadResponse(string url, CancellationToken cancellationToken);
 
-    protected abstract ValueTask<PageExtract> ExtractPageData(TResponse response);
+    protected abstract ValueTask<TDocument> ParseResponse(TResponse response);
+
+    protected abstract ValueTask<PageExtract> ExtractPageData(TDocument document);
+
+    protected virtual Task DisposeDocument(TDocument document)
+    {
+        return Task.CompletedTask;
+    }
 
     protected virtual Task DisposeResponse(TResponse? response)
     {
@@ -297,13 +316,18 @@ public abstract class AbstractCrawler<TResponse, TResult> : ICrawler<TResult>
     {
         _logger.LogInformation("Processing url '{url}'", url);
 
+        var document = default(TDocument);
+        var parsed = false;
         try
         {
-            var pageData = await ExtractPageData(response);
+            document = await ParseResponse(response);
+            parsed = true;
+
+            var pageData = await ExtractPageData(document);
 
             var resolvedUrl = pageData.CanonicalUrl ?? url;
 
-            await AnalyzeDocument(resolvedUrl, response);
+            await AnalyzeDocument(resolvedUrl, document);
 
             var robots = _options.RespectMetaRobots ? pageData.Robots : RobotsRules.All;
             if (robots.Index)
@@ -337,6 +361,9 @@ public abstract class AbstractCrawler<TResponse, TResult> : ICrawler<TResult>
         finally
         {
             Interlocked.Increment(ref _processedCount);
+
+            if (parsed)
+                await DisposeDocument(document!);
 
             await DisposeResponse(response);
 

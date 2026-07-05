@@ -7,19 +7,24 @@ using Microsoft.Extensions.Options;
 
 namespace Crawler.HtmlAgilityPack;
 
-public abstract class HtmlAgilityPackCrawler<TResult> : AbstractStaticHtmlCrawler<TResult>
+public abstract class HtmlAgilityPackCrawler<TResult> : AbstractStaticHtmlCrawler<HtmlDocument, TResult>
     where TResult : IScrapeResult
 {
     protected HtmlAgilityPackCrawler(HttpClient client, IRobotClient robotClient, IOptions<CrawlerOptions> options, ILogger logger) : base(client, robotClient, options, logger)
     {
     }
 
-    protected override (string? CanonicalHref, string? RobotsContent, IReadOnlyList<string?> LinkHrefs) ExtractStatic(byte[] response)
+    protected override HtmlDocument ParseDocument(byte[] response)
     {
         var document = new HtmlDocument();
-        using (var stream = new MemoryStream(response, writable: false))
-            document.Load(stream);
+        using var stream = new MemoryStream(response, writable: false);
+        document.Load(stream);
 
+        return document;
+    }
+
+    protected override (string? CanonicalHref, string? RobotsContent, IReadOnlyList<string?> LinkHrefs) ExtractStatic(HtmlDocument document)
+    {
         var hrefs = new List<string?>();
         string? canonicalHref = null;
         string? robotsContent = null;

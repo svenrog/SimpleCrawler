@@ -9,7 +9,7 @@ using System.Collections.Concurrent;
 
 namespace Crawler.Playwright;
 
-public abstract class PlaywrightCrawler<TResult> : AbstractRobotsCrawler<IPage, TResult>
+public abstract class PlaywrightCrawler<TResult> : AbstractRobotsCrawler<IPage, IPage, TResult>
     where TResult : IScrapeResult
 {
     private readonly PlaywrightBrowserSession _session;
@@ -51,6 +51,11 @@ public abstract class PlaywrightCrawler<TResult> : AbstractRobotsCrawler<IPage, 
 
             return null;
         }
+    }
+
+    protected override ValueTask<IPage> ParseResponse(IPage response)
+    {
+        return new ValueTask<IPage>(response);
     }
 
     protected override async ValueTask<PageExtract> ExtractPageData(IPage response)
