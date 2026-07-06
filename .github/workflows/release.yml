@@ -1,0 +1,95 @@
+name: release
+
+on:
+  push:
+    tags: [ 'v*' ]
+
+permissions:
+  contents: read
+
+jobs:
+  publish-packages:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write   # required for NuGet Trusted Publishing (OIDC)
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # MinVer needs full history + tags
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Build
+        run: dotnet build SimpleCrawler.slnx -c Release
+
+      - name: Install Playwright browsers
+        run: pwsh tests/SimpleCrawler.Tests/bin/Release/net10.0/playwright.ps1 install chromium --with-deps
+
+      - name: Robots tests
+        run: dotnet run --project tests/SimpleCrawler.Robots.Tests -c Release --no-build
+
+      - name: Crawler tests
+        run: dotnet run --project tests/SimpleCrawler.Tests -c Release --no-build
+
+      - name: Pack
+        run: dotnet pack SimpleCrawler.slnx -c Release --no-build -p:ContinuousIntegrationBuild=true -o artifacts/pkg
+
+      # Trusted Publishing: configure a trust policy on nuget.org for
+      # svenrog/SimpleCrawler + release.yml, and set the NUGET_USER repo
+      # variable to the nuget.org account name. Falls back to a scoped API
+      # key (NUGET_API_KEY secret) if Trusted Publishing is unavailable.
+      - name: NuGet login (OIDC)
+        uses: NuGet/login@v1
+        id: nuget-login
+        with:
+          user: ${{ vars.NUGET_USER }}
+
+      - name: Push packages
+        run: >
+          dotnet nuget push "artifacts/pkg/*.nupkg"
+          --api-key ${{ steps.nuget-login.outputs.NUGET_API_KEY }}
+          --source https://api.nuget.org/v3/index.json
+          --skip-duplicate
+
+  publish-cli:
+    needs: publish-packages
+    permissions:
+      contents: write   # attach binaries to the GitHub Release
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            rid: win-x64
+          - os: ubuntu-latest
+            rid: linux-x64
+          - os: macos-latest
+            rid: osx-arm64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Install AOT prerequisites (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        run: sudo apt-get update && sudo apt-get install -y clang zlib1g-dev
+
+      - name: Publish smpcrawl (AOT)
+        run: dotnet publish src/SimpleCrawler.Console -c Release -r ${{ matrix.rid }} -o publish/${{ matrix.rid }}
+
+      - name: Zip binary
+        shell: pwsh
+        run: Compress-Archive -Path publish/${{ matrix.rid }}/smpcrawl* -DestinationPath smpcrawl-${{ matrix.rid }}.zip
+
+      - name: Attach to release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: smpcrawl-${{ matrix.rid }}.zip
