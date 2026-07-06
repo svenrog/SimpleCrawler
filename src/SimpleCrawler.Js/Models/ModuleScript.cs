@@ -1,4 +1,4 @@
-namespace Crawler.Js.Models;
+namespace SimpleCrawler.Js.Models;
 
 // External marks a module fetched from a stable URL (cacheable: its parsed form is reused across pages).
 // An inline module's Specifier is the page URL, which is unique per page, so it is never cached — caching

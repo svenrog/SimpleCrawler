@@ -1,4 +1,4 @@
-using Crawler.Core.Robots;
+using SimpleCrawler.Core.Robots;
 using FluentAssertions;
 using System;
 using System.IO;
@@ -7,7 +7,7 @@ using System.Text;
 using System.Threading.Tasks;
 using Xunit;
 
-namespace Robots.Parser.Tests;
+namespace SimpleCrawler.Robots.Tests;
 
 public class SitemapParserTests
 {

@@ -1,10 +1,10 @@
-using Crawler.Core;
-using Crawler.Js.Abstractions;
-using Crawler.Js.Models;
+using SimpleCrawler.Core;
+using SimpleCrawler.Js.Abstractions;
+using SimpleCrawler.Js.Models;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 
-namespace Crawler.Js.V8;
+namespace SimpleCrawler.Js.V8;
 
 public static class ServiceCollectionExtensions
 {

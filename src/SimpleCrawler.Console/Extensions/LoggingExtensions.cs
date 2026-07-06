@@ -1,7 +1,7 @@
 ﻿using CommandLine;
 using Microsoft.Extensions.Logging;
 
-namespace SimpleCrawler.Extensions;
+namespace SimpleCrawler.Console.Extensions;
 
 public static class LoggingExtensions
 {

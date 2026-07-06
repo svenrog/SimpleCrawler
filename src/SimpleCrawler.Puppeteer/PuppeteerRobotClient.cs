@@ -1,8 +1,8 @@
-using Crawler.Core.Robots;
+using SimpleCrawler.Core.Robots;
 using Microsoft.Extensions.Logging;
 using PuppeteerSharp;
 
-namespace Crawler.Puppeteer;
+namespace SimpleCrawler.Puppeteer;
 
 public sealed class PuppeteerRobotClient : AbstractBrowserRobotClient
 {

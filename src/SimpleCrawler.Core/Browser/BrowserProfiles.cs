@@ -1,4 +1,4 @@
-namespace Crawler.Core.Browser;
+namespace SimpleCrawler.Core.Browser;
 
 public static class BrowserProfiles
 {

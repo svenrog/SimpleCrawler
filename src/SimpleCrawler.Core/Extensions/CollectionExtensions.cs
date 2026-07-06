@@ -1,4 +1,4 @@
-﻿namespace Crawler.Core.Extensions;
+﻿namespace SimpleCrawler.Core.Extensions;
 
 public static class CollectionExtensions
 {

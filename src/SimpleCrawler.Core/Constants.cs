@@ -1,4 +1,4 @@
-﻿namespace Crawler.Core;
+﻿namespace SimpleCrawler.Core;
 
 internal class Constants
 {

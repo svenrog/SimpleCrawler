@@ -1,4 +1,4 @@
-namespace Crawler.Js.Services;
+namespace SimpleCrawler.Js.Services;
 
 // The render caches assume a single-domain SPA serving the same bundle on every route, so keying parsed
 // scripts/modules/sources by URL for the whole crawl is bounded and a large win. A heterogeneous site

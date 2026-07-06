@@ -1,4 +1,4 @@
-﻿namespace Crawler.Core.Models;
+﻿namespace SimpleCrawler.Core.Models;
 
 public sealed class ScrapeResult : IScrapeResult
 {

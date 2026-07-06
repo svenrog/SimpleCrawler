@@ -1,11 +1,11 @@
-﻿using Crawler.Core;
-using Crawler.Core.Helpers;
-using Crawler.Core.Robots;
-using Crawler.Core.Robots.Http;
+﻿using SimpleCrawler.Core;
+using SimpleCrawler.Core.Helpers;
+using SimpleCrawler.Core.Robots;
+using SimpleCrawler.Core.Robots.Http;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 
-namespace Crawler.HtmlAgilityPack;
+namespace SimpleCrawler.HtmlAgilityPack;
 
 public static class ServiceCollectionExtensions
 {

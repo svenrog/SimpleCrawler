@@ -1,4 +1,4 @@
-using Crawler.Core.Robots;
+using SimpleCrawler.Core.Robots;
 using FluentAssertions;
 using Microsoft.Extensions.FileProviders;
 using System;
@@ -10,7 +10,7 @@ using System.Text;
 using System.Threading.Tasks;
 using Xunit;
 
-namespace Robots.Parser.Tests;
+namespace SimpleCrawler.Robots.Tests;
 
 public class SimpleTextSitemapParserTests
 {

@@ -1,6 +1,6 @@
-using Crawler.TestHost.Infrastructure.Factories;
+using SimpleCrawler.TestHost.Infrastructure.Factories;
 
-namespace Crawler.TestHost;
+namespace SimpleCrawler.TestHost;
 
 public partial class Program
 {

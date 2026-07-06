@@ -1,16 +1,16 @@
 using BenchmarkDotNet.Attributes;
-using Crawler.Core;
-using Crawler.Js.Jint;
-using Crawler.Js.V8;
-using Crawler.Playwright;
-using Crawler.Puppeteer;
-using Crawler.TestHost.Infrastructure.Factories;
+using SimpleCrawler.Core;
+using SimpleCrawler.Js.Jint;
+using SimpleCrawler.Js.V8;
+using SimpleCrawler.Playwright;
+using SimpleCrawler.Puppeteer;
+using SimpleCrawler.TestHost.Infrastructure.Factories;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 
-namespace Crawler.Benchmarks;
+namespace SimpleCrawler.Benchmarks;
 
 // Exercises the real JS render path: every route returns the same client-only SPA shell, so a crawler
 // only discovers the link set after rendering it and then re-runs the engine once per discovered link.

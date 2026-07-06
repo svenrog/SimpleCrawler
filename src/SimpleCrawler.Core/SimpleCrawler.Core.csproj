@@ -12,7 +12,7 @@
 	</ItemGroup>
 
 	<ItemGroup>
-		<InternalsVisibleTo Include="Robots.Parser.Tests" />
+		<InternalsVisibleTo Include="SimpleCrawler.Robots.Tests" />
 	</ItemGroup>
 
 </Project>

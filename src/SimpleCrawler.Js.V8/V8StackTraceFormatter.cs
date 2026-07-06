@@ -1,6 +1,6 @@
 using System.Text;
 
-namespace Crawler.Js.V8;
+namespace SimpleCrawler.Js.V8;
 
 internal sealed class V8StackTraceFormatter
 {

@@ -1,6 +1,6 @@
 using Microsoft.ClearScript.V8;
 
-namespace Crawler.Tests.Helpers;
+namespace SimpleCrawler.Tests.Helpers;
 
 internal static class V8Support
 {

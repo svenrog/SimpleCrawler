@@ -1,4 +1,4 @@
-namespace Crawler.Tests.Models;
+namespace SimpleCrawler.Tests.Models;
 
 public enum JsEngine
 {

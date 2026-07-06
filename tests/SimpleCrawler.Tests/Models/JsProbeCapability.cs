@@ -1,4 +1,4 @@
-namespace Crawler.Tests.Models;
+namespace SimpleCrawler.Tests.Models;
 
 // Each value is a JS-engine capability that a real bundle depends on, encoded as a minimal shell that only
 // renders its links when the capability works. The order maps to the per-capability host port.

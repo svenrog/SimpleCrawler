@@ -1,4 +1,4 @@
-﻿namespace Crawler.Core.Helpers;
+﻿namespace SimpleCrawler.Core.Helpers;
 
 public static class UriHelper
 {

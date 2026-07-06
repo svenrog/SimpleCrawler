@@ -1,14 +1,14 @@
-using Crawler.Js.Abstractions;
-using Crawler.Js.Models;
-using Crawler.Js.Rendering;
-using Crawler.Core;
-using Crawler.Core.Helpers;
-using Crawler.Core.Models;
-using Crawler.Core.Robots;
+using SimpleCrawler.Js.Abstractions;
+using SimpleCrawler.Js.Models;
+using SimpleCrawler.Js.Rendering;
+using SimpleCrawler.Core;
+using SimpleCrawler.Core.Helpers;
+using SimpleCrawler.Core.Models;
+using SimpleCrawler.Core.Robots;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
-namespace Crawler.Js;
+namespace SimpleCrawler.Js;
 
 public abstract class JsCrawler<TResult> : AbstractRobotsCrawler<JsExtract, JsExtract, TResult>
     where TResult : IScrapeResult

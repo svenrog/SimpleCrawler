@@ -1,4 +1,4 @@
-namespace Crawler.Js.Abstractions;
+namespace SimpleCrawler.Js.Abstractions;
 
 public interface IJsEngineFactory
 {

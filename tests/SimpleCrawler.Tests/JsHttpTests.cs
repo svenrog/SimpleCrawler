@@ -1,9 +1,9 @@
 using System.Net;
 using System.Text.Json;
-using Crawler.Js.Network;
+using SimpleCrawler.Js.Network;
 using Microsoft.Extensions.Logging.Abstractions;
 
-namespace Crawler.Tests;
+namespace SimpleCrawler.Tests;
 
 public class JsHttpTests
 {

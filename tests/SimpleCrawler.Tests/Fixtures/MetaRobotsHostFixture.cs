@@ -1,9 +1,9 @@
-using Crawler.Core;
+using SimpleCrawler.Core;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 
-namespace Crawler.Tests.Fixtures;
+namespace SimpleCrawler.Tests.Fixtures;
 
 public sealed class MetaRobotsHostFixture : AbstractHostFixture
 {

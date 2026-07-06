@@ -1,8 +1,8 @@
-using Crawler.TestHost.Infrastructure.Extensions;
-using Crawler.TestHost.Infrastructure.Results;
+using SimpleCrawler.TestHost.Infrastructure.Extensions;
+using SimpleCrawler.TestHost.Infrastructure.Results;
 using HttpResults = Microsoft.AspNetCore.Http.Results;
 
-namespace Crawler.TestHost.Infrastructure.Factories;
+namespace SimpleCrawler.TestHost.Infrastructure.Factories;
 
 // Assembles a JS-engine capability probe from embedded resources: the shared Probes/shell.html template plus
 // a single Probes/<script> that only builds the anchors when its capability behaves correctly. The shell

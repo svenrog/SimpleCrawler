@@ -1,3 +1,3 @@
-namespace Crawler.Core.Robots;
+namespace SimpleCrawler.Core.Robots;
 
 public readonly record struct RobotResourceResponse(int Status, byte[]? Body, string? MediaType);

@@ -1,4 +1,4 @@
-﻿namespace Crawler.Core.Browser;
+﻿namespace SimpleCrawler.Core.Browser;
 
 internal static class Defaults
 {

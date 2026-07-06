@@ -1,4 +1,4 @@
-﻿namespace Crawler.Core.Robots;
+﻿namespace SimpleCrawler.Core.Robots;
 
 /// <summary>
 /// Represents a URL path pattern in a robots.txt file

@@ -1,8 +1,8 @@
-﻿using Crawler.TestHost.Infrastructure.Extensions;
-using Crawler.TestHost.Infrastructure.Results;
-using Crawler.TestHost.Infrastructure.Routing;
+﻿using SimpleCrawler.TestHost.Infrastructure.Extensions;
+using SimpleCrawler.TestHost.Infrastructure.Results;
+using SimpleCrawler.TestHost.Infrastructure.Routing;
 
-namespace Crawler.TestHost.Infrastructure.Factories;
+namespace SimpleCrawler.TestHost.Infrastructure.Factories;
 
 public class StaticWebApplicationFactory
 {

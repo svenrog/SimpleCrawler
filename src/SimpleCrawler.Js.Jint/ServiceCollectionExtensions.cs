@@ -1,9 +1,9 @@
-using Crawler.Core;
-using Crawler.Js.Abstractions;
-using Crawler.Js.Models;
+using SimpleCrawler.Core;
+using SimpleCrawler.Js.Abstractions;
+using SimpleCrawler.Js.Models;
 using Microsoft.Extensions.DependencyInjection;
 
-namespace Crawler.Js.Jint;
+namespace SimpleCrawler.Js.Jint;
 
 public static class ServiceCollectionExtensions
 {

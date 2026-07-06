@@ -1,4 +1,4 @@
-namespace Crawler.Js.V8;
+namespace SimpleCrawler.Js.V8;
 
 public sealed class V8EngineOptions
 {

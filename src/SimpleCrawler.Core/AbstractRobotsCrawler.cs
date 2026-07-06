@@ -1,9 +1,9 @@
-﻿using Crawler.Core.Models;
-using Crawler.Core.Robots;
+﻿using SimpleCrawler.Core.Models;
+using SimpleCrawler.Core.Robots;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
-namespace Crawler.Core;
+namespace SimpleCrawler.Core;
 
 public abstract class AbstractRobotsCrawler<TResponse, TDocument, TResult> : AbstractCrawler<TResponse, TDocument, TResult>
     where TResult : IScrapeResult

@@ -35,11 +35,11 @@
   </ItemGroup>
 
   <ItemGroup>
-    <InternalsVisibleTo Include="Crawler.Tests" />
+    <InternalsVisibleTo Include="SimpleCrawler.Tests" />
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\Crawler.Js\Crawler.Js.csproj" />
+    <ProjectReference Include="..\SimpleCrawler.Js\SimpleCrawler.Js.csproj" />
   </ItemGroup>
 
 </Project>

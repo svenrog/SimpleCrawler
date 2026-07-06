@@ -1,6 +1,6 @@
 ﻿using CommandLine;
 
-namespace SimpleCrawler;
+namespace SimpleCrawler.Console;
 
 public sealed class Options
 {

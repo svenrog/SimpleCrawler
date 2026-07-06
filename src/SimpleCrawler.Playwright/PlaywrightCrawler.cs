@@ -1,13 +1,13 @@
-using Crawler.Core;
-using Crawler.Core.Helpers;
-using Crawler.Core.Models;
-using Crawler.Core.Robots;
+using SimpleCrawler.Core;
+using SimpleCrawler.Core.Helpers;
+using SimpleCrawler.Core.Models;
+using SimpleCrawler.Core.Robots;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Microsoft.Playwright;
 using System.Collections.Concurrent;
 
-namespace Crawler.Playwright;
+namespace SimpleCrawler.Playwright;
 
 public abstract class PlaywrightCrawler<TResult> : AbstractRobotsCrawler<IPage, IPage, TResult>
     where TResult : IScrapeResult

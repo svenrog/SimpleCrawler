@@ -1,4 +1,4 @@
-﻿namespace Crawler.Playwright;
+﻿namespace SimpleCrawler.Playwright;
 
 internal static class Constants
 {

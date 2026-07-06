@@ -4,7 +4,7 @@
 
 using System.Text.RegularExpressions;
 
-namespace Crawler.Core.Robots;
+namespace SimpleCrawler.Core.Robots;
 
 /// <summary>
 /// Crawler name, used as the User-agent value within a robots.txt file

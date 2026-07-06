@@ -1,8 +1,8 @@
-using Crawler.Core.Proxy;
+using SimpleCrawler.Core.Proxy;
 using Microsoft.Extensions.Logging.Abstractions;
 using System.Net;
 
-namespace Crawler.Tests;
+namespace SimpleCrawler.Tests;
 
 public class ProxyRoutingHandlerTests
 {

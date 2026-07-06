@@ -1,8 +1,8 @@
-﻿using Crawler.TestHost.Infrastructure.Results;
+﻿using SimpleCrawler.TestHost.Infrastructure.Results;
 using Microsoft.AspNetCore.StaticFiles;
 using System.Reflection;
 
-namespace Crawler.TestHost.Infrastructure.Routing;
+namespace SimpleCrawler.TestHost.Infrastructure.Routing;
 
 public class EmbeddedResourceRouteResolver
 {

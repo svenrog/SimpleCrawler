@@ -1,6 +1,6 @@
 ﻿using System.Diagnostics.CodeAnalysis;
 
-namespace Crawler.Core.Comparers;
+namespace SimpleCrawler.Core.Comparers;
 
 public sealed class CharIgnoreCaseEqualityComparer : IEqualityComparer<char>
 {

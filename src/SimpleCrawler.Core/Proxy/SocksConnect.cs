@@ -3,7 +3,7 @@ using System.Net.Security;
 using System.Net.Sockets;
 using System.Text;
 
-namespace Crawler.Core.Proxy;
+namespace SimpleCrawler.Core.Proxy;
 
 internal static class SocksConnect
 {

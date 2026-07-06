@@ -1,7 +1,7 @@
 using System.Net.Mime;
 using System.Runtime.CompilerServices;
 
-namespace Crawler.Core.Robots;
+namespace SimpleCrawler.Core.Robots;
 
 public abstract class AbstractBrowserRobotClient : IRobotClient
 {

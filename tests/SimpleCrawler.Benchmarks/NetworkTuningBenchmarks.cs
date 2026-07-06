@@ -1,6 +1,6 @@
 using BenchmarkDotNet.Attributes;
-using Crawler.Core;
-using Crawler.Core.Helpers;
+using SimpleCrawler.Core;
+using SimpleCrawler.Core.Helpers;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
@@ -10,7 +10,7 @@ using System.Net;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 
-namespace Crawler.Benchmarks;
+namespace SimpleCrawler.Benchmarks;
 
 // Both clients share the same connection budget, so HTTP/2 multiplexing is the only variable.
 // Loopback has no bandwidth limit, so this measures the multiplexing lever only - compression

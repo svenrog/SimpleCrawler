@@ -1,6 +1,6 @@
 using Microsoft.ClearScript.V8;
 
-namespace Crawler.Js.V8;
+namespace SimpleCrawler.Js.V8;
 
 // Pairs a pooled isolate with its page count so the pool can retire it after a fixed number of uses.
 internal sealed class V8RuntimeLease

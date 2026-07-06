@@ -1,14 +1,14 @@
-using Crawler.Core;
-using Crawler.Core.Helpers;
-using Crawler.Core.Models;
-using Crawler.Core.Robots;
+using SimpleCrawler.Core;
+using SimpleCrawler.Core.Helpers;
+using SimpleCrawler.Core.Models;
+using SimpleCrawler.Core.Robots;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using PuppeteerSharp;
 using System.Collections.Concurrent;
 using System.Text.Json;
 
-namespace Crawler.Puppeteer;
+namespace SimpleCrawler.Puppeteer;
 
 public abstract class PuppeteerCrawler<TResult> : AbstractRobotsCrawler<IPage, IPage, TResult>
     where TResult : IScrapeResult

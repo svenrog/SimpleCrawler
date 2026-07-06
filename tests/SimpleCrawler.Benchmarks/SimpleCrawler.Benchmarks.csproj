@@ -14,9 +14,9 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\Crawler.TestHost\Crawler.TestHost.csproj" />
-    <ProjectReference Include="..\Crawler.Tests.Common\Crawler.Tests.Common.csproj" />
-    <ProjectReference Include="..\..\src\Crawler.Playwright\Crawler.Playwright.csproj" />
-    <ProjectReference Include="..\..\src\Crawler.Puppeteer\Crawler.Puppeteer.csproj" />
+    <ProjectReference Include="..\SimpleCrawler.TestHost\SimpleCrawler.TestHost.csproj" />
+    <ProjectReference Include="..\SimpleCrawler.Tests.Common\SimpleCrawler.Tests.Common.csproj" />
+    <ProjectReference Include="..\..\src\SimpleCrawler.Playwright\SimpleCrawler.Playwright.csproj" />
+    <ProjectReference Include="..\..\src\SimpleCrawler.Puppeteer\SimpleCrawler.Puppeteer.csproj" />
   </ItemGroup>
 </Project>

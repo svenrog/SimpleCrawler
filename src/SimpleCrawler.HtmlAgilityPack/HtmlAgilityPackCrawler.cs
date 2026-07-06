@@ -1,11 +1,11 @@
-using Crawler.Core;
-using Crawler.Core.Models;
-using Crawler.Core.Robots;
+using SimpleCrawler.Core;
+using SimpleCrawler.Core.Models;
+using SimpleCrawler.Core.Robots;
 using HtmlAgilityPack;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
-namespace Crawler.HtmlAgilityPack;
+namespace SimpleCrawler.HtmlAgilityPack;
 
 public abstract class HtmlAgilityPackCrawler<TResult> : AbstractStaticHtmlCrawler<HtmlDocument, TResult>
     where TResult : IScrapeResult

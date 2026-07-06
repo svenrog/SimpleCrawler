@@ -1,6 +1,6 @@
 using System.Globalization;
 
-namespace Crawler.Core.Proxy;
+namespace SimpleCrawler.Core.Proxy;
 
 internal static class ProxyParser
 {

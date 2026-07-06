@@ -1,9 +1,9 @@
 using Acornima.Ast;
-using Crawler.Js.Abstractions;
-using Crawler.Js.Services;
+using SimpleCrawler.Js.Abstractions;
+using SimpleCrawler.Js.Services;
 using Jint;
 
-namespace Crawler.Js.Jint;
+namespace SimpleCrawler.Js.Jint;
 
 // Every crawled SPA page spins up a fresh Engine, but they all import the same module graph. Parsing
 // is the dominant per-page cost and a Prepared<Module> is immutable and reusable across engines, so we

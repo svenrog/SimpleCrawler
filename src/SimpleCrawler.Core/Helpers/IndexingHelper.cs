@@ -1,6 +1,6 @@
-﻿using Crawler.Core.Models;
+﻿using SimpleCrawler.Core.Models;
 
-namespace Crawler.Core.Helpers;
+namespace SimpleCrawler.Core.Helpers;
 
 public static class IndexingHelper
 {

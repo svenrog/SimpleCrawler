@@ -1,12 +1,12 @@
-using Crawler.Core;
-using Crawler.Core.Helpers;
-using Crawler.Core.Robots;
-using Crawler.Core.Robots.Http;
-using Crawler.Js.Models;
+using SimpleCrawler.Core;
+using SimpleCrawler.Core.Helpers;
+using SimpleCrawler.Core.Robots;
+using SimpleCrawler.Core.Robots.Http;
+using SimpleCrawler.Js.Models;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 
-namespace Crawler.Js;
+namespace SimpleCrawler.Js;
 
 public static class ServiceCollectionExtensions
 {

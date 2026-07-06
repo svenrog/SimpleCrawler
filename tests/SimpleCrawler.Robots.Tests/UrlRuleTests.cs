@@ -1,8 +1,8 @@
-using Crawler.Core.Robots;
+using SimpleCrawler.Core.Robots;
 using FluentAssertions;
 using Xunit;
 
-namespace Robots.Parser.Tests;
+namespace SimpleCrawler.Robots.Tests;
 
 public class UrlRuleTests
 {

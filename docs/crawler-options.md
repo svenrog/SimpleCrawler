@@ -1,6 +1,6 @@
 # CrawlerOptions
 
-Source found in `src/Crawler.Core/CrawlerOptions.cs`, controls crawler behaviour.
+Source found in `src/SimpleCrawler.Core/CrawlerOptions.cs`, controls crawler behaviour.
 
 ## Concurrency (default 8)
 

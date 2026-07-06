@@ -1,6 +1,6 @@
 using CommandLine;
 
-namespace Crawler.ProfileRunner;
+namespace SimpleCrawler.ProfileRunner;
 
 [Verb("rendersize", HelpText = "Render the SPA once, print element/anchor counts + size, and dump the serialized HTML to disk.")]
 public sealed class RenderSizeOptions

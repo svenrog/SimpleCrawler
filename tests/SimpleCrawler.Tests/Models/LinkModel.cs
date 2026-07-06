@@ -1,6 +1,6 @@
 ﻿using System.Text.Json.Serialization;
 
-namespace Crawler.Tests.Models;
+namespace SimpleCrawler.Tests.Models;
 
 public class LinkModel
 {

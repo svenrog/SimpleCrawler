@@ -1,10 +1,10 @@
-﻿using Crawler.Core;
-using Crawler.Core.Models;
-using Crawler.Core.Robots;
+﻿using SimpleCrawler.Core;
+using SimpleCrawler.Core.Models;
+using SimpleCrawler.Core.Robots;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
-namespace Crawler.Playwright;
+namespace SimpleCrawler.Playwright;
 
 public sealed class DefaultPlaywrightCrawler : PlaywrightCrawler<ScrapeResult>, ICrawler
 {

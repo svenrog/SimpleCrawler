@@ -1,4 +1,6 @@
 [![Platform](https://img.shields.io/badge/Platform-.NET%2010-blue.svg?style=flat)](https://docs.microsoft.com/en-us/dotnet/)
+[![NuGet](https://img.shields.io/nuget/vpre/SimpleCrawler.Core.svg?style=flat&label=SimpleCrawler.Core)](https://www.nuget.org/packages/SimpleCrawler.Core/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg?style=flat)](./LICENSE.txt)
 
 # Simple crawler project
 
@@ -24,6 +26,23 @@ This project stemmed from the need to crawl a single domain in preparation of lo
 | [Puppeteer Sharp](https://www.puppeteersharp.com/) | :heavy_check_mark: | :heavy_check_mark: |
 | [Selenium WebDriver](https://www.selenium.dev/) | :skull: | :skull: |
 
+## Installation
+
+The crawler ships as a set of NuGet packages, one per rendering backend, all sharing the `SimpleCrawler.*` prefix. Start with `SimpleCrawler.Core` plus the backend you want:
+
+```
+dotnet add package SimpleCrawler.HtmlAgilityPack   # default, static HTML
+dotnet add package SimpleCrawler.AngleSharp        # static HTML, AngleSharp
+dotnet add package SimpleCrawler.Js.V8             # JS rendering (ClearScript V8)
+dotnet add package SimpleCrawler.Js.Jint           # JS rendering (Jint)
+dotnet add package SimpleCrawler.Playwright        # headless browser
+dotnet add package SimpleCrawler.Puppeteer         # headless browser
+```
+
+Wire a backend into your `IServiceCollection` with its `AddXyzCrawler(...)` extension — see each package's README and [docs/](./docs/configuration.md).
+
+> The CLI (`smpcrawl`) is **not** on NuGet; grab the AOT binary from the [GitHub releases](https://github.com/svenrog/SimpleCrawler/releases).
+
 ## Running the .exe
 
 Executing the binary will crawl a single domain using the default `HtmlAgilityPack` crawler.
@@ -32,9 +51,11 @@ Executing the binary will crawl a single domain using the default `HtmlAgilityPa
 smpcrawl -e "<entry url>" -o "<output file>"
 ```
 
-Full list of possible options can be found [here](./src/SimpleCrawler/Options.cs).
+> **Play nice.** This is a tool for load-testing sites you own or operate. It respects `robots.txt` and meta-robots by default. The `--impersonate` browser-impersonation flag exists so legitimate load tests aren't tripped up by anti-bot heuristics on your own infrastructure — not to sneak past someone else's. Point it only at hosts you're authorized to hammer.
 
-Adjusting which implementation is used can be done by referencing another implementation project and switching service collection extension [here](./src/SimpleCrawler/Extensions/ServiceCollectionExtensions.cs).
+Full list of possible options can be found [here](./src/SimpleCrawler.Console/Options.cs).
+
+Adjusting which implementation is used can be done by referencing another implementation project and switching service collection extension [here](./src/SimpleCrawler.Console/Extensions/ServiceCollectionExtensions.cs).
 
 ## Configuration
 
@@ -59,10 +80,10 @@ The application uses a [custom log formatter](./src/Logging.Core/CrudeLogFormatt
 
 ### Static files from embedded resources
 
-Among the test projects there are [TestHosts](./tests/Crawler.TestHost/Infrastructure/Factories/SpaWebApplicationFactory.cs) capable of serving embedded resources as static files, this makes it possible to start the server entirely from memory. A prerequisite for using it across projects.
+Among the test projects there are [TestHosts](./tests/SimpleCrawler.TestHost/Infrastructure/Factories/SpaWebApplicationFactory.cs) capable of serving embedded resources as static files, this makes it possible to start the server entirely from memory. A prerequisite for using it across projects.
 
 ### Robots.txt
 
 This implementation is based on the work of Adam Shirt that is found [here](https://github.com/drmathias/robots).
 The matching engine has been reworked by me for performance reasons.
-A full attributation and license can be found under [`Crawler.Core.Robots`](./src/Crawler.Core/Robots/).
+A full attributation and license can be found under [`SimpleCrawler.Core.Robots`](./src/SimpleCrawler.Core/Robots/).

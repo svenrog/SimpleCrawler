@@ -1,4 +1,4 @@
-namespace SimpleCrawler;
+namespace SimpleCrawler.Console;
 
 public enum BrowserImpersonation
 {

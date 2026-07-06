@@ -5,7 +5,7 @@ using BenchmarksConsoleLogger = BenchmarkDotNet.Loggers.ConsoleLogger;
 using IAbstractionsLogger = Microsoft.Extensions.Logging.ILogger;
 using IBenchmarksLogger = BenchmarkDotNet.Loggers.ILogger;
 
-namespace Crawler.Benchmarks.Logger;
+namespace SimpleCrawler.Benchmarks.Logger;
 
 internal class ConsoleLogger : IAbstractionsLogger
 {

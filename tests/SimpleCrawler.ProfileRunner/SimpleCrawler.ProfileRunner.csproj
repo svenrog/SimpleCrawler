@@ -13,7 +13,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\Crawler.TestHost\Crawler.TestHost.csproj" />
-    <ProjectReference Include="..\Crawler.Tests.Common\Crawler.Tests.Common.csproj" />
+    <ProjectReference Include="..\SimpleCrawler.TestHost\SimpleCrawler.TestHost.csproj" />
+    <ProjectReference Include="..\SimpleCrawler.Tests.Common\SimpleCrawler.Tests.Common.csproj" />
   </ItemGroup>
 </Project>

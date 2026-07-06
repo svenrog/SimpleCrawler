@@ -1,7 +1,7 @@
 using System.Collections.Concurrent;
 using System.Text.Json;
 
-namespace Crawler.Js.Rendering;
+namespace SimpleCrawler.Js.Rendering;
 
 // Env-gated (JSRENDER_DOM_PROFILE=1) counter for the DOM operations a bundle drives during render. Unlike
 // RenderProfiler (which times engine-boundary calls), this reaches inside bundleExec: dom.js counts the

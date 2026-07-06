@@ -1,8 +1,8 @@
-using Crawler.Js.Abstractions;
+using SimpleCrawler.Js.Abstractions;
 using Microsoft.ClearScript;
 using Microsoft.ClearScript.JavaScript;
 
-namespace Crawler.Js.V8;
+namespace SimpleCrawler.Js.V8;
 
 internal sealed class V8ModuleLoader : DocumentLoader
 {

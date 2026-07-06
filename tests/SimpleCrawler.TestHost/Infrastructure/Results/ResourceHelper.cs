@@ -1,6 +1,6 @@
 ﻿using System.Reflection;
 
-namespace Crawler.TestHost.Infrastructure.Results;
+namespace SimpleCrawler.TestHost.Infrastructure.Results;
 
 public static class ResourceHelper
 {

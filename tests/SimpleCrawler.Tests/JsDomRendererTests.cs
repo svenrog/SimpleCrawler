@@ -1,18 +1,18 @@
-using Crawler.Core;
-using Crawler.Js.Abstractions;
-using Crawler.Js.Jint;
-using Crawler.Js.Models;
-using Crawler.Js.Rendering;
-using Crawler.Js.V8;
-using Crawler.Tests.Helpers;
-using Crawler.Tests.Models;
+using SimpleCrawler.Core;
+using SimpleCrawler.Js.Abstractions;
+using SimpleCrawler.Js.Jint;
+using SimpleCrawler.Js.Models;
+using SimpleCrawler.Js.Rendering;
+using SimpleCrawler.Js.V8;
+using SimpleCrawler.Tests.Helpers;
+using SimpleCrawler.Tests.Models;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using System.Net;
 using System.Text;
 
-namespace Crawler.Tests;
+namespace SimpleCrawler.Tests;
 
 // Exercises the pure-JS DOM path (dom.js) without a host: dom.js parses the shell, the inline
 // script mutates the JS DOM, and the tree is serialized back to HTML — no managed DOM wrappers involved.

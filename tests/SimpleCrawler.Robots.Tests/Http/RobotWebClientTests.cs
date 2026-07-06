@@ -1,5 +1,5 @@
-using Crawler.Core.Robots;
-using Crawler.Core.Robots.Http;
+using SimpleCrawler.Core.Robots;
+using SimpleCrawler.Core.Robots.Http;
 using FluentAssertions;
 using Moq;
 using System;
@@ -8,7 +8,7 @@ using System.Net.Http;
 using System.Threading.Tasks;
 using Xunit;
 
-namespace Robots.Parser.Tests.Http;
+namespace SimpleCrawler.Robots.Tests.Http;
 
 public class RobotWebClientTests
 {

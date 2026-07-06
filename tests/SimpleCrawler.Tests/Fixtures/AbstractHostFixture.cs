@@ -1,21 +1,21 @@
-﻿using Crawler.AngleSharp;
-using Crawler.Core;
-using Crawler.Core.Models;
-using Crawler.HtmlAgilityPack;
-using Crawler.Js;
-using Crawler.Js.Jint;
-using Crawler.Js.Models;
-using Crawler.Js.V8;
-using Crawler.Playwright;
-using Crawler.Puppeteer;
-using Crawler.Tests.Common.Extensions;
-using Crawler.Tests.Models;
+﻿using SimpleCrawler.AngleSharp;
+using SimpleCrawler.Core;
+using SimpleCrawler.Core.Models;
+using SimpleCrawler.HtmlAgilityPack;
+using SimpleCrawler.Js;
+using SimpleCrawler.Js.Jint;
+using SimpleCrawler.Js.Models;
+using SimpleCrawler.Js.V8;
+using SimpleCrawler.Playwright;
+using SimpleCrawler.Puppeteer;
+using SimpleCrawler.Tests.Common.Extensions;
+using SimpleCrawler.Tests.Models;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 
-namespace Crawler.Tests.Fixtures;
+namespace SimpleCrawler.Tests.Fixtures;
 
 public abstract class AbstractHostFixture : IAsyncDisposable
 {

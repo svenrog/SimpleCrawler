@@ -1,4 +1,4 @@
-namespace SimpleCrawler.Helper;
+namespace SimpleCrawler.Console.Helper;
 
 public static class ProxyCollector
 {

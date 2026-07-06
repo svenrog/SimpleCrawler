@@ -1,0 +1,11 @@
+@SimpleCrawler.TestHost_HostAddress = http://localhost:5139
+
+GET {{SimpleCrawler.TestHost_HostAddress}}/todos/
+Accept: application/json
+
+###
+
+GET {{SimpleCrawler.TestHost_HostAddress}}/todos/1
+Accept: application/json
+
+###

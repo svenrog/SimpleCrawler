@@ -1,4 +1,4 @@
-namespace Crawler.Js.Errors;
+namespace SimpleCrawler.Js.Errors;
 
 public sealed class JsException : Exception
 {

@@ -7,7 +7,7 @@ using System.Runtime.CompilerServices;
 using System.Xml;
 using System.Xml.Linq;
 
-namespace Crawler.Core.Robots;
+namespace SimpleCrawler.Core.Robots;
 
 /// <summary>
 /// Parses a <see cref="Sitemap"/> XML document

@@ -1,9 +1,9 @@
-﻿using Crawler.Core.Helpers;
-using Crawler.Tests.Models;
+﻿using SimpleCrawler.Core.Helpers;
+using SimpleCrawler.Tests.Models;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 
-namespace Crawler.Tests.Assertions;
+namespace SimpleCrawler.Tests.Assertions;
 
 internal partial class LinkAssertions
 {

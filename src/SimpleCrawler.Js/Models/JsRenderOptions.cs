@@ -1,6 +1,6 @@
 using Microsoft.Extensions.Logging;
 
-namespace Crawler.Js.Models;
+namespace SimpleCrawler.Js.Models;
 
 public class JsRenderOptions
 {

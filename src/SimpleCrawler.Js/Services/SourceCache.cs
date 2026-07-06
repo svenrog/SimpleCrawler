@@ -1,4 +1,4 @@
-namespace Crawler.Js.Services;
+namespace SimpleCrawler.Js.Services;
 
 // Every route of a client-only SPA returns the same shell pointing at the same bundle, so without a
 // cross-page cache each crawled page re-fetches and re-materializes the identical module sources —

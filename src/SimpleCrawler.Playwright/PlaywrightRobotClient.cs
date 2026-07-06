@@ -1,8 +1,8 @@
-using Crawler.Core.Robots;
+using SimpleCrawler.Core.Robots;
 using Microsoft.Extensions.Logging;
 using Microsoft.Playwright;
 
-namespace Crawler.Playwright;
+namespace SimpleCrawler.Playwright;
 
 public sealed class PlaywrightRobotClient : AbstractBrowserRobotClient
 {

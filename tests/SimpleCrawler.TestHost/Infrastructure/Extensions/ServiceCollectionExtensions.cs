@@ -1,7 +1,7 @@
-﻿using Crawler.TestHost.Infrastructure.Routing;
+﻿using SimpleCrawler.TestHost.Infrastructure.Routing;
 using Microsoft.AspNetCore.StaticFiles;
 
-namespace Crawler.TestHost.Infrastructure.Extensions;
+namespace SimpleCrawler.TestHost.Infrastructure.Extensions;
 
 public static class ServiceCollectionExtensions
 {

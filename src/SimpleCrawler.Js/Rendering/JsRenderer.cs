@@ -1,13 +1,13 @@
-using Crawler.Js.Abstractions;
-using Crawler.Js.Errors;
-using Crawler.Js.Models;
-using Crawler.Js.Network;
-using Crawler.Js.Services;
+using SimpleCrawler.Js.Abstractions;
+using SimpleCrawler.Js.Errors;
+using SimpleCrawler.Js.Models;
+using SimpleCrawler.Js.Network;
+using SimpleCrawler.Js.Services;
 using Microsoft.Extensions.Logging;
 using System.Text;
 using System.Text.Json;
 
-namespace Crawler.Js.Rendering;
+namespace SimpleCrawler.Js.Rendering;
 
 public sealed class JsRenderer
 {

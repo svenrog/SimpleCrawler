@@ -19,8 +19,8 @@
 	</ItemGroup>
 
 	<ItemGroup>
-		<ProjectReference Include="..\Crawler.Core\Crawler.Core.csproj" />
-		<ProjectReference Include="..\Crawler.HtmlAgilityPack\Crawler.HtmlAgilityPack.csproj" />
+		<ProjectReference Include="..\SimpleCrawler.Core\SimpleCrawler.Core.csproj" />
+		<ProjectReference Include="..\SimpleCrawler.HtmlAgilityPack\SimpleCrawler.HtmlAgilityPack.csproj" />
 	</ItemGroup>
 
 </Project>

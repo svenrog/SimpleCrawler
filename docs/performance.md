@@ -24,5 +24,5 @@ ShortRun). Lower is better. This is relative guidance, not a guarantee.
 ## Benchmarks
 
 ```
-dotnet run -c Release --project tests/Crawler.Benchmarks
+dotnet run -c Release --project tests/SimpleCrawler.Benchmarks
 ```

@@ -1,7 +1,7 @@
 using Jint;
 using Jint.Runtime;
 
-namespace Crawler.Tests;
+namespace SimpleCrawler.Tests;
 
 // Documents (as living tests) why Vue renders on V8 but is skipped on Jint: Jint mis-evaluates Vue's
 // runtime-core when run as an ES module — it throws "Cannot access 't' before initialization" — yet the

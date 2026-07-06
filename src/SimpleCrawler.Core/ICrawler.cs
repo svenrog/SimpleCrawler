@@ -1,6 +1,6 @@
-using Crawler.Core.Models;
+using SimpleCrawler.Core.Models;
 
-namespace Crawler.Core;
+namespace SimpleCrawler.Core;
 
 public interface ICrawler : ICrawler<ScrapeResult> { }
 public interface ICrawler<TResult>

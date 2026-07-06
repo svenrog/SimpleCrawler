@@ -1,4 +1,4 @@
-﻿namespace Crawler.Tests.Common.Extensions;
+﻿namespace SimpleCrawler.Tests.Common.Extensions;
 
 internal static class TaskExtensions
 {

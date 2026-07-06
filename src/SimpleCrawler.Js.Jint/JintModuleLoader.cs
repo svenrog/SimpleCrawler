@@ -1,8 +1,8 @@
-using Crawler.Js.Abstractions;
+using SimpleCrawler.Js.Abstractions;
 using Jint.Runtime.Modules;
 using Module = Jint.Runtime.Modules.Module;
 
-namespace Crawler.Js.Jint;
+namespace SimpleCrawler.Js.Jint;
 
 internal sealed class JintModuleLoader : IModuleLoader
 {

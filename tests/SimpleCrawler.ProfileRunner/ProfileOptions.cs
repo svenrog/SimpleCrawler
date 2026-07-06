@@ -1,6 +1,6 @@
 using CommandLine;
 
-namespace Crawler.ProfileRunner;
+namespace SimpleCrawler.ProfileRunner;
 
 [Verb("profile", HelpText = "Crawl the SPA repeatedly so RenderProfiler (JSRENDER_PROFILE=1) prints a per-phase table at exit.")]
 public sealed class ProfileOptions

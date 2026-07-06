@@ -1,16 +1,16 @@
-using Crawler.Core.Collections;
-using Crawler.Core.Comparers;
-using Crawler.Core.Extensions;
-using Crawler.Core.Helpers;
-using Crawler.Core.Models;
-using Crawler.Core.Proxy;
+using SimpleCrawler.Core.Collections;
+using SimpleCrawler.Core.Comparers;
+using SimpleCrawler.Core.Extensions;
+using SimpleCrawler.Core.Helpers;
+using SimpleCrawler.Core.Models;
+using SimpleCrawler.Core.Proxy;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Threading.Channels;
 
-namespace Crawler.Core;
+namespace SimpleCrawler.Core;
 
 public abstract class AbstractCrawler<TResponse, TDocument, TResult> : ICrawler<TResult>
     where TResult : IScrapeResult

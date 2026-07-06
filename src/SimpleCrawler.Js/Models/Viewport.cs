@@ -1,4 +1,4 @@
-﻿namespace Crawler.Js.Models;
+﻿namespace SimpleCrawler.Js.Models;
 
 public readonly record struct Viewport
 {

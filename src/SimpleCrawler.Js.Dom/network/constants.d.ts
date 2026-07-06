@@ -1,4 +1,4 @@
-// Shape returned by the host JsHttp.request POCO; the C#<->JS contract stays owned by Crawler.Js.Dom.Network.
+// Shape returned by the host JsHttp.request POCO; the C#<->JS contract stays owned by SimpleCrawler.Js.Dom.Network.
 interface IHostHttpResponse {
     ok: boolean;
     status: number;

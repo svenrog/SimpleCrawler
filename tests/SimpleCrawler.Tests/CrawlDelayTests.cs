@@ -1,12 +1,12 @@
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
-using Crawler.Core;
-using Crawler.Core.Models;
-using Crawler.Core.Robots;
+using SimpleCrawler.Core;
+using SimpleCrawler.Core.Models;
+using SimpleCrawler.Core.Robots;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 
-namespace Crawler.Tests;
+namespace SimpleCrawler.Tests;
 
 // Guards the crawl-delay throttle: robots.txt Crawl-delay must actually slow requests (it was parsed but
 // ignored because the delay was snapshotted in the constructor), and it may only raise the configured

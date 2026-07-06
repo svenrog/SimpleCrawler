@@ -1,9 +1,9 @@
-﻿using Crawler.Core;
-using Crawler.Core.Robots;
+﻿using SimpleCrawler.Core;
+using SimpleCrawler.Core.Robots;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 
-namespace Crawler.Playwright;
+namespace SimpleCrawler.Playwright;
 
 public static class ServiceCollectionExtensions
 {

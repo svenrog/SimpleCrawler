@@ -1,9 +1,9 @@
-using Crawler.HtmlAgilityPack;
-using Crawler.Tests.Assertions;
-using Crawler.Tests.Fixtures;
+using SimpleCrawler.HtmlAgilityPack;
+using SimpleCrawler.Tests.Assertions;
+using SimpleCrawler.Tests.Fixtures;
 using Microsoft.Extensions.DependencyInjection;
 
-namespace Crawler.Tests;
+namespace SimpleCrawler.Tests;
 
 [Collection("Crawler")]
 public class MetaRobotsTests : IClassFixture<MetaRobotsHostFixture>

@@ -1,10 +1,10 @@
-using Crawler.Core;
-using Crawler.Core.Browser;
+using SimpleCrawler.Core;
+using SimpleCrawler.Core.Browser;
 using Microsoft.Extensions.Options;
 using Microsoft.Playwright;
 using PlaywrightContext = Microsoft.Playwright.Playwright;
 
-namespace Crawler.Playwright;
+namespace SimpleCrawler.Playwright;
 
 public sealed class PlaywrightBrowserSession : IAsyncDisposable
 {

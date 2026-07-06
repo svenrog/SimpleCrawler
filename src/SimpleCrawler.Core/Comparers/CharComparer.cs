@@ -1,4 +1,4 @@
-﻿namespace Crawler.Core.Comparers;
+﻿namespace SimpleCrawler.Core.Comparers;
 
 public static class CharComparer
 {

@@ -1,10 +1,10 @@
-using Crawler.Core;
-using Crawler.Js.Abstractions;
-using Crawler.Js.Jint;
-using Crawler.Js.Models;
-using Crawler.Js.Rendering;
-using Crawler.Js.V8;
-using Crawler.TestHost.Infrastructure.Factories;
+using SimpleCrawler.Core;
+using SimpleCrawler.Js.Abstractions;
+using SimpleCrawler.Js.Jint;
+using SimpleCrawler.Js.Models;
+using SimpleCrawler.Js.Rendering;
+using SimpleCrawler.Js.V8;
+using SimpleCrawler.TestHost.Infrastructure.Factories;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -13,7 +13,7 @@ using System.Diagnostics;
 using System.Text;
 using System.Text.RegularExpressions;
 
-namespace Crawler.ProfileRunner;
+namespace SimpleCrawler.ProfileRunner;
 
 // Investigation harness (not a benchmark). Drives the real crawl/render path for a single
 // engine+parser combo against one framework's test-host SPA.

@@ -1,7 +1,7 @@
-﻿using Crawler.Core.Browser;
-using Crawler.Core.Proxy;
+﻿using SimpleCrawler.Core.Browser;
+using SimpleCrawler.Core.Proxy;
 
-namespace Crawler.Core;
+namespace SimpleCrawler.Core;
 
 public class CrawlerOptions
 {

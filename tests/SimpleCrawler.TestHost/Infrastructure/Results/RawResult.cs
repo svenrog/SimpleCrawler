@@ -1,4 +1,4 @@
-﻿namespace Crawler.TestHost.Infrastructure.Results;
+﻿namespace SimpleCrawler.TestHost.Infrastructure.Results;
 
 public sealed class RawResult : IResult
 {

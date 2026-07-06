@@ -1,10 +1,10 @@
-using Crawler.Core;
-using Crawler.Core.Browser;
+using SimpleCrawler.Core;
+using SimpleCrawler.Core.Browser;
 using Microsoft.Extensions.Options;
 using PuppeteerSharp;
 using PuppeteerController = PuppeteerSharp.Puppeteer;
 
-namespace Crawler.Puppeteer;
+namespace SimpleCrawler.Puppeteer;
 
 public sealed class PuppeteerBrowserSession : IAsyncDisposable
 {

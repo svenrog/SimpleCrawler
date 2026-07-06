@@ -1,8 +1,8 @@
 using Acornima.Ast;
-using Crawler.Js.Services;
+using SimpleCrawler.Js.Services;
 using Jint;
 
-namespace Crawler.Js.Jint;
+namespace SimpleCrawler.Js.Jint;
 
 // Parsed forms of external scripts (stable URLs), reused across the fresh per-page engines. Bounded by an
 // LRU cap: a heterogeneous site yields thousands of distinct chunk URLs whose ASTs would otherwise be held

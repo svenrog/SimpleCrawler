@@ -5,7 +5,7 @@
 using System.Net.Mime;
 using System.Runtime.CompilerServices;
 
-namespace Crawler.Core.Robots.Http;
+namespace SimpleCrawler.Core.Robots.Http;
 
 /// <summary>
 /// Client for retrieving robots.txt from a website

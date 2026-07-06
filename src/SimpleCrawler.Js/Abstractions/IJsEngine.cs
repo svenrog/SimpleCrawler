@@ -1,6 +1,6 @@
-using Crawler.Js.Models;
+using SimpleCrawler.Js.Models;
 
-namespace Crawler.Js.Abstractions;
+namespace SimpleCrawler.Js.Abstractions;
 
 public interface IJsEngine : IDisposable
 {

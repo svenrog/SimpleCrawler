@@ -1,18 +1,18 @@
 ﻿using BenchmarkDotNet.Attributes;
-using Crawler.AngleSharp;
-using Crawler.Core;
-using Crawler.HtmlAgilityPack;
-using Crawler.Js.Jint;
-using Crawler.Js.V8;
-using Crawler.Playwright;
-using Crawler.Puppeteer;
-using Crawler.TestHost.Infrastructure.Factories;
+using SimpleCrawler.AngleSharp;
+using SimpleCrawler.Core;
+using SimpleCrawler.HtmlAgilityPack;
+using SimpleCrawler.Js.Jint;
+using SimpleCrawler.Js.V8;
+using SimpleCrawler.Playwright;
+using SimpleCrawler.Puppeteer;
+using SimpleCrawler.TestHost.Infrastructure.Factories;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 
-namespace Crawler.Benchmarks;
+namespace SimpleCrawler.Benchmarks;
 
 [MemoryDiagnoser]
 [ShortRunJob]

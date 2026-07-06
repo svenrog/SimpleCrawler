@@ -1,4 +1,4 @@
-namespace Crawler.Core;
+namespace SimpleCrawler.Core;
 
 public sealed class HeadlessCrawlerOptions : CrawlerOptions
 {

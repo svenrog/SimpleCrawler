@@ -2,7 +2,7 @@
 using System.Text;
 using System.Text.Json;
 
-namespace Crawler.Js.Network;
+namespace SimpleCrawler.Js.Network;
 
 public sealed class JsHttp
 {

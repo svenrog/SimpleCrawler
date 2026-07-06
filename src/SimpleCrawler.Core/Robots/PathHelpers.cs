@@ -1,9 +1,9 @@
-﻿using Crawler.Core.Comparers;
-using Crawler.Core.Extensions;
+﻿using SimpleCrawler.Core.Comparers;
+using SimpleCrawler.Core.Extensions;
 using System.Numerics;
 using System.Web;
 
-namespace Crawler.Core.Robots;
+namespace SimpleCrawler.Core.Robots;
 
 internal static class PathHelpers
 {

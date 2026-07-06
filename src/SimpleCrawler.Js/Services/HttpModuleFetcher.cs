@@ -1,6 +1,6 @@
-using Crawler.Js.Abstractions;
+using SimpleCrawler.Js.Abstractions;
 
-namespace Crawler.Js.Services;
+namespace SimpleCrawler.Js.Services;
 
 internal sealed class HttpModuleFetcher : IModuleFetcher
 {

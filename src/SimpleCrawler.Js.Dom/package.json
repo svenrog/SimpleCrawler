@@ -2,13 +2,13 @@
   "name": "crawler.js.dom",
   "version": "0.0.1",
   "private": true,
-  "description": "TypeScript frontend that compiles to the embedded dom.js prelude for the Crawler.Js backends",
+  "description": "TypeScript frontend that compiles to the embedded dom.js prelude for the SimpleCrawler.Js backends",
   "scripts": {
     "build": "npm run build:dom && npm run build:fetch && npm run build:indexeddb && npm run build:jint",
-    "build:dom": "esbuild index.ts --bundle --format=iife --platform=neutral --target=es2020 --outfile=../Crawler.Js/Rendering/Preludes/dom.js",
-    "build:fetch": "esbuild ./network/index.ts --bundle --format=iife --platform=neutral --target=es2020 --outfile=../Crawler.Js/Rendering/Preludes/fetch.js",
-    "build:indexeddb": "esbuild ./indexeddb/prelude.ts --bundle --format=iife --platform=neutral --target=es2020 --outfile=../Crawler.Js/Rendering/Preludes/indexeddb.js",
-    "build:jint": "esbuild ./shims/jint/index.ts --bundle --format=iife --platform=neutral --target=es2020 --outfile=../Crawler.Js.Jint/Preludes/shims.js",
+    "build:dom": "esbuild index.ts --bundle --format=iife --platform=neutral --target=es2020 --outfile=../SimpleCrawler.Js/Rendering/Preludes/dom.js",
+    "build:fetch": "esbuild ./network/index.ts --bundle --format=iife --platform=neutral --target=es2020 --outfile=../SimpleCrawler.Js/Rendering/Preludes/fetch.js",
+    "build:indexeddb": "esbuild ./indexeddb/prelude.ts --bundle --format=iife --platform=neutral --target=es2020 --outfile=../SimpleCrawler.Js/Rendering/Preludes/indexeddb.js",
+    "build:jint": "esbuild ./shims/jint/index.ts --bundle --format=iife --platform=neutral --target=es2020 --outfile=../SimpleCrawler.Js.Jint/Preludes/shims.js",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {

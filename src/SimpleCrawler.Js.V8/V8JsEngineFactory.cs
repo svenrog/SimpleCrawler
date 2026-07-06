@@ -1,7 +1,7 @@
-using Crawler.Js.Abstractions;
+using SimpleCrawler.Js.Abstractions;
 using Microsoft.Extensions.Options;
 
-namespace Crawler.Js.V8;
+namespace SimpleCrawler.Js.V8;
 
 internal sealed class V8JsEngineFactory : IJsEngineFactory, IDisposable
 {

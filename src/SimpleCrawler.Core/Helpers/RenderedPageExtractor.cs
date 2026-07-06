@@ -1,6 +1,6 @@
 using System.Text.Json;
 
-namespace Crawler.Core.Helpers;
+namespace SimpleCrawler.Core.Helpers;
 
 // One in-browser evaluation returns every anchor href, the canonical link and the meta-robots
 // directive, collapsing one protocol round-trip per element into one round-trip per page.

@@ -1,7 +1,7 @@
-using Crawler.Js.Abstractions;
-using Crawler.Js.Models;
+using SimpleCrawler.Js.Abstractions;
+using SimpleCrawler.Js.Models;
 
-namespace Crawler.Js.Rendering;
+namespace SimpleCrawler.Js.Rendering;
 
 // Decorates an engine when JSRENDER_PROFILE is set, attributing time and call counts to each boundary
 // crossing so a render profile can split per-page cost between Execute/ExecuteCached, host embeds,

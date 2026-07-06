@@ -1,13 +1,13 @@
-using Crawler.Js.Abstractions;
-using Crawler.Js.Models;
-using Crawler.Core;
-using Crawler.Core.Models;
-using Crawler.Core.Robots;
+using SimpleCrawler.Js.Abstractions;
+using SimpleCrawler.Js.Models;
+using SimpleCrawler.Core;
+using SimpleCrawler.Core.Models;
+using SimpleCrawler.Core.Robots;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
-namespace Crawler.Js.V8;
+namespace SimpleCrawler.Js.V8;
 
 public sealed class DefaultV8Crawler : JsCrawler<ScrapeResult>, ICrawler
 {

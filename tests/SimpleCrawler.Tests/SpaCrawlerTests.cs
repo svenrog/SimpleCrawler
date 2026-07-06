@@ -1,14 +1,14 @@
-using Crawler.Core.Models;
-using Crawler.Js.Jint;
-using Crawler.Js.V8;
-using Crawler.Playwright;
-using Crawler.Puppeteer;
-using Crawler.Tests.Assertions;
-using Crawler.Tests.Fixtures;
-using Crawler.Tests.Helpers;
+using SimpleCrawler.Core.Models;
+using SimpleCrawler.Js.Jint;
+using SimpleCrawler.Js.V8;
+using SimpleCrawler.Playwright;
+using SimpleCrawler.Puppeteer;
+using SimpleCrawler.Tests.Assertions;
+using SimpleCrawler.Tests.Fixtures;
+using SimpleCrawler.Tests.Helpers;
 using Microsoft.Extensions.DependencyInjection;
 
-namespace Crawler.Tests;
+namespace SimpleCrawler.Tests;
 
 [Collection("Crawler")]
 public class SpaCrawlerTests : IClassFixture<SpaHostFixture>

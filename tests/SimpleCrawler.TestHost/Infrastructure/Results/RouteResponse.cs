@@ -1,6 +1,6 @@
 ﻿using System.Diagnostics.CodeAnalysis;
 
-namespace Crawler.TestHost.Infrastructure.Results;
+namespace SimpleCrawler.TestHost.Infrastructure.Results;
 
 public class RouteResponse
 {

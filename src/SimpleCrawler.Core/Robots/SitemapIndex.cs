@@ -2,7 +2,7 @@
 // Licensed under MIT. See the LICENSE file in the project root for more information
 // https://github.com/drmathias/robots
 
-namespace Crawler.Core.Robots;
+namespace SimpleCrawler.Core.Robots;
 
 internal class SitemapIndex : Sitemap
 {

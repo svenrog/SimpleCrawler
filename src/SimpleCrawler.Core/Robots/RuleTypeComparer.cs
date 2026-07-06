@@ -1,4 +1,4 @@
-﻿namespace Crawler.Core.Robots;
+﻿namespace SimpleCrawler.Core.Robots;
 
 public sealed class RuleTypeComparer : IComparer<RuleType>
 {

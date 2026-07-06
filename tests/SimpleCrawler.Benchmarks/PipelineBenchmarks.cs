@@ -1,6 +1,6 @@
 using BenchmarkDotNet.Attributes;
-using Crawler.Core;
-using Crawler.HtmlAgilityPack;
+using SimpleCrawler.Core;
+using SimpleCrawler.HtmlAgilityPack;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
@@ -10,7 +10,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using System.Text;
 
-namespace Crawler.Benchmarks;
+namespace SimpleCrawler.Benchmarks;
 
 // Compares coupled fetch/parse concurrency against a decoupled split, over a server with real
 // per-request latency and a parse-heavy payload. Shows that splitting (high fetch, bounded parse)

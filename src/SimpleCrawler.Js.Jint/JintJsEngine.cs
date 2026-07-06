@@ -1,13 +1,13 @@
-using Crawler.Js.Abstractions;
-using Crawler.Js.Errors;
-using Crawler.Js.Models;
+using SimpleCrawler.Js.Abstractions;
+using SimpleCrawler.Js.Errors;
+using SimpleCrawler.Js.Models;
 using Jint;
 using Jint.Native;
 using Jint.Runtime;
 using Jint.Runtime.Interop;
 using System.Globalization;
 
-namespace Crawler.Js.Jint;
+namespace SimpleCrawler.Js.Jint;
 
 internal sealed class JintJsEngine : IJsEngine
 {

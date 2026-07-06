@@ -1,6 +1,6 @@
-using Crawler.Js.V8;
+using SimpleCrawler.Js.V8;
 
-namespace Crawler.Tests;
+namespace SimpleCrawler.Tests;
 
 // A minified bundle can carry literal newlines inside a single source line (e.g. core-js' whitespace
 // feature-detect strings), which split one stack frame's source across several physical lines. The frame's

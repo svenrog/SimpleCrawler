@@ -1,6 +1,6 @@
 ﻿using HttpResults = Microsoft.AspNetCore.Http.Results;
 
-namespace Crawler.TestHost.Infrastructure.Extensions;
+namespace SimpleCrawler.TestHost.Infrastructure.Extensions;
 
 public static class EndpointRouteExtensions
 {

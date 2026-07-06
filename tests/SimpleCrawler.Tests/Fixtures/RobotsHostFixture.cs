@@ -1,11 +1,11 @@
-﻿using Crawler.Core;
-using Crawler.Core.Helpers;
-using Crawler.TestHost.Infrastructure.Factories;
-using Crawler.TestHost.Infrastructure.Results;
-using Crawler.Tests.Assertions;
+﻿using SimpleCrawler.Core;
+using SimpleCrawler.Core.Helpers;
+using SimpleCrawler.TestHost.Infrastructure.Factories;
+using SimpleCrawler.TestHost.Infrastructure.Results;
+using SimpleCrawler.Tests.Assertions;
 using Microsoft.AspNetCore.Builder;
 
-namespace Crawler.Tests.Fixtures;
+namespace SimpleCrawler.Tests.Fixtures;
 
 public sealed class RobotsHostFixture : AbstractHostFixture
 {
@@ -22,7 +22,7 @@ public sealed class RobotsHostFixture : AbstractHostFixture
         var html = ResourceHelper.GetHtmlResponse("default");
         var links = LinkAssertions.GetHtmlLinks(HostUri, html);
 
-        // This test data is related to the robots.txt file found in Crawler.TestHost/wwwroot/robots.txt
+        // This test data is related to the robots.txt file found in SimpleCrawler.TestHost/wwwroot/robots.txt
         var exclusions = UriHelper.GetAbsoluteUrls(HostUri, ["/contact", "/book-meeting"]);
 
         return [.. links.Except(exclusions)];

@@ -7,18 +7,18 @@
 	</PropertyGroup>
 
 	<ItemGroup>
-		<InternalsVisibleTo Include="Crawler.Benchmarks" />
-		<InternalsVisibleTo Include="Crawler.Tests" />
+		<InternalsVisibleTo Include="SimpleCrawler.Benchmarks" />
+		<InternalsVisibleTo Include="SimpleCrawler.Tests" />
 	</ItemGroup>
 
 	<ItemGroup>
-		<ProjectReference Include="..\..\src\Crawler.AngleSharp\Crawler.AngleSharp.csproj" />
-		<ProjectReference Include="..\..\src\Crawler.Js.Jint\Crawler.Js.Jint.csproj" />
-		<ProjectReference Include="..\..\src\Crawler.Js.V8\Crawler.Js.V8.csproj" />
-		<ProjectReference Include="..\..\src\Crawler.Core\Crawler.Core.csproj" />
-		<ProjectReference Include="..\..\src\Crawler.HtmlAgilityPack\Crawler.HtmlAgilityPack.csproj" />
-		<ProjectReference Include="..\..\src\Crawler.Playwright\Crawler.Playwright.csproj" />
-		<ProjectReference Include="..\..\src\Crawler.Puppeteer\Crawler.Puppeteer.csproj" />
+		<ProjectReference Include="..\..\src\SimpleCrawler.AngleSharp\SimpleCrawler.AngleSharp.csproj" />
+		<ProjectReference Include="..\..\src\SimpleCrawler.Js.Jint\SimpleCrawler.Js.Jint.csproj" />
+		<ProjectReference Include="..\..\src\SimpleCrawler.Js.V8\SimpleCrawler.Js.V8.csproj" />
+		<ProjectReference Include="..\..\src\SimpleCrawler.Core\SimpleCrawler.Core.csproj" />
+		<ProjectReference Include="..\..\src\SimpleCrawler.HtmlAgilityPack\SimpleCrawler.HtmlAgilityPack.csproj" />
+		<ProjectReference Include="..\..\src\SimpleCrawler.Playwright\SimpleCrawler.Playwright.csproj" />
+		<ProjectReference Include="..\..\src\SimpleCrawler.Puppeteer\SimpleCrawler.Puppeteer.csproj" />
 	</ItemGroup>
 
 </Project>

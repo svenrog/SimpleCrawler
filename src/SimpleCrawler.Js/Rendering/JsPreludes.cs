@@ -1,6 +1,6 @@
-using Crawler.Js.Helpers;
+using SimpleCrawler.Js.Helpers;
 
-namespace Crawler.Js.Rendering;
+namespace SimpleCrawler.Js.Rendering;
 
 internal static class JsPreludes
 {

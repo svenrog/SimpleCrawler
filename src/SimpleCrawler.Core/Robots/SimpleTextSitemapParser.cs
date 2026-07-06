@@ -4,7 +4,7 @@
 
 using System.Runtime.CompilerServices;
 
-namespace Crawler.Core.Robots;
+namespace SimpleCrawler.Core.Robots;
 
 /// <summary>
 /// Parses a <see cref="Sitemap"/> TXT document

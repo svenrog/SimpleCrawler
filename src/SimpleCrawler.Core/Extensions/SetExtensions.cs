@@ -1,6 +1,6 @@
-﻿using Crawler.Core.Collections;
+﻿using SimpleCrawler.Core.Collections;
 
-namespace Crawler.Core.Extensions;
+namespace SimpleCrawler.Core.Extensions;
 
 public static class SetExtensions
 {

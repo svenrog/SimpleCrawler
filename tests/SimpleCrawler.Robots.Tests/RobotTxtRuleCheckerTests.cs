@@ -1,4 +1,4 @@
-using Crawler.Core.Robots;
+using SimpleCrawler.Core.Robots;
 using FluentAssertions;
 using System.IO;
 using System.Text;

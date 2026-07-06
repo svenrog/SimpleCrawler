@@ -1,5 +1,5 @@
 using CommandLine;
-using Crawler.ProfileRunner;
+using SimpleCrawler.ProfileRunner;
 
 using var parser = new Parser(settings =>
 {

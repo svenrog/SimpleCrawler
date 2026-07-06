@@ -1,4 +1,4 @@
-﻿namespace Crawler.Core.Robots;
+﻿namespace SimpleCrawler.Core.Robots;
 
 /// <summary>
 /// A URI path that is normalized so that it can be compared with rules in a robots.txt file

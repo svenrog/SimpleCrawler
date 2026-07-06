@@ -2,7 +2,7 @@ using System.Buffers;
 using System.Text;
 using System.Text.Json;
 
-namespace Crawler.Core.Helpers;
+namespace SimpleCrawler.Core.Helpers;
 
 // Reflection-free JSON encoding for values embedded into generated JS source. JsonSerializer.Serialize<T>
 // resolves a contract for T through reflection (a trimming / NativeAOT hazard); Utf8JsonWriter's primitive

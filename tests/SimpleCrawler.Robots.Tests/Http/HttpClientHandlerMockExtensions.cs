@@ -5,7 +5,7 @@ using System.Threading.Tasks;
 using Moq;
 using Moq.Protected;
 
-namespace Robots.Parser.Tests.Http;
+namespace SimpleCrawler.Robots.Tests.Http;
 
 public static class HttpClientHandlerMockExtensions
 {

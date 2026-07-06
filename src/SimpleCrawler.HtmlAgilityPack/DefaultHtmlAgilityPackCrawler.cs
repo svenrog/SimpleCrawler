@@ -1,10 +1,10 @@
-﻿using Crawler.Core;
-using Crawler.Core.Models;
-using Crawler.Core.Robots;
+﻿using SimpleCrawler.Core;
+using SimpleCrawler.Core.Models;
+using SimpleCrawler.Core.Robots;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
-namespace Crawler.HtmlAgilityPack;
+namespace SimpleCrawler.HtmlAgilityPack;
 
 public sealed class DefaultHtmlAgilityPackCrawler : HtmlAgilityPackCrawler<ScrapeResult>, ICrawler
 {

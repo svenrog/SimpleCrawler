@@ -1,15 +1,15 @@
-﻿using Crawler.AngleSharp;
-using Crawler.Core.Models;
-using Crawler.HtmlAgilityPack;
-using Crawler.Js.Jint;
-using Crawler.Js.V8;
-using Crawler.Playwright;
-using Crawler.Puppeteer;
-using Crawler.Tests.Assertions;
-using Crawler.Tests.Fixtures;
+﻿using SimpleCrawler.AngleSharp;
+using SimpleCrawler.Core.Models;
+using SimpleCrawler.HtmlAgilityPack;
+using SimpleCrawler.Js.Jint;
+using SimpleCrawler.Js.V8;
+using SimpleCrawler.Playwright;
+using SimpleCrawler.Puppeteer;
+using SimpleCrawler.Tests.Assertions;
+using SimpleCrawler.Tests.Fixtures;
 using Microsoft.Extensions.DependencyInjection;
 
-namespace Crawler.Tests;
+namespace SimpleCrawler.Tests;
 
 [Collection("Crawler")]
 public class StaticCrawlerTests : IClassFixture<StaticHostFixture>

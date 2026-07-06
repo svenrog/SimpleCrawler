@@ -1,4 +1,4 @@
-﻿namespace Crawler.TestHost.Infrastructure.Extensions;
+﻿namespace SimpleCrawler.TestHost.Infrastructure.Extensions;
 
 public class FileExtensions
 {

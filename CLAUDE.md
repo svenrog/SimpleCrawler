@@ -4,25 +4,25 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-A high-performance single-domain web crawler (CLI: `smpcrawl`) built to gather URLs for load testing, respecting `robots.txt` and meta-robots. The crawler logic lives in `Crawler.Core` and is parameterized over a pluggable HTML/rendering backend.
+A high-performance single-domain web crawler (CLI: `smpcrawl`) built to gather URLs for load testing, respecting `robots.txt` and meta-robots. The crawler logic lives in `SimpleCrawler.Core` and is parameterized over a pluggable HTML/rendering backend.
 
 ## Build, test, run
 
-- Solution file is `SimpleCrawler.slnx` (modern XML solution format), targeting **.NET 10**. `dotnet build` / `dotnet test` operate on it.
-- Run a single test: `dotnet test --filter "FullyQualifiedName~TestName"`.
-- Tests use **xUnit v3** (pre-release `xunit.v3`), FluentAssertions, and Moq — not xUnit v2 idioms.
-- Benchmarks are a runnable BenchmarkDotNet console app: `dotnet run -c Release --project tests/Crawler.Benchmarks`. Always run benchmarks in Release.
-- The JS-render profiling harness is a separate console app, `tests/Crawler.ProfileRunner` (CommandLineParser verbs, not a benchmark). It drives the real crawl/render path against a test-host SPA: `dotnet run --project tests/Crawler.ProfileRunner -- profile <combo> <iterations> [framework]` (crawls repeatedly so `RenderProfiler` with `JSRENDER_PROFILE=1` prints a per-phase table), or `-- rendersize <combo> [framework]` (renders once, dumps element/anchor counts + serialized HTML). `combo` = `jint|v8`; `framework` = `react|preact|vue|svelte|solid`. Pass `--help` or `profile --help` for defaults.
+- Solution file is `SimpleCrawler.slnx` (modern XML solution format), targeting **.NET 10**. `dotnet build` operates on it.
+- Tests use **xUnit v3** (pre-release `xunit.v3`, Microsoft.Testing.Platform), FluentAssertions, and Moq — not xUnit v2 idioms. `dotnet test` does **not** work here; run a test project via `dotnet run --project tests/SimpleCrawler.Tests -c Release`.
+- Run a single test with the MTP native runner filter: `dotnet run --project tests/SimpleCrawler.Tests -c Release -- --filter "/*/*/ClassName/MethodName"`.
+- Benchmarks are a runnable BenchmarkDotNet console app: `dotnet run -c Release --project tests/SimpleCrawler.Benchmarks`. Always run benchmarks in Release.
+- The JS-render profiling harness is a separate console app, `tests/SimpleCrawler.ProfileRunner` (CommandLineParser verbs, not a benchmark). It drives the real crawl/render path against a test-host SPA: `dotnet run --project tests/SimpleCrawler.ProfileRunner -- profile <combo> <iterations> [framework]` (crawls repeatedly so `RenderProfiler` with `JSRENDER_PROFILE=1` prints a per-phase table), or `-- rendersize <combo> [framework]` (renders once, dumps element/anchor counts + serialized HTML). `combo` = `jint|v8`; `framework` = `react|preact|vue|svelte|solid`. Pass `--help` or `profile --help` for defaults.
 
 ## Architecture
 
-- `Crawler.Core` — abstract base (`AbstractCrawler.cs`, semaphore-based parallelism), the custom `robots.txt`/sitemap parser, and shared crawling logic.
-- One project per HTML/rendering backend: `Crawler.HtmlAgilityPack` (default, static), `Crawler.AngleSharp` (static), `Crawler.Playwright` and `Crawler.Puppeteer` (headless browser, JS rendering). Every project under `/src` is part of the solution; there are no out-of-solution experiments.
-- `Crawler.TestHost` serves embedded resources as static files so integration test servers run entirely from memory.
+- `SimpleCrawler.Core` — abstract base (`AbstractCrawler.cs`, semaphore-based parallelism), the custom `robots.txt`/sitemap parser, and shared crawling logic.
+- One project per HTML/rendering backend: `SimpleCrawler.HtmlAgilityPack` (default, static), `SimpleCrawler.AngleSharp` (static), `SimpleCrawler.Playwright` and `SimpleCrawler.Puppeteer` (headless browser, JS rendering). Every project under `/src` is part of the solution; there are no out-of-solution experiments.
+- `SimpleCrawler.TestHost` serves embedded resources as static files so integration test servers run entirely from memory.
 
 ## Switching the active crawler backend
 
-The CLI is wired to one backend at a time. To change it, edit `src/SimpleCrawler/Extensions/ServiceCollectionExtensions.cs` (`AddCrawler` calls `services.AddHtmlAgilityPackCrawler(...)`) to call the target backend's `AddXyzCrawler` extension, and add the corresponding project reference to `SimpleCrawler.csproj`.
+The CLI is wired to one backend at a time. To change it, edit `src/SimpleCrawler.Console/Extensions/ServiceCollectionExtensions.cs` (`AddCrawler` calls `services.AddHtmlAgilityPackCrawler(...)`) to call the target backend's `AddXyzCrawler` extension, and add the corresponding project reference to `SimpleCrawler.Console.csproj`.
 
 ## Code style
 

@@ -1,17 +1,17 @@
-using Crawler.Core;
-using Crawler.Js.Abstractions;
-using Crawler.Js.Jint;
-using Crawler.Js.Models;
-using Crawler.Js.Rendering;
-using Crawler.Js.V8;
-using Crawler.Tests.Helpers;
-using Crawler.Tests.Models;
+using SimpleCrawler.Core;
+using SimpleCrawler.Js.Abstractions;
+using SimpleCrawler.Js.Jint;
+using SimpleCrawler.Js.Models;
+using SimpleCrawler.Js.Rendering;
+using SimpleCrawler.Js.V8;
+using SimpleCrawler.Tests.Helpers;
+using SimpleCrawler.Tests.Models;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using System.Net;
 using System.Text;
 
-namespace Crawler.Tests;
+namespace SimpleCrawler.Tests;
 
 // A module import that resolves to a non-HTTP URI must not abort the page. A protocol-relative specifier
 // (`//host/x.js`) parses as a file:// URI, and the fetcher's HttpClient.Send throws "the file scheme is not

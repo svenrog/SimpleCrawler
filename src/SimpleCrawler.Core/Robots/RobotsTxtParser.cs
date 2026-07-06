@@ -4,7 +4,7 @@
 
 using System.Text;
 
-namespace Crawler.Core.Robots;
+namespace SimpleCrawler.Core.Robots;
 
 /// <summary>
 /// Provides the ability to parse robots.txt 

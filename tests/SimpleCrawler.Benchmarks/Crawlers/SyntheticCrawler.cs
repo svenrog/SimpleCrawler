@@ -1,10 +1,10 @@
-using Crawler.Core;
-using Crawler.Core.Helpers;
-using Crawler.Core.Models;
+using SimpleCrawler.Core;
+using SimpleCrawler.Core.Helpers;
+using SimpleCrawler.Core.Models;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 
-namespace Crawler.Benchmarks;
+namespace SimpleCrawler.Benchmarks;
 
 public sealed class SyntheticCrawler : AbstractCrawler<string, string, ScrapeResult>
 {

@@ -1,6 +1,6 @@
-using Crawler.Core.Helpers;
+using SimpleCrawler.Core.Helpers;
 
-namespace Crawler.Core.Browser;
+namespace SimpleCrawler.Core.Browser;
 
 public static class BrowserHelper
 {

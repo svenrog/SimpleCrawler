@@ -1,6 +1,6 @@
 ﻿using PuppeteerSharp;
 
-namespace Crawler.Puppeteer;
+namespace SimpleCrawler.Puppeteer;
 
 internal static class Constants
 {

@@ -29,7 +29,7 @@
 	</ItemGroup>
 
 	<ItemGroup>
-		<ProjectReference Include="..\..\src\Crawler.Core\Crawler.Core.csproj" />
+		<ProjectReference Include="..\..\src\SimpleCrawler.Core\SimpleCrawler.Core.csproj" />
 	</ItemGroup>
 
 </Project>

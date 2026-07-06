@@ -1,6 +1,6 @@
 using BenchmarkDotNet.Running;
 
-namespace Crawler.Benchmarks;
+namespace SimpleCrawler.Benchmarks;
 
 internal class Program
 {

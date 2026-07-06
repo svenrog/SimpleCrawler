@@ -1,6 +1,6 @@
-﻿using Crawler.TestHost.Infrastructure.Results;
+﻿using SimpleCrawler.TestHost.Infrastructure.Results;
 
-namespace Crawler.TestHost.Infrastructure.Extensions;
+namespace SimpleCrawler.TestHost.Infrastructure.Extensions;
 
 public static class ResultsExtensions
 {

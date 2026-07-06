@@ -1,9 +1,9 @@
-using Crawler.Tests.Assertions;
-using Crawler.Tests.Fixtures;
-using Crawler.Tests.Helpers;
-using Crawler.Tests.Models;
+using SimpleCrawler.Tests.Assertions;
+using SimpleCrawler.Tests.Fixtures;
+using SimpleCrawler.Tests.Helpers;
+using SimpleCrawler.Tests.Models;
 
-namespace Crawler.Tests;
+namespace SimpleCrawler.Tests;
 
 // One test per (capability, engine): each capability shell renders its links only when the probed JS-engine
 // behaviour works, so a crawl that matches the embedded manifest is the regression guard. See ProbeHostFixture

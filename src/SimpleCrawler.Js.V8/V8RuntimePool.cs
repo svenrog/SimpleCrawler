@@ -1,7 +1,7 @@
 using Microsoft.ClearScript.V8;
 using System.Collections.Concurrent;
 
-namespace Crawler.Js.V8;
+namespace SimpleCrawler.Js.V8;
 
 // A V8Runtime is a V8 isolate; creating one per page is the dominant per-page cost. Engines created
 // from a shared runtime get isolated contexts (separate globals) but reuse the isolate's heap and

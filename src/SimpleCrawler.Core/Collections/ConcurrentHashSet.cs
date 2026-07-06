@@ -1,7 +1,7 @@
 ﻿using System.Collections;
 using System.Collections.Concurrent;
 
-namespace Crawler.Core.Collections;
+namespace SimpleCrawler.Core.Collections;
 
 public class ConcurrentHashSet<T> : ICollection<T>, ISet<T>, IReadOnlyCollection<T>, IReadOnlySet<T>
     where T : notnull

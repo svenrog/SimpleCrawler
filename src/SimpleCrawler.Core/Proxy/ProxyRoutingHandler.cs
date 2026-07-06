@@ -1,7 +1,7 @@
 using Microsoft.Extensions.Logging;
 using System.Net;
 
-namespace Crawler.Core.Proxy;
+namespace SimpleCrawler.Core.Proxy;
 
 public sealed class ProxyRoutingHandler : HttpMessageHandler
 {

@@ -1,6 +1,6 @@
-﻿using Crawler.Js.Helpers;
+﻿using SimpleCrawler.Js.Helpers;
 
-namespace Crawler.Js.Jint;
+namespace SimpleCrawler.Js.Jint;
 
 internal static class Shim
 {

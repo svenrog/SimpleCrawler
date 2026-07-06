@@ -1,9 +1,9 @@
 using System.Collections.Concurrent;
 using System.Net;
-using Crawler.Core.Helpers;
+using SimpleCrawler.Core.Helpers;
 using Microsoft.Extensions.Options;
 
-namespace Crawler.Core.Proxy;
+namespace SimpleCrawler.Core.Proxy;
 
 public sealed class ProxyHandlerProvider : IProxyClientProvider, IDisposable
 {

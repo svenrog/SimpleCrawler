@@ -1,4 +1,4 @@
-namespace Crawler.Core.Proxy;
+namespace SimpleCrawler.Core.Proxy;
 
 public enum ProxyFailureKind
 {

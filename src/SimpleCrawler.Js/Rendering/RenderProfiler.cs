@@ -1,7 +1,7 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
 
-namespace Crawler.Js.Rendering;
+namespace SimpleCrawler.Js.Rendering;
 
 // Env-gated profiler (JSRENDER_PROFILE=1) that sums Stopwatch ticks and call counts per bucket across all
 // pages/threads and prints a table at process exit. Every entry point early-returns when disabled, and Scope

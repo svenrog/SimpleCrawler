@@ -1,15 +1,15 @@
 ﻿using CommandLine;
-using Crawler.Core;
+using SimpleCrawler.Core;
 using Crude.Logging.Console.Extensions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Http;
 using Microsoft.Extensions.Logging;
-using SimpleCrawler.Extensions;
+using SimpleCrawler.Console.Extensions;
 using System.Diagnostics.CodeAnalysis;
 
-namespace SimpleCrawler;
+namespace SimpleCrawler.Console;
 
 internal static class Program
 {
@@ -22,7 +22,7 @@ internal static class Program
 
         using var parser = new Parser(settings =>
         {
-            settings.HelpWriter = Console.Error;
+            settings.HelpWriter = System.Console.Error;
             settings.CaseInsensitiveEnumValues = true;
         });
 
@@ -43,7 +43,7 @@ internal static class Program
         using var host = builder.Build();
         using var tokenSource = new CancellationTokenSource();
 
-        Console.CancelKeyPress += delegate (object? sender, ConsoleCancelEventArgs e)
+        System.Console.CancelKeyPress += delegate (object? sender, ConsoleCancelEventArgs e)
         {
             tokenSource.Cancel();
         };

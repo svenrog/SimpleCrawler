@@ -2,7 +2,7 @@
 using System.Net.Mime;
 using System.Text;
 
-namespace Crawler.TestHost.Infrastructure.Results;
+namespace SimpleCrawler.TestHost.Infrastructure.Results;
 
 public sealed class SerializedJsonResult : IResult
 {

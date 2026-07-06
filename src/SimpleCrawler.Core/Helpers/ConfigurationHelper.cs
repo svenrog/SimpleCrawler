@@ -1,10 +1,10 @@
-﻿using Crawler.Core.Proxy;
+﻿using SimpleCrawler.Core.Proxy;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using System.Net;
 
-namespace Crawler.Core.Helpers;
+namespace SimpleCrawler.Core.Helpers;
 
 public static class ConfigurationHelper
 {

@@ -1,11 +1,11 @@
-using Crawler.Js.Models;
-using Crawler.TestHost.Infrastructure.Factories;
-using Crawler.TestHost.Infrastructure.Results;
-using Crawler.Tests.Assertions;
-using Crawler.Tests.Models;
+using SimpleCrawler.Js.Models;
+using SimpleCrawler.TestHost.Infrastructure.Factories;
+using SimpleCrawler.TestHost.Infrastructure.Results;
+using SimpleCrawler.Tests.Assertions;
+using SimpleCrawler.Tests.Models;
 using Microsoft.AspNetCore.Builder;
 
-namespace Crawler.Tests.Fixtures;
+namespace SimpleCrawler.Tests.Fixtures;
 
 // One host per JS-engine capability probe, each on its own port, served from a single fixture (mirroring
 // SpaHostFixture's multi-host layout). Each host assembles Probes/shell.html + a Probes/<script> resource,

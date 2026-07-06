@@ -1,6 +1,6 @@
 ﻿using System.Net;
 
-namespace Crawler.TestHost.Infrastructure.Routing;
+namespace SimpleCrawler.TestHost.Infrastructure.Routing;
 
 public class EmbeddedResourceStaticFileMiddleware
 {

@@ -1,9 +1,9 @@
-﻿using Crawler.TestHost.Infrastructure.Factories;
-using Crawler.TestHost.Infrastructure.Results;
-using Crawler.Tests.Assertions;
+﻿using SimpleCrawler.TestHost.Infrastructure.Factories;
+using SimpleCrawler.TestHost.Infrastructure.Results;
+using SimpleCrawler.Tests.Assertions;
 using Microsoft.AspNetCore.Builder;
 
-namespace Crawler.Tests.Fixtures;
+namespace SimpleCrawler.Tests.Fixtures;
 
 public sealed class StaticHostFixture : AbstractHostFixture
 {

@@ -1,11 +1,11 @@
-using Crawler.Core;
-using Crawler.Core.Browser;
-using Crawler.Core.Proxy;
-using Crawler.HtmlAgilityPack;
+using SimpleCrawler.Core;
+using SimpleCrawler.Core.Browser;
+using SimpleCrawler.Core.Proxy;
+using SimpleCrawler.HtmlAgilityPack;
 using Microsoft.Extensions.DependencyInjection;
-using SimpleCrawler.Helper;
+using SimpleCrawler.Console.Helper;
 
-namespace SimpleCrawler.Extensions;
+namespace SimpleCrawler.Console.Extensions;
 
 internal static class ServiceCollectionExtensions
 {
@@ -40,14 +40,14 @@ internal static class ServiceCollectionExtensions
         if (manifest.Length == 0)
             return;
 
-        Console.WriteLine($"Resolving {manifest.Length} proxy entries...");
+        System.Console.WriteLine($"Resolving {manifest.Length} proxy entries...");
 
         var resolver = new PreparedProxyResolver();
         var proxies = resolver.Resolve(manifest).Distinct().ToList();
 
         if (proxies.Count == 0)
         {
-            Console.WriteLine("No usable proxies resolved; crawling without a proxy.");
+            System.Console.WriteLine("No usable proxies resolved; crawling without a proxy.");
             return;
         }
 
@@ -62,7 +62,7 @@ internal static class ServiceCollectionExtensions
         services.AddSingleton<IProxyPool>(_ => new ProxyPool(proxies, poolOptions));
         services.AddSingleton<IProxyClientProvider, ProxyHandlerProvider>();
 
-        Console.WriteLine($"Proxy pool initialised with {proxies.Count} proxies.");
+        System.Console.WriteLine($"Proxy pool initialised with {proxies.Count} proxies.");
     }
 
     private static IBrowserProfile MapBrowserProfile(Options options)

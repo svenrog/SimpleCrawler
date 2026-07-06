@@ -1,6 +1,6 @@
-using Crawler.Core.Proxy;
+using SimpleCrawler.Core.Proxy;
 
-namespace Crawler.Tests;
+namespace SimpleCrawler.Tests;
 
 public class ProxyParserTests
 {

@@ -1,8 +1,8 @@
 using BenchmarkDotNet.Attributes;
-using Crawler.Core;
+using SimpleCrawler.Core;
 using Microsoft.Extensions.Options;
 
-namespace Crawler.Benchmarks;
+namespace SimpleCrawler.Benchmarks;
 
 [MemoryDiagnoser]
 [ShortRunJob]

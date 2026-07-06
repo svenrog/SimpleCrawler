@@ -1,4 +1,4 @@
-using Crawler.Core.Robots;
+using SimpleCrawler.Core.Robots;
 using FluentAssertions;
 using Microsoft.Extensions.FileProviders;
 using Moq;

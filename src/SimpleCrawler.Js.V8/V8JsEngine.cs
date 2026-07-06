@@ -1,13 +1,13 @@
-using Crawler.Core.Helpers;
-using Crawler.Js.Abstractions;
-using Crawler.Js.Errors;
-using Crawler.Js.Models;
+using SimpleCrawler.Core.Helpers;
+using SimpleCrawler.Js.Abstractions;
+using SimpleCrawler.Js.Errors;
+using SimpleCrawler.Js.Models;
 using Microsoft.ClearScript;
 using Microsoft.ClearScript.JavaScript;
 using Microsoft.ClearScript.V8;
 using System.Globalization;
 
-namespace Crawler.Js.V8;
+namespace SimpleCrawler.Js.V8;
 
 internal sealed class V8JsEngine : IJsEngine
 {

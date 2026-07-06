@@ -1,12 +1,12 @@
 using AngleSharp.Dom;
 using AngleSharp.Html.Parser;
-using Crawler.Core;
-using Crawler.Core.Models;
-using Crawler.Core.Robots;
+using SimpleCrawler.Core;
+using SimpleCrawler.Core.Models;
+using SimpleCrawler.Core.Robots;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
-namespace Crawler.AngleSharp;
+namespace SimpleCrawler.AngleSharp;
 
 public abstract class AngleSharpCrawler<TResult> : AbstractStaticHtmlCrawler<IDocument, TResult>
     where TResult : IScrapeResult

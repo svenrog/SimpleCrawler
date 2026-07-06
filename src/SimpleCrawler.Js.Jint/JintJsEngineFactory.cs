@@ -1,6 +1,6 @@
-using Crawler.Js.Abstractions;
+using SimpleCrawler.Js.Abstractions;
 
-namespace Crawler.Js.Jint;
+namespace SimpleCrawler.Js.Jint;
 
 internal sealed class JintJsEngineFactory : IJsEngineFactory
 {

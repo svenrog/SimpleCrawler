@@ -1,6 +1,6 @@
 using System.Diagnostics;
 
-namespace Crawler.Core.Proxy;
+namespace SimpleCrawler.Core.Proxy;
 
 public sealed class ProxyPool : IProxyPool
 {
