@@ -2,7 +2,7 @@
   "profiles": {
     "SimpleCrawler": {
       "commandName": "Project",
-      "commandLineArgs": "-e \"https://www.github.com\" -o \"D:\\tmp\\www.github.com\" -d 1 -p \"D:\\tmp\\oxylabs.log\""
+      "commandLineArgs": "-e \"https://www.github.com\" -o \"www.github.com\" -d 1"
     }
   }
 }
