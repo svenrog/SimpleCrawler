@@ -37,6 +37,14 @@ public abstract class AbstractCrawler<TResponse, TDocument, TResult> : ICrawler<
     protected Uri SiteUri => _siteUri!;
     protected string SiteAuthority => _siteAuthority!;
 
+    // TEMP-DIAG: env-gated pipeline trace to capture why follow-up URLs aren't fetched on Linux CI.
+    private static readonly bool _trace = Environment.GetEnvironmentVariable("CRAWLER_TRACE") == "1";
+    private static void Trace(string message)
+    {
+        if (_trace)
+            System.Console.Error.WriteLine(message);
+    }
+
     protected readonly ConcurrentHashSet<string> Visited;
 
     protected AbstractCrawler(IOptions<CrawlerOptions> options, ILogger logger)
@@ -139,7 +147,9 @@ public abstract class AbstractCrawler<TResponse, TDocument, TResult> : ICrawler<
     // fetch workers block on the bounded parse-channel write, which a non-empty system always drains).
     private void CompleteUrl()
     {
-        if (Interlocked.Decrement(ref _outstanding) == 0)
+        var after = Interlocked.Decrement(ref _outstanding);
+        Trace($"COMPLETE out->{after}{(after == 0 ? "  CHANNEL-CLOSED" : "")}");
+        if (after == 0)
         {
             _urlChannel.Writer.TryComplete();
             _parseChannel.Writer.TryComplete();
@@ -165,6 +175,7 @@ public abstract class AbstractCrawler<TResponse, TDocument, TResult> : ICrawler<
         {
             while (reader.TryRead(out var url))
             {
+                Trace($"FETCH read: {url}  out={Volatile.Read(ref _outstanding)}");
                 if (Volatile.Read(ref _processedCount) >= _options.MaxPages)
                 {
                     CompleteUrl();
@@ -257,17 +268,27 @@ public abstract class AbstractCrawler<TResponse, TDocument, TResult> : ICrawler<
     private bool Enqueue(string url)
     {
         if (!_discovered.Add(url))
+        {
+            Trace($"ENQUEUE dup (skip): {url}  out={Volatile.Read(ref _outstanding)}");
             return false;
+        }
 
         if (!IsCrawlAllowed(url))
+        {
+            Trace($"ENQUEUE disallowed (skip): {url}  out={Volatile.Read(ref _outstanding)}");
             return false;
+        }
 
         Interlocked.Increment(ref _outstanding);
 
         if (_urlChannel.Writer.TryWrite(url))
+        {
+            Trace($"ENQUEUE written: {url}  out={Volatile.Read(ref _outstanding)}");
             return true;
+        }
 
         Interlocked.Decrement(ref _outstanding);
+        Trace($"ENQUEUE write-failed (channel closed): {url}  out={Volatile.Read(ref _outstanding)}");
         return false;
     }
 
@@ -339,6 +360,7 @@ public abstract class AbstractCrawler<TResponse, TDocument, TResult> : ICrawler<
     private async Task ProcessPage(string url, TResponse response)
     {
         _logger.LogInformation("Processing url '{url}'", url);
+        Trace($"PROCESS enter: {url}  out={Volatile.Read(ref _outstanding)}");
 
         var document = default(TDocument);
         var parsed = false;
@@ -373,6 +395,8 @@ public abstract class AbstractCrawler<TResponse, TDocument, TResult> : ICrawler<
 
             if (discovered > 0)
                 _logger.LogDebug("Found {count} new outgoing links on '{url}'", discovered, resolvedUrl);
+
+            Trace($"PROCESS links: discovered={discovered} on {resolvedUrl}");
         }
         catch (TimeoutException ex)
         {

@@ -37,6 +37,8 @@ jobs:
 
       - name: Crawler tests
         run: dotnet run --project tests/SimpleCrawler.Tests -c Release --no-build
+        env:
+          CRAWLER_TRACE: "1"
 
       # Pack on every PR as a validation gate; artifacts are not published here.
       - name: Pack (validation)
