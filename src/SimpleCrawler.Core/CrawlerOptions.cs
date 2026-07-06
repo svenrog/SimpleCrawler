@@ -12,6 +12,10 @@ public class CrawlerOptions
     public bool RespectMetaRobots { get; set; } = true;
     public bool RespectRobotsTxt { get; set; } = true;
     public bool EnableSitemapDiscovery { get; set; } = true;
+
+    // Cap on the decompressed response body size, in bytes. A value of 0 or less disables the cap.
+    public long MaxResponseBodySize { get; set; } = 10 * 1024 * 1024;
+
     public IBrowserProfile BrowserProfile { get; set; } = new DefaultBrowserProfile();
     public ProxyPoolOptions? ProxyPool { get; set; }
 
