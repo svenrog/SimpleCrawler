@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+	<PropertyGroup>
+		<TargetFramework>net10.0</TargetFramework>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<Nullable>enable</Nullable>
+		<Description>Jint JavaScript-rendering backend for SimpleCrawler: crawls client-rendered SPAs by executing page scripts on the managed Jint engine (no native dependencies).</Description>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<PackageReference Include="Jint" Version="[4.10.0,5)" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<ProjectReference Include="..\SimpleCrawler.Js\SimpleCrawler.Js.csproj" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<EmbeddedResource Include="Preludes\*.js" />
+	</ItemGroup>
+
+</Project>

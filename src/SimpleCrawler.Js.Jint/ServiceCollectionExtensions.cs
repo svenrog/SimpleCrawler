@@ -1,0 +1,24 @@
+using SimpleCrawler.Core;
+using SimpleCrawler.Js.Abstractions;
+using SimpleCrawler.Js.Models;
+using Microsoft.Extensions.DependencyInjection;
+
+namespace SimpleCrawler.Js.Jint;
+
+public static class ServiceCollectionExtensions
+{
+    public static IServiceCollection AddJintCrawler(this IServiceCollection services, CrawlerOptions options, Action<IServiceProvider, HttpClient>? config = null)
+    {
+        return AddJintCrawler(services, options, new JsRenderOptions(), config);
+    }
+
+    public static IServiceCollection AddJintCrawler(this IServiceCollection services, CrawlerOptions options, JsRenderOptions renderOptions, Action<IServiceProvider, HttpClient>? config = null)
+    {
+        services.AddJsCore(options, renderOptions, config);
+        services.AddKeyedSingleton<IJsEngineFactory, JintJsEngineFactory>(DefaultJintCrawler.EngineKey);
+        services.AddCrawlerHttpClient<DefaultJintCrawler>(config);
+        services.AddTransient<ICrawler>(provider => provider.GetRequiredService<DefaultJintCrawler>());
+
+        return services;
+    }
+}

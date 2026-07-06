@@ -1,0 +1,27 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+	<PropertyGroup>
+		<OutputType>Exe</OutputType>
+		<TargetFramework>net10.0</TargetFramework>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<Nullable>enable</Nullable>
+		<PublishAot>true</PublishAot>
+		<InvariantGlobalization>true</InvariantGlobalization>
+		<ServerGarbageCollection>true</ServerGarbageCollection>
+		<AssemblyName>smpcrawl</AssemblyName>
+		<IsPackable>false</IsPackable>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<PackageReference Include="CommandLineParser" Version="2.9.1" />
+		<PackageReference Include="Crude.Logging.Console" Version="1.0.2" />
+		<PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.8" />
+		<PackageReference Include="Microsoft.Extensions.Http" Version="10.0.8" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<ProjectReference Include="..\SimpleCrawler.Core\SimpleCrawler.Core.csproj" />
+		<ProjectReference Include="..\SimpleCrawler.HtmlAgilityPack\SimpleCrawler.HtmlAgilityPack.csproj" />
+	</ItemGroup>
+
+</Project>

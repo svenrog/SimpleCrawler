@@ -1,0 +1,43 @@
+name: build
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Restore
+        run: dotnet restore SimpleCrawler.slnx
+
+      - name: Build
+        run: dotnet build SimpleCrawler.slnx -c Release --no-restore
+
+      # Tests run through the Microsoft.Testing.Platform native runner via
+      # `dotnet run` — `dotnet test` does not work with this xUnit v3 setup.
+      - name: Robots tests
+        run: dotnet run --project tests/SimpleCrawler.Robots.Tests -c Release --no-build
+
+      - name: Install Playwright browsers
+        run: pwsh tests/SimpleCrawler.Tests/bin/Release/net10.0/playwright.ps1 install chromium --with-deps
+
+      - name: Crawler tests
+        run: dotnet run --project tests/SimpleCrawler.Tests -c Release --no-build
+
+      # Pack on every PR as a validation gate; artifacts are not published here.
+      - name: Pack (validation)
+        run: dotnet pack SimpleCrawler.slnx -c Release --no-build -o artifacts/pkg

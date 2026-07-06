@@ -1,6 +1,6 @@
 # JavaScript crawlers
 
-Since AngleSharp or any other library lacked the ability to render simpler JavaScript sites, the `Crawler.Js` project that provides a rendering engine was added. There are 2 engine implementations, `Jint` and `ClearScript.V8`.
+Since AngleSharp or any other library lacked the ability to render simpler JavaScript sites, the `SimpleCrawler.Js` project that provides a rendering engine was added. There are 2 engine implementations, `Jint` and `ClearScript.V8`.
 
 Both are tested against the client-side frameworks and libraries below. The test do not cover the full featureset, a list of real sites have been used as a reference.
 
@@ -10,11 +10,11 @@ Both are tested against the client-side frameworks and libraries below. The test
 - [Svelte](https://svelte.dev/)
 - [Vue](https://vuejs.org/) (Jint can't run [Vue](./docs/javascript-crawlers.md))
 
-Using `Crawler.Js` crawlers requires choosing an engine (`Jint` or `V8`).
+Using `SimpleCrawler.Js` crawlers requires choosing an engine (`Jint` or `V8`).
 
 ## Engine
 
-### Jint (`Crawler.Js.Jint`)
+### Jint (`SimpleCrawler.Js.Jint`)
 
 - No native dependencies.
 - All memory on the managed GC heap, profiler sees the whole footprint.
@@ -23,7 +23,7 @@ Using `Crawler.Js` crawlers requires choosing an engine (`Jint` or `V8`).
 
 Use if memory management is needed or dependencies can't be installed.
 
-### V8 (`Crawler.Js.V8`)
+### V8 (`SimpleCrawler.Js.V8`)
 
 - Much faster on render-heavy pages (optimising JIT).
 - Broadest compatibility.

@@ -1,0 +1,92 @@
+﻿using SimpleCrawler.Core.Models;
+using SimpleCrawler.Core.Robots;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
+
+namespace SimpleCrawler.Core;
+
+public abstract class AbstractRobotsCrawler<TResponse, TDocument, TResult> : AbstractCrawler<TResponse, TDocument, TResult>
+    where TResult : IScrapeResult
+{
+    private readonly IRobotClient _robotClient;
+    private readonly CrawlerOptions _options;
+    private readonly ProductToken _productToken;
+    private readonly ILogger _logger;
+
+    private IRobotRuleChecker? _robotRules;
+    private IRobotsTxt? _robots;
+
+    protected AbstractRobotsCrawler(IRobotClient robotClient, IOptions<CrawlerOptions> options, ILogger logger) : base(options, logger)
+    {
+        _robotClient = robotClient;
+        _options = options.Value;
+        _logger = logger;
+        _productToken = ProductToken.Wildcard;
+
+        if (_options.BrowserProfile.UserAgent != null)
+            _productToken = DeriveProductToken(_options.BrowserProfile.UserAgent);
+    }
+
+    private static ProductToken DeriveProductToken(string userAgent)
+    {
+        var span = userAgent.AsSpan().Trim();
+        var end = span.IndexOfAny('/', ' ');
+        var name = (end >= 0 ? span[..end] : span).ToString();
+
+        return ProductToken.TryParse(name, out var token) ? token : ProductToken.Wildcard;
+    }
+
+    protected override async ValueTask InitializeCrawl(string entry, CancellationToken cancellationToken)
+    {
+        // Rules must be ready before base.InitializeCrawl enqueues the entry (Enqueue consults IsCrawlAllowed),
+        // so prime the site identity here and load robots.txt before delegating.
+        SetSiteIdentity(entry);
+        _robots = await _robotClient.LoadRobotsTxtAsync(SiteUri, cancellationToken);
+
+        if (_options.RespectRobotsTxt && _robots.TryGetCrawlDelay(_productToken, out var crawlDelay))
+            _options.CrawlDelay = Math.Max(_options.CrawlDelay, crawlDelay);
+
+        if (!_robots.TryGetRules(_productToken, out _robotRules))
+            _robotRules = RobotRuleChecker.Empty;
+
+        await base.InitializeCrawl(entry, cancellationToken);
+    }
+
+    protected override async ValueTask BackgroundDiscovery(CancellationToken cancellationToken)
+    {
+        if (!_options.EnableSitemapDiscovery)
+            return;
+
+        try
+        {
+            var sitemap = _robots!.LoadSitemapAsync(SiteUri, null, cancellationToken);
+            await foreach (var item in sitemap)
+            {
+                var url = item.Location.ToString();
+
+                DiscoverLink(url);
+            }
+        }
+        catch (Exception e) when (e is not OperationCanceledException)
+        {
+            _logger.LogWarning("Sitemap discovery failed: {message}", e.Message);
+        }
+    }
+
+    protected override bool IsCrawlAllowed(string url)
+    {
+        if (!_options.RespectRobotsTxt)
+            return true;
+
+        return _robotRules!.IsAllowed(GetSitePath(url));
+    }
+
+    private string GetSitePath(string url)
+    {
+        var authority = SiteAuthority;
+        if (url.Length > authority.Length && url.StartsWith(authority, StringComparison.OrdinalIgnoreCase))
+            return url[authority.Length..];
+
+        return "/";
+    }
+}

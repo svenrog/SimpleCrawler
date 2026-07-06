@@ -1,27 +1,29 @@
 <Solution>
   <Folder Name="/Implementations/">
-    <Project Path="src/Crawler.AngleSharp/Crawler.AngleSharp.csproj" Id="723c64c0-ed52-44f6-902e-9b93ddbc2645" />
-    <Project Path="src/Crawler.Js/Crawler.Js.csproj" />
-    <Project Path="src/Crawler.Js.Jint/Crawler.Js.Jint.csproj" />
-    <Project Path="src/Crawler.Js.V8/Crawler.Js.V8.csproj" />
-    <Project Path="src/Crawler.HtmlAgilityPack/Crawler.HtmlAgilityPack.csproj" Id="835175c9-97b5-4ced-9d3b-3f68bfd07018" />
-    <Project Path="src/Crawler.Playwright/Crawler.Playwright.csproj" Id="cc0b2ae3-66e6-47b9-8762-8f62bff5c582" />
-    <Project Path="src/Crawler.Puppeteer/Crawler.Puppeteer.csproj" Id="a3091394-7cad-4616-80b2-12a5a168df4e" />
+    <Project Path="src/SimpleCrawler.AngleSharp/SimpleCrawler.AngleSharp.csproj" Id="723c64c0-ed52-44f6-902e-9b93ddbc2645" />
+    <Project Path="src/SimpleCrawler.Js/SimpleCrawler.Js.csproj" />
+    <Project Path="src/SimpleCrawler.Js.Jint/SimpleCrawler.Js.Jint.csproj" />
+    <Project Path="src/SimpleCrawler.Js.V8/SimpleCrawler.Js.V8.csproj" />
+    <Project Path="src/SimpleCrawler.HtmlAgilityPack/SimpleCrawler.HtmlAgilityPack.csproj" Id="835175c9-97b5-4ced-9d3b-3f68bfd07018" />
+    <Project Path="src/SimpleCrawler.Playwright/SimpleCrawler.Playwright.csproj" Id="cc0b2ae3-66e6-47b9-8762-8f62bff5c582" />
+    <Project Path="src/SimpleCrawler.Puppeteer/SimpleCrawler.Puppeteer.csproj" Id="a3091394-7cad-4616-80b2-12a5a168df4e" />
   </Folder>
   <Folder Name="/Solution Items/">
     <File Path=".editorconfig" />
+    <File Path=".github/workflows/build.yml" />
+    <File Path=".github/workflows/release.yml" />
     <File Path="CLAUDE.md" />
     <File Path="LICENSE.txt" />
     <File Path="README.md" />
   </Folder>
   <Folder Name="/Tests/">
-    <Project Path="tests/Crawler.Benchmarks/Crawler.Benchmarks.csproj" Id="9fe55db8-801d-42f0-88ba-cc4940d643e3" />
-    <Project Path="tests/Crawler.ProfileRunner/Crawler.ProfileRunner.csproj" />
-    <Project Path="tests/Crawler.TestHost/Crawler.TestHost.csproj" Id="c0a85867-92a3-4a3f-b011-c070f28c203b" />
-    <Project Path="tests/Crawler.Tests.Common/Crawler.Tests.Common.csproj" Id="392409a2-41fe-4106-b868-a7acb3843317" />
-    <Project Path="tests/Crawler.Tests/Crawler.Tests.csproj" Id="a44b35c8-f14b-43fd-bdd7-5a5e8485e7e6" />
-    <Project Path="tests/Robots.Parser.Tests/Robots.Parser.Tests.csproj" />
+    <Project Path="tests/SimpleCrawler.Benchmarks/SimpleCrawler.Benchmarks.csproj" Id="9fe55db8-801d-42f0-88ba-cc4940d643e3" />
+    <Project Path="tests/SimpleCrawler.ProfileRunner/SimpleCrawler.ProfileRunner.csproj" />
+    <Project Path="tests/SimpleCrawler.TestHost/SimpleCrawler.TestHost.csproj" Id="c0a85867-92a3-4a3f-b011-c070f28c203b" />
+    <Project Path="tests/SimpleCrawler.Tests.Common/SimpleCrawler.Tests.Common.csproj" Id="392409a2-41fe-4106-b868-a7acb3843317" />
+    <Project Path="tests/SimpleCrawler.Tests/SimpleCrawler.Tests.csproj" Id="a44b35c8-f14b-43fd-bdd7-5a5e8485e7e6" />
+    <Project Path="tests/SimpleCrawler.Robots.Tests/SimpleCrawler.Robots.Tests.csproj" />
   </Folder>
-  <Project Path="src/Crawler.Core/Crawler.Core.csproj" Id="8d491ce0-221d-428e-8136-ae10e7740cce" />
-  <Project Path="src/SimpleCrawler/SimpleCrawler.csproj" />
+  <Project Path="src/SimpleCrawler.Core/SimpleCrawler.Core.csproj" Id="8d491ce0-221d-428e-8136-ae10e7740cce" />
+  <Project Path="src/SimpleCrawler.Console/SimpleCrawler.Console.csproj" />
 </Solution>
