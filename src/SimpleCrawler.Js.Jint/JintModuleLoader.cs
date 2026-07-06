@@ -1,3 +1,4 @@
+using SimpleCrawler.Core.Helpers;
 using SimpleCrawler.Js.Abstractions;
 using Jint.Runtime.Modules;
 using Module = Jint.Runtime.Modules.Module;
@@ -22,7 +23,7 @@ internal sealed class JintModuleLoader : IModuleLoader
         var specifier = moduleRequest.Specifier;
 
         Uri uri;
-        if (Uri.TryCreate(specifier, UriKind.Absolute, out var absolute))
+        if (UriHelper.TryCreateHttpAbsolute(specifier, out var absolute))
             uri = absolute;
         else
             uri = new Uri(ResolveReferrer(referencingModuleLocation), specifier);
@@ -37,7 +38,7 @@ internal sealed class JintModuleLoader : IModuleLoader
         if (location == null)
             return _baseUri;
 
-        return Uri.TryCreate(location, UriKind.Absolute, out var absolute) ? absolute : new Uri(_baseUri, location);
+        return UriHelper.TryCreateHttpAbsolute(location, out var absolute) ? absolute : new Uri(_baseUri, location);
     }
 
     public Module LoadModule(global::Jint.Engine engine, ResolvedSpecifier resolved)

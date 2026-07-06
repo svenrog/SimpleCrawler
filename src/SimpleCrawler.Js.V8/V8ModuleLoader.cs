@@ -1,3 +1,4 @@
+using SimpleCrawler.Core.Helpers;
 using SimpleCrawler.Js.Abstractions;
 using Microsoft.ClearScript;
 using Microsoft.ClearScript.JavaScript;
@@ -51,7 +52,7 @@ internal sealed class V8ModuleLoader : DocumentLoader
 
     private Uri Resolve(DocumentInfo? sourceInfo, string specifier)
     {
-        if (Uri.TryCreate(specifier, UriKind.Absolute, out var absolute))
+        if (UriHelper.TryCreateHttpAbsolute(specifier, out var absolute))
             return absolute;
 
         var referrer = sourceInfo?.Uri is { IsAbsoluteUri: true } source ? source : _baseUri;
