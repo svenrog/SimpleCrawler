@@ -11,24 +11,32 @@ namespace SimpleCrawler.Tests;
 // [[phase5-js-spa-hydration]].
 public class JintModuleTdzRepro
 {
-    private static string RuntimeCoreSource()
+    // The bundled Vue runtime-core (reactivity inlined) only exists after the Astro TestHost SPA is built
+    // locally; it lives under a gitignored build/node_modules tree and is absent on CI, so these tests skip
+    // there. Search is bounded at the repo root and ignores inaccessible directories so it never crawls (or
+    // trips over the permissions of) anything outside the checkout.
+    private static string? RuntimeCoreSource()
     {
+        var options = new EnumerationOptions { RecurseSubdirectories = true, IgnoreInaccessible = true };
         var dir = new DirectoryInfo(AppContext.BaseDirectory);
         while (dir is not null)
         {
-            var hit = dir.GetFiles("runtime-core.esm-bundler.*.js", SearchOption.AllDirectories);
+            var hit = dir.GetFiles("runtime-core.esm-bundler.*.js", options);
             if (hit.Length > 0) return File.ReadAllText(hit[0].FullName);
+            if (dir.GetFiles("SimpleCrawler.slnx").Length > 0) return null;
             dir = dir.Parent;
         }
-        throw new FileNotFoundException("runtime-core.esm-bundler.*.js");
+        return null;
     }
 
     [Fact]
     public void RuntimeCore_AsModule_ThrowsTdzOnJint()
     {
         var source = RuntimeCoreSource();
+        Assert.SkipWhen(source is null, "Bundled Vue runtime-core not built (CI / no local SPA build).");
+
         var engine = new Engine(o => o.EnableModules(AppContext.BaseDirectory));
-        engine.Modules.Add("rc", b => b.AddModule(Engine.PrepareModule(source, "rc")));
+        engine.Modules.Add("rc", b => b.AddModule(Engine.PrepareModule(source!, "rc")));
 
         var ex = Assert.Throws<JavaScriptException>(() => engine.Modules.Import("rc"));
         Assert.Contains("before initialization", ex.Message);
@@ -38,7 +46,9 @@ public class JintModuleTdzRepro
     public void RuntimeCore_AsScript_EvaluatesOnJint()
     {
         var source = RuntimeCoreSource();
-        var scriptSource = System.Text.RegularExpressions.Regex.Replace(source, @"export\{[^}]*\};?", "");
+        Assert.SkipWhen(source is null, "Bundled Vue runtime-core not built (CI / no local SPA build).");
+
+        var scriptSource = System.Text.RegularExpressions.Regex.Replace(source!, @"export\{[^}]*\};?", "");
 
         var engine = new Engine();
         var ex = Record.Exception(() => engine.Execute(scriptSource));
