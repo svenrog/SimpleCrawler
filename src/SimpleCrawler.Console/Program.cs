@@ -1,5 +1,4 @@
 ﻿using CommandLine;
-using SimpleCrawler.Core;
 using Crude.Logging.Console.Extensions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -7,7 +6,9 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Http;
 using Microsoft.Extensions.Logging;
 using SimpleCrawler.Console.Extensions;
+using SimpleCrawler.Core;
 using System.Diagnostics.CodeAnalysis;
+using SystemConsole = System.Console;
 
 namespace SimpleCrawler.Console;
 
@@ -43,7 +44,7 @@ internal static class Program
         using var host = builder.Build();
         using var tokenSource = new CancellationTokenSource();
 
-        System.Console.CancelKeyPress += delegate (object? sender, ConsoleCancelEventArgs e)
+        SystemConsole.CancelKeyPress += delegate (object? sender, ConsoleCancelEventArgs e)
         {
             tokenSource.Cancel();
         };

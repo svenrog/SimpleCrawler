@@ -16,6 +16,7 @@ public sealed class HeadlessCrawlerOptions : CrawlerOptions
         RespectRobotsTxt = options.RespectRobotsTxt;
         EnableSitemapDiscovery = options.EnableSitemapDiscovery;
         BrowserProfile = options.BrowserProfile;
+        ProxyPool = options.ProxyPool;
     }
 
     public bool BlockNonEssentialResources { get; set; } = true;
