@@ -4,6 +4,7 @@
 		<TargetFramework>net10.0</TargetFramework>
 		<ImplicitUsings>enable</ImplicitUsings>
 		<Nullable>enable</Nullable>
+		<Description>Jint JavaScript-rendering backend for SimpleCrawler: crawls client-rendered SPAs by executing page scripts on the managed Jint engine (no native dependencies).</Description>
 	</PropertyGroup>
 
 	<ItemGroup>

@@ -4,6 +4,7 @@
 		<TargetFramework>net10.0</TargetFramework>
 		<ImplicitUsings>enable</ImplicitUsings>
 		<Nullable>enable</Nullable>
+		<Description>Headless-browser crawling backend for SimpleCrawler using PuppeteerSharp, for fully JavaScript-rendered sites. Downloads Chromium on first run.</Description>
 	</PropertyGroup>
 
 	<ItemGroup>

@@ -4,6 +4,7 @@
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <Description>Shared JavaScript-rendering pipeline for SimpleCrawler: the pure-JS DOM prelude and renderer used by the Jint and V8 engine backends.</Description>
   </PropertyGroup>
 
   <ItemGroup>

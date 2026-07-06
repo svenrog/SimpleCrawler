@@ -4,6 +4,7 @@
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <Description>Static-HTML crawling backend for SimpleCrawler using HtmlAgilityPack — the default, fastest backend for server-rendered sites.</Description>
   </PropertyGroup>
 
 	<ItemGroup>
