@@ -13,12 +13,6 @@ public sealed class Options
     [Option('o', "outputFile", Required = true, HelpText = "The file to output to.")]
     public string Output { get; set; } = string.Empty;
 
-    [Option('t', "concurrency", Required = false, Default = 8, HelpText = "Concurrent fetches in flight.")]
-    public int Concurrency { get; set; } = 8;
-
-    [Option('p', "parseConcurrency", Required = false, Default = 0, HelpText = "Concurrent page parses. 0 = match --concurrency; lowering it below --concurrency can improve throughput on parse-heavy sites.")]
-    public int ParseConcurrency { get; set; }
-
     [Option('m', "maxPages", Required = false, Default = 10000, HelpText = "Max pages to visit.")]
     public int MaxPages { get; set; } = 10000;
 
@@ -31,6 +25,24 @@ public sealed class Options
     [Option('a', "userAgent", Required = false, HelpText = "This sets the user agent of the browser.")]
     public string? UserAgent { get; set; }
 
+    [Option('p', "proxy", Required = false, HelpText = "A proxy to use for requests (or a reference to a list of proxies)")]
+    public string? Proxy { get; set; }
+
+    [Option("proxyRetries", Required = false, Default = 3, HelpText = "Max proxy retries per request before surfacing the failure.")]
+    public int ProxyRetries { get; set; } = 3;
+
+    [Option("proxyCooldown", Required = false, Default = 60, HelpText = "Seconds a failing proxy is benched before being retried.")]
+    public int ProxyCooldown { get; set; } = 60;
+
+    [Option("proxyMinHealthy", Required = false, Default = 0.25, HelpText = "Fraction of proxies that must stay healthy; below this the crawl aborts.")]
+    public double ProxyMinHealthy { get; set; } = 0.25;
+
     [Option('i', "impersonate", Required = false, Default = BrowserImpersonation.None, HelpText = "Impersonate a real browser to reduce bot-detection blocks (e.g. 403). Values: none, chrome.")]
     public BrowserImpersonation Impersonate { get; set; }
+
+    [Option('t', "concurrency", Required = false, Default = 8, HelpText = "Concurrent fetches in flight.")]
+    public int Concurrency { get; set; } = 8;
+
+    [Option("parseConcurrency", Required = false, Default = 0, HelpText = "Concurrent page parses. 0 = match --concurrency; lowering it below --concurrency can improve throughput on parse-heavy sites.")]
+    public int ParseConcurrency { get; set; }
 }

@@ -25,13 +25,13 @@ public static class ServiceCollectionExtensions
             config?.Invoke(provider, client);
             ConfigurationHelper.ConfigureClient(client, provider.GetRequiredService<IOptions<CrawlerOptions>>());
         }).ConfigurePrimaryHttpMessageHandler(provider =>
-            ConfigurationHelper.CreatePrimaryHandler(provider.GetRequiredService<IOptions<CrawlerOptions>>()));
+            ConfigurationHelper.CreatePrimaryHandler(provider));
         services.AddHttpClient<IRobotClient, RobotWebClient>((provider, client) =>
         {
             config?.Invoke(provider, client);
             ConfigurationHelper.ConfigureClient(client, provider.GetRequiredService<IOptions<CrawlerOptions>>());
         }).ConfigurePrimaryHttpMessageHandler(provider =>
-            ConfigurationHelper.CreatePrimaryHandler(provider.GetRequiredService<IOptions<CrawlerOptions>>()));
+            ConfigurationHelper.CreatePrimaryHandler(provider));
         services.AddTransient<ICrawler>(provider => provider.GetRequiredService<DefaultAngleSharpCrawler>());
 
         return services;

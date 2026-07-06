@@ -9,7 +9,8 @@ This project stemmed from the need to crawl a single domain in preparation of lo
 | Parallel crawling | :heavy_check_mark: |
 | Meta robots | :heavy_check_mark: |
 | Robots.txt | :heavy_check_mark: |
-| Browser impersonation | :detective: |
+| Browser impersonation | :heavy_check_mark: |
+| Proxy pooling | :heavy_check_mark: |
 | Modern .NET features | :heavy_check_mark: |
 | Console colors | :rainbow: |
 

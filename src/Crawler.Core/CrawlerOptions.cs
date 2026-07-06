@@ -1,4 +1,5 @@
 ﻿using Crawler.Core.Browser;
+using Crawler.Core.Proxy;
 
 namespace Crawler.Core;
 
@@ -12,6 +13,8 @@ public class CrawlerOptions
     public bool RespectRobotsTxt { get; set; } = true;
     public bool EnableSitemapDiscovery { get; set; } = true;
     public IBrowserProfile BrowserProfile { get; set; } = new DefaultBrowserProfile();
+    public ProxyPoolOptions? ProxyPool { get; set; }
+
     public int EffectiveConcurrency => Math.Max(1, Concurrency);
     public int EffectiveParseConcurrency => ParseConcurrency > 0 ? ParseConcurrency : EffectiveConcurrency;
 }
