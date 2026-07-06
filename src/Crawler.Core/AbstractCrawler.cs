@@ -3,6 +3,7 @@ using Crawler.Core.Comparers;
 using Crawler.Core.Extensions;
 using Crawler.Core.Helpers;
 using Crawler.Core.Models;
+using Crawler.Core.Proxy;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using System.Diagnostics;
@@ -23,6 +24,7 @@ public abstract class AbstractCrawler<TResponse, TDocument, TResult> : ICrawler<
     private Channel<(string Url, TResponse Response)> _parseChannel;
     private int _outstanding;
     private int _processedCount;
+    private int _aborted;
     private long _nextSlotTimestamp;
 
     private Uri? _siteUri;
@@ -95,6 +97,7 @@ public abstract class AbstractCrawler<TResponse, TDocument, TResult> : ICrawler<
         _parseChannel = CreateParseChannel();
         _outstanding = 0;
         _processedCount = 0;
+        _aborted = 0;
         _nextSlotTimestamp = 0;
 
         Enqueue(entry);
@@ -143,6 +146,17 @@ public abstract class AbstractCrawler<TResponse, TDocument, TResult> : ICrawler<
         }
     }
 
+    // Soft-abort: stop scheduling new fetches (completing the URL channel makes Enqueue a no-op and
+    // drains fetch workers) while letting in-flight parses finish, so Start returns partial results.
+    protected void Abort(string reason)
+    {
+        if (Interlocked.CompareExchange(ref _aborted, 1, 0) != 0)
+            return;
+
+        _logger.LogCritical("Aborting crawl: {reason}.", reason);
+        _urlChannel.Writer.TryComplete();
+    }
+
     private async Task RunFetchWorker(CancellationToken cancellationToken)
     {
         var reader = _urlChannel.Reader;
@@ -152,6 +166,12 @@ public abstract class AbstractCrawler<TResponse, TDocument, TResult> : ICrawler<
             while (reader.TryRead(out var url))
             {
                 if (Volatile.Read(ref _processedCount) >= _options.MaxPages)
+                {
+                    CompleteUrl();
+                    continue;
+                }
+
+                if (Volatile.Read(ref _aborted) == 1)
                 {
                     CompleteUrl();
                     continue;
@@ -172,6 +192,10 @@ public abstract class AbstractCrawler<TResponse, TDocument, TResult> : ICrawler<
                 catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
                 {
                     throw;
+                }
+                catch (ProxyPoolExhaustedException)
+                {
+                    Abort("proxy pool exhausted");
                 }
                 catch (TimeoutException ex)
                 {

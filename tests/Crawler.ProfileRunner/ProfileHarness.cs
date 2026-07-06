@@ -17,7 +17,7 @@ namespace Crawler.ProfileRunner;
 
 // Investigation harness (not a benchmark). Drives the real crawl/render path for a single
 // engine+parser combo against one framework's test-host SPA.
-internal static class ProfileHarness
+internal static partial class ProfileHarness
 {
     private const int _port = 5299;
     private static readonly string _entry = $"http://localhost:{_port}/";
@@ -82,8 +82,8 @@ internal static class ProfileHarness
         var htmlBytes = await renderer.RenderAsync(shell, _entry, client, tokenSource.Token);
         var html = Encoding.UTF8.GetString(htmlBytes);
 
-        var elements = Regex.Matches(html, "<[a-zA-Z][^\\s/>]*").Count;
-        var anchors = Regex.Matches(html, "<a[\\s>]").Count;
+        var elements = Elements().Count(html);
+        var anchors = Anchors().Count(html);
 
         var dumpPath = Path.Combine(Path.GetTempPath(), $"rendersize-{framework}-{combo}.html");
         await File.WriteAllTextAsync(dumpPath, html, tokenSource.Token);
@@ -134,4 +134,9 @@ internal static class ProfileHarness
         services.AddSingleton<ILogger>(NullLogger.Instance);
         return services.BuildServiceProvider();
     }
+
+    [GeneratedRegex("<a[\\s>]")]
+    private static partial Regex Anchors();
+    [GeneratedRegex("<[a-zA-Z][^\\s/>]*")]
+    private static partial Regex Elements();
 }

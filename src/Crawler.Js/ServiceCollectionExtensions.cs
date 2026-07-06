@@ -1,8 +1,8 @@
-using Crawler.Js.Models;
 using Crawler.Core;
 using Crawler.Core.Helpers;
 using Crawler.Core.Robots;
 using Crawler.Core.Robots.Http;
+using Crawler.Js.Models;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 
@@ -25,8 +25,7 @@ public static class ServiceCollectionExtensions
         where TClient : class
     {
         return services.AddHttpClient<TClient>((provider, client) => ConfigureClient(provider, client, config))
-            .ConfigurePrimaryHttpMessageHandler(provider =>
-                ConfigurationHelper.CreatePrimaryHandler(provider.GetRequiredService<IOptions<CrawlerOptions>>()));
+            .ConfigurePrimaryHttpMessageHandler(ConfigurationHelper.CreatePrimaryHandler);
     }
 
     public static IHttpClientBuilder AddCrawlerHttpClient<TClient, TImplementation>(this IServiceCollection services, Action<IServiceProvider, HttpClient>? config)
@@ -34,8 +33,7 @@ public static class ServiceCollectionExtensions
         where TImplementation : class, TClient
     {
         return services.AddHttpClient<TClient, TImplementation>((provider, client) => ConfigureClient(provider, client, config))
-            .ConfigurePrimaryHttpMessageHandler(provider =>
-                ConfigurationHelper.CreatePrimaryHandler(provider.GetRequiredService<IOptions<CrawlerOptions>>()));
+            .ConfigurePrimaryHttpMessageHandler(ConfigurationHelper.CreatePrimaryHandler);
     }
 
     private static void ConfigureClient(IServiceProvider provider, HttpClient client, Action<IServiceProvider, HttpClient>? config)

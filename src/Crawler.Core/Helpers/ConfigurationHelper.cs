@@ -1,4 +1,7 @@
-﻿using Microsoft.Extensions.Options;
+﻿using Crawler.Core.Proxy;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using System.Net;
 
 namespace Crawler.Core.Helpers;
@@ -46,12 +49,28 @@ public static class ConfigurationHelper
             PooledConnectionLifetime = TimeSpan.FromMinutes(10),
             PooledConnectionIdleTimeout = TimeSpan.FromMinutes(1),
             AutomaticDecompression = DecompressionMethods.All,
-            Proxy = options.Proxy,
         };
     }
 
     public static SocketsHttpHandler CreatePrimaryHandler(IOptions<CrawlerOptions> options)
     {
         return CreatePrimaryHandler(options.Value);
+    }
+
+    public static HttpMessageHandler CreatePrimaryHandler(IServiceProvider provider)
+    {
+        var pool = provider.GetService<IProxyPool>();
+        var options = provider.GetRequiredService<IOptions<CrawlerOptions>>().Value;
+
+        if (pool is not null && options.ProxyPool is not null)
+        {
+            return new ProxyRoutingHandler(
+                pool,
+                provider.GetRequiredService<IProxyClientProvider>(),
+                options.ProxyPool,
+                provider.GetRequiredService<ILogger<ProxyRoutingHandler>>());
+        }
+
+        return CreatePrimaryHandler(options);
     }
 }

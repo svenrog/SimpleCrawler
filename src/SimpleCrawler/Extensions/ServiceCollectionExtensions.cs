@@ -1,10 +1,9 @@
-﻿using Crawler.Core;
+using Crawler.Core;
 using Crawler.Core.Browser;
 using Crawler.Core.Proxy;
 using Crawler.HtmlAgilityPack;
 using Microsoft.Extensions.DependencyInjection;
 using SimpleCrawler.Helper;
-using System.Net;
 
 namespace SimpleCrawler.Extensions;
 
@@ -13,7 +12,11 @@ internal static class ServiceCollectionExtensions
     public static void AddCrawler(this IServiceCollection services, Options options)
     {
         services.AddSingleton(options);
-        services.AddHtmlAgilityPackCrawler(MapCrawlerOptions(options), (provider, client) =>
+
+        var crawlerOptions = MapCrawlerOptions(options);
+        ConfigureProxyPool(services, options, crawlerOptions);
+
+        services.AddHtmlAgilityPackCrawler(crawlerOptions, (provider, client) =>
             ConfigureHttpClient(client, options));
     }
 
@@ -28,8 +31,38 @@ internal static class ServiceCollectionExtensions
             RespectMetaRobots = options.RespectRobots,
             RespectRobotsTxt = options.RespectRobots,
             BrowserProfile = MapBrowserProfile(options),
-            Proxy = MapProxy(options)
         };
+    }
+
+    private static void ConfigureProxyPool(IServiceCollection services, Options options, CrawlerOptions crawlerOptions)
+    {
+        var manifest = ProxyCollector.Collect(options.Proxy);
+        if (manifest.Length == 0)
+            return;
+
+        Console.WriteLine($"Resolving {manifest.Length} proxy entries...");
+
+        var resolver = new PreparedProxyResolver();
+        var proxies = resolver.Resolve(manifest).Distinct().ToList();
+
+        if (proxies.Count == 0)
+        {
+            Console.WriteLine("No usable proxies resolved; crawling without a proxy.");
+            return;
+        }
+
+        var poolOptions = new ProxyPoolOptions
+        {
+            MaxRetries = options.ProxyRetries,
+            Cooldown = TimeSpan.FromSeconds(options.ProxyCooldown),
+            MinHealthyRatio = options.ProxyMinHealthy,
+        };
+
+        crawlerOptions.ProxyPool = poolOptions;
+        services.AddSingleton<IProxyPool>(_ => new ProxyPool(proxies, poolOptions));
+        services.AddSingleton<IProxyClientProvider, ProxyHandlerProvider>();
+
+        Console.WriteLine($"Proxy pool initialised with {proxies.Count} proxies.");
     }
 
     private static IBrowserProfile MapBrowserProfile(Options options)
@@ -41,33 +74,6 @@ internal static class ServiceCollectionExtensions
             return new DefaultBrowserProfile { UserAgent = options.UserAgent };
 
         return BrowserProfiles.Default;
-    }
-
-    private static IWebProxy? MapProxy(Options options)
-    {
-        var proxyManifest = ProxyCollector.Collect(options.Proxy);
-        if (proxyManifest.Length == 0)
-            return null;
-
-        Console.WriteLine($"Resolving {proxyManifest.Length} proxies...");
-
-        var resolver = new PreparedProxyResolver();
-        var proxies = resolver.Resolve(proxyManifest).Select(x => x.ToUri()).ToList();
-
-        Console.WriteLine($"Proxy resolution done, resolved {proxies.Count} proxies.");
-
-        if (proxies.Count > 1)
-        {
-            return new RoundRobinProxy(proxies);
-        }
-        else if (proxies.Count == 1)
-        {
-            return new WebProxy(proxies.First());
-        }
-        else
-        {
-            return null;
-        }
     }
 
     private static void ConfigureHttpClient(HttpClient httpClient, Options options)

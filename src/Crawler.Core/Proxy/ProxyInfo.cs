@@ -1,14 +1,27 @@
-﻿namespace Crawler.Core.Proxy;
+namespace Crawler.Core.Proxy;
 
 public sealed record ProxyInfo
 {
     public string Host { get; init; } = string.Empty;
     public int Port { get; init; }
-    public ProxyProtocol Protocol { get; set; } = ProxyProtocol.Unknown;
+    public ProxyProtocol Protocol { get; init; } = ProxyProtocol.Unknown;
+    public string? Username { get; init; }
+    public string? Password { get; init; }
 
-    public override string ToString()
-        => $"{Protocol.ToString().ToLower()}://{Host}:{Port}";
+    public bool HasCredentials => !string.IsNullOrEmpty(Username);
 
     public Uri ToUri()
-        => new(ToString());
+    {
+        var scheme = Protocol switch
+        {
+            ProxyProtocol.Http => "http",
+            ProxyProtocol.Https => "https",
+            ProxyProtocol.Socks4 => "socks4",
+            ProxyProtocol.Socks5 => "socks5",
+            _ => "http",
+        };
+        return new Uri($"{scheme}://{Host}:{Port}");
+    }
+
+    public override string ToString() => ToUri().ToString();
 }

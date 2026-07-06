@@ -1,4 +1,4 @@
-﻿namespace SimpleCrawler.Helper;
+namespace SimpleCrawler.Helper;
 
 public static class ProxyCollector
 {
@@ -7,30 +7,20 @@ public static class ProxyCollector
         if (string.IsNullOrWhiteSpace(proxy))
             return [];
 
-        try
+        if (File.Exists(proxy))
         {
-            string[] proxies = [.. File.ReadLines(proxy)
-                .Where(line => !string.IsNullOrWhiteSpace(line))
+            return [.. File.ReadLines(proxy)
                 .Select(line => line.Trim())
-                .Where(IsProxy)];
+                .Where(line => line.Length > 0 && !line.StartsWith('#'))];
+        }
 
-            if (proxies.Length > 0)
-                return proxies;
-        }
-        catch
-        {
-            if (IsProxy(proxy))
-                return [proxy];
-        }
+        var trimmed = proxy.Trim();
+        if (LooksLikeProxy(trimmed))
+            return [trimmed];
 
         throw new InvalidOperationException($"Could not parse a proxy from '{proxy}'");
     }
 
-    private static bool IsProxy(string proxy)
-    {
-        if (Uri.TryCreate(proxy, UriKind.Absolute, out _))
-            return true;
-
-        return false;
-    }
+    private static bool LooksLikeProxy(string value)
+        => value.Contains(':') || value.Contains("://");
 }
