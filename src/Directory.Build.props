@@ -17,11 +17,13 @@
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <NoWarn>$(NoWarn);CS1591;CS1573</NoWarn>
     <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageIcon>icon.png</PackageIcon>
     <PackageTags>crawler;web-crawler;scraper;scraping;robots-txt;sitemap;load-testing</PackageTags>
   </PropertyGroup>
 
   <ItemGroup>
     <None Include="README.md" Pack="true" PackagePath="\" />
+    <None Include="$(MSBuildThisFileDirectory)..\assets\icon-128.png" Pack="true" PackagePath="icon.png" Visible="false" />
   </ItemGroup>
 
 </Project>
