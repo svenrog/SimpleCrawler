@@ -383,6 +383,7 @@ public abstract class AbstractCrawler<TResponse, TDocument, TResult> : ICrawler<
                 return;
 
             var discovered = 0;
+            Trace($"PROCESS href-count={pageData.LinkHrefs.Count} on {resolvedUrl}");
             foreach (var href in pageData.LinkHrefs)
             {
                 var link = ResolveCrawlableUrl(href);
@@ -430,19 +431,38 @@ public abstract class AbstractCrawler<TResponse, TDocument, TResult> : ICrawler<
 
     protected virtual string? ResolveCrawlableUrl(string? href)
     {
-        if (InvalidateHref(href))
+        if (href is null)
+        {
+            Trace("RESOLVE null href");
             return null;
+        }
+
+        if (InvalidateHref(href))
+        {
+            Trace($"RESOLVE invalhref: href='{href}' ext='{Path.GetExtension(href.AsSpan())}'");
+            return null;
+        }
 
         if (IsExternalAbsoluteUrl(href))
+        {
+            Trace($"RESOLVE external: href='{href}'");
             return null;
+        }
 
         var url = GetAbsoluteUrl(href);
         if (url == null)
+        {
+            Trace($"RESOLVE getabsolute-null: href='{href}' tryAbs={Uri.TryCreate(href, UriKind.Absolute, out _)} tryRel={Uri.TryCreate(href, UriKind.Relative, out _)}");
             return null;
+        }
 
         if (!url.StartsWith(_siteAuthority!, StringComparison.OrdinalIgnoreCase))
+        {
+            Trace($"RESOLVE auth-mismatch: href='{href}' url='{url}' auth='{_siteAuthority}' site='{_siteUri}'");
             return null;
+        }
 
+        Trace($"RESOLVE ok: href='{href}' url='{url}'");
         return url;
     }
 
