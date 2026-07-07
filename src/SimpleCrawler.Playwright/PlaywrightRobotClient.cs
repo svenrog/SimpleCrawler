@@ -1,4 +1,5 @@
 using SimpleCrawler.Core;
+using SimpleCrawler.Core.Extensions;
 using SimpleCrawler.Core.Proxy;
 using SimpleCrawler.Core.Robots;
 using Microsoft.Extensions.Logging;
@@ -58,7 +59,7 @@ public sealed class PlaywrightRobotClient : AbstractBrowserRobotClient
             // Only a successful response carries a body worth reading; mirroring the HttpClient robot
             // client, a non-success probe (e.g. an absent /sitemap.xml) is not a fetch error, and
             // reading its body would throw.
-            if (status is < 200 or >= 300)
+            if (!status.IsSuccessStatus())
                 return (new RobotResourceResponse(status, null, null), kind);
 
             var body = await response.BodyAsync().WaitAsync(cancellationToken);
