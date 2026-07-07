@@ -70,3 +70,5 @@ The `smpcrawl` CLI wires its `--cookie` and `--userAgent` flags through this sam
 ## Headless backends
 
 `Playwright` and `Puppeteer` don't fetch over `HttpClient` and take no hook headers, cookies, or a stored session has to be set in the browser context instead (e.g. Playwright's `ExtraHTTPHeaders`).
+
+Proxy pooling still applies: register an `IProxyPool` and the headless session rotates proxies **per page** (a browser context per proxy) instead of per request, reusing the same health/cooldown/retry accounting as the static backends. One limitation travels with Chromium — it can't authenticate SOCKS proxies, so a pool containing an authenticated SOCKS entry fails fast at startup on a headless backend. HTTP(S) proxies and unauthenticated SOCKS work as usual.

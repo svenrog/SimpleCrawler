@@ -130,6 +130,8 @@ public class ProxyRoutingHandlerTests
         public List<ProxyInfo> Successes { get; } = [];
         public List<(ProxyInfo Proxy, ProxyFailureKind Kind)> Failures { get; } = [];
 
+        public IReadOnlyList<ProxyInfo> Proxies => AcquireResult is null ? [] : [AcquireResult];
+
         public ProxyInfo? Acquire() => AcquireResult;
 
         public void ReportSuccess(ProxyInfo proxy) => Successes.Add(proxy);

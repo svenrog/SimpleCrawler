@@ -6,6 +6,7 @@ public sealed class ProxyPool : IProxyPool
 {
     private readonly ProxyHealth[] _health;
     private readonly Dictionary<ProxyInfo, ProxyHealth> _byProxy;
+    private readonly ProxyInfo[] _proxies;
     private readonly ProxyPoolOptions _options;
     private int _cursor;
 
@@ -17,7 +18,10 @@ public sealed class ProxyPool : IProxyPool
         _options = options;
         _health = proxies.Select(p => new ProxyHealth(p, options)).ToArray();
         _byProxy = _health.ToDictionary(h => h.Proxy);
+        _proxies = _health.Select(h => h.Proxy).ToArray();
     }
+
+    public IReadOnlyList<ProxyInfo> Proxies => _proxies;
 
     public ProxyInfo? Acquire()
     {
