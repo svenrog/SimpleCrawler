@@ -15,8 +15,7 @@ public abstract class PuppeteerCrawler<TResult> : AbstractRobotsCrawler<IPage, I
     where TResult : IScrapeResult
 {
     private readonly PuppeteerBrowserSession _session;
-    private readonly IProxyPool? _pool;
-    private readonly int _maxRetries;
+    private readonly ProxyRetryExecutor? _retry;
     private readonly ConcurrentDictionary<string, ConcurrentQueue<IPage>> _pagePools;
     private readonly ConcurrentDictionary<IPage, string> _pageKeys;
     private readonly ILogger _logger;
@@ -24,8 +23,9 @@ public abstract class PuppeteerCrawler<TResult> : AbstractRobotsCrawler<IPage, I
     protected PuppeteerCrawler(IRobotClient robotClient, PuppeteerBrowserSession session, IOptions<HeadlessCrawlerOptions> options, ILogger logger, IProxyPool? pool = null) : base(robotClient, options, logger)
     {
         _session = session;
-        _pool = options.Value.ProxyPool is not null ? pool : null;
-        _maxRetries = options.Value.ProxyPool?.MaxRetries ?? 0;
+        _retry = options.Value.ProxyPool is not null && pool is not null
+            ? new ProxyRetryExecutor(pool, options.Value.ProxyPool.MaxRetries)
+            : null;
         _logger = logger;
         _pagePools = new ConcurrentDictionary<string, ConcurrentQueue<IPage>>();
         _pageKeys = new ConcurrentDictionary<IPage, string>();
@@ -33,64 +33,62 @@ public abstract class PuppeteerCrawler<TResult> : AbstractRobotsCrawler<IPage, I
 
     protected override async Task<IPage?> LoadResponse(string url, CancellationToken cancellationToken)
     {
-        if (_pool is null)
+        if (_retry is null)
             return await LoadOnce(url, null, cancellationToken);
 
-        for (var attempt = 0; attempt <= _maxRetries; attempt++)
+        return await _retry.ExecuteAsync(
+            (proxy, token) => AttemptLoad(url, proxy, token),
+            () =>
+            {
+                _logger.LogWarning("Exhausted proxy retries for '{url}'", url);
+                return (IPage?)null;
+            },
+            cancellationToken);
+    }
+
+    private async Task<ProxyAttempt<IPage?>> AttemptLoad(string url, ProxyInfo? proxy, CancellationToken cancellationToken)
+    {
+        var page = await AcquirePage(proxy);
+
+        IResponse? response;
+        try
         {
-            cancellationToken.ThrowIfCancellationRequested();
-
-            var proxy = _pool.Acquire() ?? throw new ProxyPoolExhaustedException("No healthy proxies remain (below configured cutoff).");
-            var page = await AcquirePage(proxy);
-
-            IResponse? response;
-            try
-            {
-                response = await page.GoToAsync(url, GetNavigationOptions()).WaitAsync(cancellationToken);
-            }
-            catch (PuppeteerException e)
-            {
-                _logger.LogDebug("Proxy {proxy} failed on '{url}' (attempt {attempt}): {message}", proxy, url, attempt + 1, e.Message);
-                _pool.ReportFailure(proxy, ProxyFailureKind.Connection);
-                await ClosePage(page);
-                continue;
-            }
-
-            if (response is null)
-            {
-                _logger.LogWarning("No response from '{url}' via proxy {proxy}", url, proxy);
-                _pool.ReportFailure(proxy, ProxyFailureKind.Connection);
-                await ClosePage(page);
-                continue;
-            }
-
-            var status = (int)response.Status;
-            var kind = ProxyFailureClassifier.Classify(status);
-            if (kind is not null)
-            {
-                _logger.LogDebug("Proxy {proxy} returned {code} on '{url}' (attempt {attempt})", proxy, status, url, attempt + 1);
-                _pool.ReportFailure(proxy, kind.Value);
-                await ClosePage(page);
-                continue;
-            }
-
-            _pool.ReportSuccess(proxy);
-
-            if (status < 300)
-            {
-                _logger.LogDebug("Response '{code}' from url '{url}' via proxy {proxy}", status, url, proxy);
-                _pageKeys[page] = BrowserProxyHelper.ContextKey(proxy);
-                return page;
-            }
-
-            _logger.LogWarning("Error {code} on url '{url}'", status, url);
-            _pageKeys[page] = BrowserProxyHelper.ContextKey(proxy);
-            await DisposeResponse(page);
-            return null;
+            response = await page.GoToAsync(url, GetNavigationOptions()).WaitAsync(cancellationToken);
+        }
+        catch (PuppeteerException e)
+        {
+            _logger.LogDebug("Proxy {proxy} failed on '{url}': {message}", proxy, url, e.Message);
+            await ClosePage(page);
+            return ProxyAttempt<IPage?>.Failed(ProxyFailureKind.Connection);
         }
 
-        _logger.LogWarning("Exhausted proxy retries for '{url}'", url);
-        return null;
+        if (response is null)
+        {
+            _logger.LogWarning("No response from '{url}' via proxy {proxy}", url, proxy);
+            await ClosePage(page);
+            return ProxyAttempt<IPage?>.Failed(ProxyFailureKind.Connection);
+        }
+
+        var status = (int)response.Status;
+        var kind = ProxyFailureClassifier.Classify(status);
+        if (kind is not null)
+        {
+            _logger.LogDebug("Proxy {proxy} returned {code} on '{url}'", proxy, status, url);
+            await ClosePage(page);
+            return ProxyAttempt<IPage?>.Failed(kind.Value);
+        }
+
+        _pageKeys[page] = BrowserProxyHelper.ContextKey(proxy);
+
+        if (status < 300)
+        {
+            _logger.LogDebug("Response '{code}' from url '{url}' via proxy {proxy}", status, url, proxy);
+            return ProxyAttempt<IPage?>.Ok(page);
+        }
+
+        _logger.LogWarning("Error {code} on url '{url}'", status, url);
+        await DisposeResponse(page);
+        return ProxyAttempt<IPage?>.Ok(null);
     }
 
     private async Task<IPage?> LoadOnce(string url, ProxyInfo? proxy, CancellationToken cancellationToken)

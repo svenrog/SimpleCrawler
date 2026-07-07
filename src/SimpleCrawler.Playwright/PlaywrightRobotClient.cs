@@ -10,42 +10,33 @@ namespace SimpleCrawler.Playwright;
 public sealed class PlaywrightRobotClient : AbstractBrowserRobotClient
 {
     private readonly PlaywrightBrowserSession _session;
-    private readonly IProxyPool? _pool;
-    private readonly int _maxRetries;
+    private readonly ProxyRetryExecutor? _retry;
     private readonly ILogger<PlaywrightRobotClient> _logger;
 
     public PlaywrightRobotClient(PlaywrightBrowserSession session, IOptions<HeadlessCrawlerOptions> options, ILogger<PlaywrightRobotClient> logger, IProxyPool? pool = null)
     {
         _session = session;
-        _pool = options.Value.ProxyPool is not null ? pool : null;
-        _maxRetries = options.Value.ProxyPool?.MaxRetries ?? 0;
+        _retry = options.Value.ProxyPool is not null && pool is not null
+            ? new ProxyRetryExecutor(pool, options.Value.ProxyPool.MaxRetries)
+            : null;
         _logger = logger;
     }
 
     protected override async Task<RobotResourceResponse> FetchAsync(string url, CancellationToken cancellationToken)
     {
-        if (_pool is null)
+        if (_retry is null)
             return (await FetchClassified(url, null, cancellationToken)).Response;
 
-        for (var attempt = 0; attempt <= _maxRetries; attempt++)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-
-            var proxy = _pool.Acquire();
-            if (proxy is null)
-                return (await FetchClassified(url, null, cancellationToken)).Response;
-
-            var (response, kind) = await FetchClassified(url, proxy, cancellationToken);
-            if (kind is null)
+        return await _retry.ExecuteWithDirectFallbackAsync(
+            async (proxy, token) =>
             {
-                _pool.ReportSuccess(proxy);
-                return response;
-            }
-
-            _pool.ReportFailure(proxy, kind.Value);
-        }
-
-        return new RobotResourceResponse(0, null, null);
+                var (response, kind) = await FetchClassified(url, proxy, token);
+                return kind is null
+                    ? ProxyAttempt<RobotResourceResponse>.Ok(response)
+                    : ProxyAttempt<RobotResourceResponse>.Failed(kind.Value, response);
+            },
+            () => new RobotResourceResponse(0, null, null),
+            cancellationToken);
     }
 
     private async Task<(RobotResourceResponse Response, ProxyFailureKind? Kind)> FetchClassified(string url, ProxyInfo? proxy, CancellationToken cancellationToken)
