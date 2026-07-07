@@ -53,7 +53,7 @@ public abstract class AbstractStaticHtmlCrawler<TDocument, TResult> : AbstractRo
     {
         var (canonicalHref, robotsContent, hrefs) = ExtractStatic(document);
 
-        var extract = new PageExtract(GetAbsoluteUrl(canonicalHref), IndexingHelper.ParseMetaRobots(robotsContent), hrefs);
+        var extract = new PageExtract(canonicalHref, IndexingHelper.ParseMetaRobots(robotsContent), hrefs);
         return new ValueTask<PageExtract>(extract);
     }
 

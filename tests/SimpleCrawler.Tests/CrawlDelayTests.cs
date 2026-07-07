@@ -43,7 +43,7 @@ public class CrawlDelayTests
 
         await crawler.Start(_entry, TestContext.Current.CancellationToken);
 
-        Assert.Equal(expected, options.CrawlDelay);
+        Assert.Equal(expected, crawler.EffectiveDelay(_entry));
     }
 
     [Fact]
@@ -55,7 +55,7 @@ public class CrawlDelayTests
 
         await crawler.Start(_entry, TestContext.Current.CancellationToken);
 
-        Assert.Equal(0, options.CrawlDelay);
+        Assert.Equal(0, crawler.EffectiveDelay(_entry));
     }
 
     private static CrawlerOptions CreateOptions(double configuredDelay) => new()
@@ -103,6 +103,8 @@ public class CrawlDelayTests
 
         protected override ValueTask<ScrapeResult> GetResult(CancellationToken cancellationToken)
             => ValueTask.FromResult(new ScrapeResult { Urls = [.. Visited] });
+
+        public double EffectiveDelay(string url) => GetCrawlDelay(new Uri(url).Authority);
     }
 
     private sealed class FakeRobotClient : IRobotClient

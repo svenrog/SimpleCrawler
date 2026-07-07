@@ -73,7 +73,7 @@ public abstract class PuppeteerCrawler<TResult> : AbstractRobotsCrawler<IPage, I
         var json = await response.EvaluateFunctionAsync<JsonElement>(RenderedPageExtractor.Script);
         var (canonicalHref, robotsContent, linkHrefs) = RenderedPageExtractor.Parse(json);
 
-        return new PageExtract(GetAbsoluteUrl(canonicalHref), IndexingHelper.ParseMetaRobots(robotsContent), linkHrefs);
+        return new PageExtract(canonicalHref, IndexingHelper.ParseMetaRobots(robotsContent), linkHrefs);
     }
 
     protected override Task DisposeResponse(IPage? response)
