@@ -1,4 +1,5 @@
 using SimpleCrawler.Js.Abstractions;
+using SimpleCrawler.Core.Extensions;
 
 namespace SimpleCrawler.Js.Services;
 
@@ -39,7 +40,7 @@ internal sealed class HttpModuleFetcher : IModuleFetcher
         {
             using var request = new HttpRequestMessage(HttpMethod.Get, absolute);
             using var response = _client.Send(request, _cancellationToken);
-            if (!response.IsSuccessStatusCode)
+            if (!response.IsSuccessStatus())
                 return null;
 
             using var stream = response.Content.ReadAsStream(_cancellationToken);

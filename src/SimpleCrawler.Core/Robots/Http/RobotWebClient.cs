@@ -4,6 +4,7 @@
 
 using System.Net.Mime;
 using System.Runtime.CompilerServices;
+using SimpleCrawler.Core.Extensions;
 
 namespace SimpleCrawler.Core.Robots.Http;
 
@@ -68,7 +69,7 @@ public class RobotWebClient : IRobotClient
         request.Headers.Add("Accept", "application/xml,text/plain,text/xml,*/*");
 
         var response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
-        if (!response.IsSuccessStatusCode) yield break;
+        if (!response.IsSuccessStatus()) yield break;
 
         await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
 
