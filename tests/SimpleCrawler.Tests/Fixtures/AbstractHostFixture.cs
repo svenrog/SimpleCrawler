@@ -19,11 +19,13 @@ namespace SimpleCrawler.Tests.Fixtures;
 
 public abstract class AbstractHostFixture : IAsyncDisposable
 {
+    private static readonly TimeSpan _shutdownTimeout = TimeSpan.FromSeconds(10);
+
     public readonly ServiceProvider ServiceProvider;
-    public readonly CancellationTokenSource CancellationSource;
     public readonly List<string> Links;
 
     private readonly IReadOnlyList<WebApplication> _hosts;
+    private readonly CancellationTokenSource _stopping = new();
 
     public AbstractHostFixture()
     {
@@ -43,14 +45,11 @@ public abstract class AbstractHostFixture : IAsyncDisposable
         services.AddSingleton<ILogger>(NullLogger.Instance);
         services.AddSingleton(typeof(ILogger<>), typeof(NullLogger<>));
 
-        services.AddScoped<CancellationTokenSource>();
-
         ServiceProvider = services.BuildServiceProvider();
-        CancellationSource = ServiceProvider.GetRequiredService<CancellationTokenSource>();
 
         _hosts = [.. CreateHosts()];
         foreach (var host in _hosts)
-            host.StartAsync(CancellationSource.Token).AwaitSync();
+            host.StartAsync(CancellationToken.None).AwaitSync();
 
         Links = GetLinks();
     }
@@ -91,14 +90,40 @@ public abstract class AbstractHostFixture : IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
+        // Bound graceful shutdown: a stalled host would otherwise wait out the 30s shutdown timeout
+        // while xUnit (and VS) have already given up on the run, pinning the testhost process.
+        _stopping.CancelAfter(_shutdownTimeout);
+
         foreach (var host in _hosts)
         {
-            await host.StopAsync(CancellationSource.Token);
-            await host.DisposeAsync();
+            try
+            {
+                await host.StopAsync(_stopping.Token);
+            }
+            catch
+            {
+                // Swallowed deliberately: the ServiceProvider owns the headless-browser subprocesses,
+                // so a host that throws here must not skip it or the remaining hosts.
+            }
+
+            try
+            {
+                await host.DisposeAsync();
+            }
+            catch
+            {
+                // As above: keep going so ServiceProvider disposal is always reached.
+            }
         }
 
-        await ServiceProvider.DisposeAsync();
-
-        GC.SuppressFinalize(this);
+        try
+        {
+            await ServiceProvider.DisposeAsync();
+        }
+        finally
+        {
+            _stopping.Dispose();
+            GC.SuppressFinalize(this);
+        }
     }
 }
