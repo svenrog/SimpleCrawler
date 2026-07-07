@@ -9,6 +9,7 @@ This project stemmed from the need to crawl a single domain in preparation of lo
 | Feature    | Support |
 | ---------- | ------- |
 | Parallel crawling | :heavy_check_mark: |
+| Multi-domain crawling | :heavy_check_mark: |
 | Meta robots | :heavy_check_mark: |
 | Robots.txt | :heavy_check_mark: |
 | Browser impersonation | :heavy_check_mark: |
@@ -45,11 +46,21 @@ Wire a backend into your `IServiceCollection` with its `AddXyzCrawler(...)` exte
 
 ## Running the .exe
 
-Executing the binary will crawl a single domain using the default `HtmlAgilityPack` crawler.
+Executing the binary will crawl a domain using the default `HtmlAgilityPack` crawler.
 
 ```
 smpcrawl -e "<entry url>" -o "<output file>"
 ```
+
+### Crawling several hosts at once
+
+Pass `-e/--entryPoint` more than once to crawl a small, known set of hosts in a single run — handy when a site spans, say, `www.example.com` and `api.example.com`:
+
+```
+smpcrawl -e "https://www.example.com/" -e "https://api.example.com/" -o "urls.txt"
+```
+
+The crawl stays within the **exact** set of hosts you list. Scope is decided by authority (`host[:port]`, scheme-agnostic), so subdomains are **not** pulled in automatically — to crawl `blog.example.com` you have to list it. Each host gets its own `robots.txt`, `Crawl-delay`, and sitemap; one unreachable host won't abort the others.
 
 > **Play nice.** This is a tool for load-testing sites you own or operate. It respects `robots.txt` and meta-robots by default. The `--impersonate` browser-impersonation flag exists so legitimate load tests aren't tripped up by anti-bot heuristics on your own infrastructure — not to sneak past someone else's. Point it only at hosts you're authorized to hammer.
 
