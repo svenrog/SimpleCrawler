@@ -36,17 +36,19 @@ public abstract class PlaywrightCrawler<TResult> : AbstractRobotsCrawler<IPage, 
     protected override async Task<IPage?> LoadResponse(string url, CancellationToken cancellationToken)
     {
         if (_pool is null)
-            return await LoadOnce(url, null);
+            return await LoadOnce(url, null, cancellationToken);
 
         for (var attempt = 0; attempt <= _maxRetries; attempt++)
         {
+            cancellationToken.ThrowIfCancellationRequested();
+
             var proxy = _pool.Acquire() ?? throw new ProxyPoolExhaustedException("No healthy proxies remain (below configured cutoff).");
             var page = await AcquirePage(proxy);
 
             IResponse? response;
             try
             {
-                response = await page.GotoAsync(url, new PageGotoOptions { WaitUntil = WaitUntilState.Load });
+                response = await page.GotoAsync(url, new PageGotoOptions { WaitUntil = WaitUntilState.Load }).WaitAsync(cancellationToken);
             }
             catch (PlaywrightException e)
             {
@@ -77,7 +79,7 @@ public abstract class PlaywrightCrawler<TResult> : AbstractRobotsCrawler<IPage, 
 
             if (response.Status is >= 200 and < 300)
             {
-                await WaitForNetworkIdle(page);
+                await WaitForNetworkIdle(page, cancellationToken);
                 _logger.LogDebug("Response '{code}' from url '{url}' via proxy {proxy}", response.Status, url, proxy);
                 _pageKeys[page] = BrowserProxyHelper.ContextKey(proxy);
                 return page;
@@ -93,10 +95,12 @@ public abstract class PlaywrightCrawler<TResult> : AbstractRobotsCrawler<IPage, 
         return null;
     }
 
-    private async Task<IPage?> LoadOnce(string url, ProxyInfo? proxy)
+    private async Task<IPage?> LoadOnce(string url, ProxyInfo? proxy, CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
+
         var page = await AcquirePage(proxy);
-        var response = await page.GotoAsync(url, new PageGotoOptions { WaitUntil = WaitUntilState.Load });
+        var response = await page.GotoAsync(url, new PageGotoOptions { WaitUntil = WaitUntilState.Load }).WaitAsync(cancellationToken);
 
         if (response == null)
         {
@@ -107,7 +111,7 @@ public abstract class PlaywrightCrawler<TResult> : AbstractRobotsCrawler<IPage, 
         }
         else if (response.Status >= 200 && response.Status < 300)
         {
-            await WaitForNetworkIdle(page);
+            await WaitForNetworkIdle(page, cancellationToken);
             _logger.LogDebug("Response '{code}' from url '{url}'", response.Status, url);
             return page;
         }
@@ -127,17 +131,17 @@ public abstract class PlaywrightCrawler<TResult> : AbstractRobotsCrawler<IPage, 
 
     protected override async ValueTask<PageExtract> ExtractPageData(IPage response)
     {
-        var json = await response.EvaluateAsync(RenderedPageExtractor.Script);
+        var json = await response.EvaluateAsync(RenderedPageExtractor.Script).WaitAsync(CrawlCancellationToken);
         var (canonicalHref, robotsContent, linkHrefs) = RenderedPageExtractor.Parse(json.GetValueOrDefault());
 
         return new PageExtract(canonicalHref, IndexingHelper.ParseMetaRobots(robotsContent), linkHrefs);
     }
 
-    private async Task WaitForNetworkIdle(IPage page)
+    private async Task WaitForNetworkIdle(IPage page, CancellationToken cancellationToken)
     {
         try
         {
-            await page.WaitForLoadStateAsync(LoadState.NetworkIdle, new PageWaitForLoadStateOptions { Timeout = _options.NetworkIdleGraceMs });
+            await page.WaitForLoadStateAsync(LoadState.NetworkIdle, new PageWaitForLoadStateOptions { Timeout = _options.NetworkIdleGraceMs }).WaitAsync(cancellationToken);
         }
         catch (System.TimeoutException)
         {

@@ -25,15 +25,17 @@ public sealed class PlaywrightRobotClient : AbstractBrowserRobotClient
     protected override async Task<RobotResourceResponse> FetchAsync(string url, CancellationToken cancellationToken)
     {
         if (_pool is null)
-            return (await FetchClassified(url, null)).Response;
+            return (await FetchClassified(url, null, cancellationToken)).Response;
 
         for (var attempt = 0; attempt <= _maxRetries; attempt++)
         {
+            cancellationToken.ThrowIfCancellationRequested();
+
             var proxy = _pool.Acquire();
             if (proxy is null)
-                return (await FetchClassified(url, null)).Response;
+                return (await FetchClassified(url, null, cancellationToken)).Response;
 
-            var (response, kind) = await FetchClassified(url, proxy);
+            var (response, kind) = await FetchClassified(url, proxy, cancellationToken);
             if (kind is null)
             {
                 _pool.ReportSuccess(proxy);
@@ -46,13 +48,13 @@ public sealed class PlaywrightRobotClient : AbstractBrowserRobotClient
         return new RobotResourceResponse(0, null, null);
     }
 
-    private async Task<(RobotResourceResponse Response, ProxyFailureKind? Kind)> FetchClassified(string url, ProxyInfo? proxy)
+    private async Task<(RobotResourceResponse Response, ProxyFailureKind? Kind)> FetchClassified(string url, ProxyInfo? proxy, CancellationToken cancellationToken)
     {
         var page = await _session.NewPageAsync(proxy);
 
         try
         {
-            var response = await page.GotoAsync(url, new PageGotoOptions { WaitUntil = WaitUntilState.DOMContentLoaded });
+            var response = await page.GotoAsync(url, new PageGotoOptions { WaitUntil = WaitUntilState.DOMContentLoaded }).WaitAsync(cancellationToken);
             if (response is null)
             {
                 _logger.LogWarning("No response from '{url}'", url);
@@ -60,7 +62,7 @@ public sealed class PlaywrightRobotClient : AbstractBrowserRobotClient
             }
 
             var kind = ProxyFailureClassifier.Classify(response.Status);
-            var body = await response.BodyAsync();
+            var body = await response.BodyAsync().WaitAsync(cancellationToken);
             response.Headers.TryGetValue("content-type", out var contentType);
 
             return (new RobotResourceResponse(response.Status, body, ParseMediaType(contentType)), kind);

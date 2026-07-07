@@ -34,17 +34,19 @@ public abstract class PuppeteerCrawler<TResult> : AbstractRobotsCrawler<IPage, I
     protected override async Task<IPage?> LoadResponse(string url, CancellationToken cancellationToken)
     {
         if (_pool is null)
-            return await LoadOnce(url, null);
+            return await LoadOnce(url, null, cancellationToken);
 
         for (var attempt = 0; attempt <= _maxRetries; attempt++)
         {
+            cancellationToken.ThrowIfCancellationRequested();
+
             var proxy = _pool.Acquire() ?? throw new ProxyPoolExhaustedException("No healthy proxies remain (below configured cutoff).");
             var page = await AcquirePage(proxy);
 
             IResponse? response;
             try
             {
-                response = await page.GoToAsync(url, GetNavigationOptions());
+                response = await page.GoToAsync(url, GetNavigationOptions()).WaitAsync(cancellationToken);
             }
             catch (PuppeteerException e)
             {
@@ -91,11 +93,13 @@ public abstract class PuppeteerCrawler<TResult> : AbstractRobotsCrawler<IPage, I
         return null;
     }
 
-    private async Task<IPage?> LoadOnce(string url, ProxyInfo? proxy)
+    private async Task<IPage?> LoadOnce(string url, ProxyInfo? proxy, CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
+
         var page = await AcquirePage(proxy);
 
-        var response = await page.GoToAsync(url, GetNavigationOptions());
+        var response = await page.GoToAsync(url, GetNavigationOptions()).WaitAsync(cancellationToken);
         if (response == null)
         {
             _logger.LogWarning("No response from '{url}'", url);
@@ -151,7 +155,7 @@ public abstract class PuppeteerCrawler<TResult> : AbstractRobotsCrawler<IPage, I
 
     protected override async ValueTask<PageExtract> ExtractPageData(IPage response)
     {
-        var json = await response.EvaluateFunctionAsync<JsonElement>(RenderedPageExtractor.Script);
+        var json = await response.EvaluateFunctionAsync<JsonElement>(RenderedPageExtractor.Script).WaitAsync(CrawlCancellationToken);
         var (canonicalHref, robotsContent, linkHrefs) = RenderedPageExtractor.Parse(json);
 
         return new PageExtract(canonicalHref, IndexingHelper.ParseMetaRobots(robotsContent), linkHrefs);
