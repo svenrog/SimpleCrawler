@@ -11,6 +11,8 @@ namespace SimpleCrawler.Tests.Fixtures;
 // crawl can be asserted to stay within exactly the hosts it was given as entries.
 public sealed class MultiHostFixture : IAsyncDisposable
 {
+    private static readonly TimeSpan _shutdownTimeout = TimeSpan.FromSeconds(10);
+
     public const string HostA = "http://localhost:5271/";
     public const string HostB = "http://localhost:5272/";
     public const string HostExternal = "http://localhost:5279/";
@@ -76,13 +78,37 @@ public sealed class MultiHostFixture : IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
+        // Bound graceful shutdown so a stalled host can't pin the testhost process once xUnit gives up.
+        CancellationSource.CancelAfter(_shutdownTimeout);
+
         foreach (var host in _hosts)
         {
-            await host.StopAsync(CancellationSource.Token);
-            await host.DisposeAsync();
+            try
+            {
+                await host.StopAsync(CancellationSource.Token);
+            }
+            catch
+            {
+                // Swallowed deliberately: a host that throws must not skip the ServiceProvider or the rest.
+            }
+
+            try
+            {
+                await host.DisposeAsync();
+            }
+            catch
+            {
+                // As above: keep going so ServiceProvider disposal is always reached.
+            }
         }
 
-        await ServiceProvider.DisposeAsync();
-        CancellationSource.Dispose();
+        try
+        {
+            await ServiceProvider.DisposeAsync();
+        }
+        finally
+        {
+            CancellationSource.Dispose();
+        }
     }
 }

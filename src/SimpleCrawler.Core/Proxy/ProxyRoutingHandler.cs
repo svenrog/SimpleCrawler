@@ -4,16 +4,14 @@ namespace SimpleCrawler.Core.Proxy;
 
 public sealed class ProxyRoutingHandler : HttpMessageHandler
 {
-    private readonly IProxyPool _pool;
     private readonly IProxyClientProvider _clients;
-    private readonly ProxyPoolOptions _options;
+    private readonly ProxyRetryExecutor _retry;
     private readonly ILogger<ProxyRoutingHandler> _logger;
 
     public ProxyRoutingHandler(IProxyPool pool, IProxyClientProvider clients, ProxyPoolOptions options, ILogger<ProxyRoutingHandler> logger)
     {
-        _pool = pool;
         _clients = clients;
-        _options = options;
+        _retry = new ProxyRetryExecutor(pool, options.MaxRetries);
         _logger = logger;
     }
 
@@ -21,48 +19,49 @@ public sealed class ProxyRoutingHandler : HttpMessageHandler
     {
         Exception? lastError = null;
 
-        for (var attempt = 0; attempt <= _options.MaxRetries; attempt++)
-        {
-            var proxy = _pool.Acquire() ?? throw new ProxyPoolExhaustedException("No healthy proxies remain (below configured cutoff).");
-            var inner = _clients.ClientFor(proxy);
-            var clone = await CloneRequestAsync(request).ConfigureAwait(false);
+        // Kept across attempts so an exhausted retry budget can surface the final proxy's HTTP error
+        // response instead of a synthetic exception. Any earlier failed response is stale and disposed
+        // at the top of the next attempt.
+        HttpResponseMessage? lastResponse = null;
 
-            HttpResponseMessage? response;
-            try
+        var result = await _retry.ExecuteAsync<HttpResponseMessage?>(
+            async (proxy, token) =>
             {
-                response = await inner.SendAsync(clone, cancellationToken).ConfigureAwait(false);
-            }
-            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-            {
-                clone.Dispose();
-                throw;
-            }
-            catch (Exception ex)
-            {
-                clone.Dispose();
-                lastError = ex;
-                _logger.LogDebug("Proxy {proxy} failed on attempt {attempt}: {message}", proxy, attempt + 1, ex.Message);
-                _pool.ReportFailure(proxy, ProxyFailureKind.Connection);
-                continue;
-            }
+                lastResponse?.Dispose();
+                lastResponse = null;
 
-            var kind = ProxyFailureClassifier.Classify((int)response.StatusCode);
+                var inner = _clients.ClientFor(proxy!);
+                var clone = await CloneRequestAsync(request).ConfigureAwait(false);
 
-            if (kind is null)
-            {
-                _pool.ReportSuccess(proxy);
-                return response;
-            }
+                HttpResponseMessage response;
+                try
+                {
+                    response = await inner.SendAsync(clone, token).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException) when (token.IsCancellationRequested)
+                {
+                    clone.Dispose();
+                    throw;
+                }
+                catch (Exception ex)
+                {
+                    clone.Dispose();
+                    lastError = ex;
+                    _logger.LogDebug("Proxy {proxy} failed: {message}", proxy, ex.Message);
+                    return ProxyAttempt<HttpResponseMessage?>.Failed(ProxyFailureKind.Connection);
+                }
 
-            _pool.ReportFailure(proxy, kind.Value);
+                var kind = ProxyFailureClassifier.Classify((int)response.StatusCode);
+                if (kind is null)
+                    return ProxyAttempt<HttpResponseMessage?>.Ok(response);
 
-            if (attempt == _options.MaxRetries)
-                return response;
+                lastResponse = response;
+                return ProxyAttempt<HttpResponseMessage?>.Failed(kind.Value, response);
+            },
+            () => lastResponse ?? throw new HttpRequestException("All proxies failed for request.", lastError),
+            cancellationToken);
 
-            response.Dispose();
-        }
-
-        throw new HttpRequestException("All proxies failed for request.", lastError);
+        return result!;
     }
 
     private static async Task<HttpRequestMessage> CloneRequestAsync(HttpRequestMessage request)
