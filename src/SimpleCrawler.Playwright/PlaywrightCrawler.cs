@@ -14,11 +14,13 @@ public abstract class PlaywrightCrawler<TResult> : AbstractHeadlessCrawler<IPage
 {
     private readonly PlaywrightBrowserSession _session;
     private readonly float _networkIdleGraceMs;
+    private readonly ILogger _logger;
 
     protected PlaywrightCrawler(IRobotClient robotClient, PlaywrightBrowserSession session, IOptions<HeadlessCrawlerOptions> options, ILogger logger, IProxyPool? pool = null) : base(robotClient, options, logger, pool)
     {
         _session = session;
         _networkIdleGraceMs = options.Value.NetworkIdleGraceMs;
+        _logger = logger;
     }
 
     protected override Task<IPage> NewPageAsync(ProxyInfo? proxy)
@@ -35,13 +37,13 @@ public abstract class PlaywrightCrawler<TResult> : AbstractHeadlessCrawler<IPage
         }
         catch (PlaywrightException e)
         {
-            Logger.LogDebug("Navigation to '{url}' via proxy {proxy} failed: {message}", url, proxy, e.Message);
+            _logger.LogDebug("Navigation to '{url}' via proxy {proxy} failed: {message}", url, proxy, e.Message);
             return null;
         }
 
         if (response is null)
         {
-            Logger.LogWarning("No response from '{url}' via proxy {proxy}", url, proxy);
+            _logger.LogWarning("No response from '{url}' via proxy {proxy}", url, proxy);
             return null;
         }
 

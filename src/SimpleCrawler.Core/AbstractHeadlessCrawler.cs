@@ -22,15 +22,14 @@ public abstract class AbstractHeadlessCrawler<TPage, TResult> : AbstractRobotsCr
     private readonly RetryExecutor _retry;
     private readonly ConcurrentDictionary<string, ConcurrentQueue<TPage>> _pagePools;
     private readonly ConcurrentDictionary<TPage, string> _pageKeys;
-
-    protected ILogger Logger { get; }
+    private readonly ILogger _logger;
 
     protected AbstractHeadlessCrawler(IRobotClient robotClient, IOptions<HeadlessCrawlerOptions> options, ILogger logger, IProxyPool? pool = null) : base(robotClient, options, logger)
     {
         _retry = new RetryExecutor(options.Value.Retry, pool);
         _pagePools = new ConcurrentDictionary<string, ConcurrentQueue<TPage>>();
         _pageKeys = new ConcurrentDictionary<TPage, string>();
-        Logger = logger;
+        _logger = logger;
     }
 
     protected override async Task<TPage?> LoadResponse(string url, CancellationToken cancellationToken)
@@ -39,7 +38,7 @@ public abstract class AbstractHeadlessCrawler<TPage, TResult> : AbstractRobotsCr
             (proxy, token) => AttemptLoad(url, proxy, token),
             () =>
             {
-                Logger.LogWarning("Exhausted retries for '{url}'", url);
+                _logger.LogWarning("Exhausted retries for '{url}'", url);
                 return (TPage?)null;
             },
             cancellationToken);
@@ -69,7 +68,7 @@ public abstract class AbstractHeadlessCrawler<TPage, TResult> : AbstractRobotsCr
         var reason = RetryClassifier.Classify(status.Value);
         if (reason is not null)
         {
-            Logger.LogDebug("Proxy {proxy} returned {code} on '{url}'", proxy, status.Value, url);
+            _logger.LogDebug("Proxy {proxy} returned {code} on '{url}'", proxy, status.Value, url);
             await ClosePage(page);
             return RetryAttempt<TPage?>.Failed(reason.Value);
         }
@@ -79,11 +78,11 @@ public abstract class AbstractHeadlessCrawler<TPage, TResult> : AbstractRobotsCr
         if (status.Value.IsSuccessStatus())
         {
             await AfterSuccessfulLoad(page, cancellationToken);
-            Logger.LogDebug("Response '{code}' from url '{url}' via proxy {proxy}", status.Value, url, proxy);
+            _logger.LogDebug("Response '{code}' from url '{url}' via proxy {proxy}", status.Value, url, proxy);
             return RetryAttempt<TPage?>.Ok(page);
         }
 
-        Logger.LogWarning("Error {code} on url '{url}'", status.Value, url);
+        _logger.LogWarning("Error {code} on url '{url}'", status.Value, url);
         await DisposeResponse(page);
         return RetryAttempt<TPage?>.Ok(null);
     }
