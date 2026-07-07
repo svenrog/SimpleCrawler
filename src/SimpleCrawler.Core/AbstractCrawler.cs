@@ -35,6 +35,10 @@ public abstract class AbstractCrawler<TResponse, TDocument, TResult> : ICrawler<
 
     protected readonly ConcurrentHashSet<string> Visited;
 
+    // The token passed to Start, invariant for the crawl. Exposed so parse-stage hooks (ParseResponse,
+    // ExtractPageData, AnalyzeDocument) whose signatures don't carry a token can still observe cancellation.
+    protected CancellationToken CrawlCancellationToken { get; private set; }
+
     protected AbstractCrawler(IOptions<CrawlerOptions> options, ILogger logger)
     {
         _options = options.Value;
@@ -57,6 +61,8 @@ public abstract class AbstractCrawler<TResponse, TDocument, TResult> : ICrawler<
 
     public virtual async Task<TResult> Start(IReadOnlyList<string> entries, CancellationToken cancellationToken = default)
     {
+        CrawlCancellationToken = cancellationToken;
+
         await InitializeCrawl(entries, cancellationToken);
 
         Interlocked.Increment(ref _outstanding);
@@ -396,6 +402,10 @@ public abstract class AbstractCrawler<TResponse, TDocument, TResult> : ICrawler<
 
             if (discovered > 0)
                 _logger.LogDebug("Found {count} new outgoing links on '{url}'", discovered, resolvedUrl);
+        }
+        catch (OperationCanceledException) when (CrawlCancellationToken.IsCancellationRequested)
+        {
+            throw;
         }
         catch (TimeoutException ex)
         {

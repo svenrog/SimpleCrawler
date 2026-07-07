@@ -36,7 +36,7 @@ public class JsProbeCrawlerTests : IClassFixture<ProbeHostFixture>
             Assert.SkipUnless(V8Support.IsAvailable, V8Support.UnavailableReason);
 
         var subject = _context.GetJsCrawler(engine);
-        var result = await subject.Start(ProbeHostFixture.HostName(capability), _context.CancellationSource.Token);
+        var result = await subject.Start(ProbeHostFixture.HostName(capability), TestContext.Current.CancellationToken);
 
         var expected = ProbeHostFixture.LinksFor(capability);
         Assert.NotEmpty(expected);

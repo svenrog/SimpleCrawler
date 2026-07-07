@@ -1,4 +1,8 @@
-﻿using SimpleCrawler.AngleSharp;
+﻿using Microsoft.AspNetCore.Builder;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
+using SimpleCrawler.AngleSharp;
 using SimpleCrawler.Core;
 using SimpleCrawler.Core.Models;
 using SimpleCrawler.HtmlAgilityPack;
@@ -10,10 +14,6 @@ using SimpleCrawler.Playwright;
 using SimpleCrawler.Puppeteer;
 using SimpleCrawler.Tests.Common.Extensions;
 using SimpleCrawler.Tests.Models;
-using Microsoft.AspNetCore.Builder;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Logging.Abstractions;
 
 namespace SimpleCrawler.Tests.Fixtures;
 

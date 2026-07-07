@@ -20,7 +20,7 @@ public class RobotsTests : IClassFixture<RobotsHostFixture>
     public async Task HtmlAgilityPackCrawler_Can_Crawl_Using_Sitemap()
     {
         var subject = _context.ServiceProvider.GetRequiredService<DefaultHtmlAgilityPackCrawler>();
-        var result = await subject.Start(RobotsHostFixture.HostName, _context.CancellationSource.Token);
+        var result = await subject.Start(RobotsHostFixture.HostName, TestContext.Current.CancellationToken);
 
         AssertResult(result);
     }

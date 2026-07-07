@@ -20,7 +20,7 @@ public class MultiHostCrawlerTests : IClassFixture<MultiHostFixture>
 
         var result = await subject.Start(
             [MultiHostFixture.HostA, MultiHostFixture.HostB],
-            _context.CancellationSource.Token);
+            TestContext.Current.CancellationToken);
 
         string[] expected =
         [
@@ -38,7 +38,7 @@ public class MultiHostCrawlerTests : IClassFixture<MultiHostFixture>
     {
         var subject = _context.CreateCrawler();
 
-        var result = await subject.Start(MultiHostFixture.HostA, _context.CancellationSource.Token);
+        var result = await subject.Start(MultiHostFixture.HostA, TestContext.Current.CancellationToken);
 
         string[] expected =
         [

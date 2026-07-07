@@ -1,5 +1,4 @@
 using Microsoft.Extensions.Logging;
-using System.Net;
 
 namespace SimpleCrawler.Core.Proxy;
 
@@ -47,7 +46,7 @@ public sealed class ProxyRoutingHandler : HttpMessageHandler
                 continue;
             }
 
-            var kind = Classify(response.StatusCode);
+            var kind = ProxyFailureClassifier.Classify((int)response.StatusCode);
 
             if (kind is null)
             {
@@ -64,18 +63,6 @@ public sealed class ProxyRoutingHandler : HttpMessageHandler
         }
 
         throw new HttpRequestException("All proxies failed for request.", lastError);
-    }
-
-    private static ProxyFailureKind? Classify(HttpStatusCode status)
-    {
-        var code = (int)status;
-        if (code == 407)
-            return ProxyFailureKind.ProxyAuth;
-        if (code == 429)
-            return ProxyFailureKind.Http429;
-        if (code is 500 or 502 or 503 or 504)
-            return ProxyFailureKind.Http5xx;
-        return null;
     }
 
     private static async Task<HttpRequestMessage> CloneRequestAsync(HttpRequestMessage request)
