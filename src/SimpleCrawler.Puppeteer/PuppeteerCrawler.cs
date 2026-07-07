@@ -3,6 +3,7 @@ using SimpleCrawler.Core.Extensions;
 using SimpleCrawler.Core.Helpers;
 using SimpleCrawler.Core.Models;
 using SimpleCrawler.Core.Proxy;
+using SimpleCrawler.Core.Retry;
 using SimpleCrawler.Core.Robots;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -16,7 +17,7 @@ public abstract class PuppeteerCrawler<TResult> : AbstractRobotsCrawler<IPage, I
     where TResult : IScrapeResult
 {
     private readonly PuppeteerBrowserSession _session;
-    private readonly ProxyRetryExecutor? _retry;
+    private readonly RetryExecutor _retry;
     private readonly ConcurrentDictionary<string, ConcurrentQueue<IPage>> _pagePools;
     private readonly ConcurrentDictionary<IPage, string> _pageKeys;
     private readonly ILogger _logger;
@@ -24,9 +25,7 @@ public abstract class PuppeteerCrawler<TResult> : AbstractRobotsCrawler<IPage, I
     protected PuppeteerCrawler(IRobotClient robotClient, PuppeteerBrowserSession session, IOptions<HeadlessCrawlerOptions> options, ILogger logger, IProxyPool? pool = null) : base(robotClient, options, logger)
     {
         _session = session;
-        _retry = options.Value.ProxyPool is not null && pool is not null
-            ? new ProxyRetryExecutor(pool, options.Value.ProxyPool.MaxRetries)
-            : null;
+        _retry = new RetryExecutor(options.Value.Retry, pool);
         _logger = logger;
         _pagePools = new ConcurrentDictionary<string, ConcurrentQueue<IPage>>();
         _pageKeys = new ConcurrentDictionary<IPage, string>();
@@ -34,20 +33,17 @@ public abstract class PuppeteerCrawler<TResult> : AbstractRobotsCrawler<IPage, I
 
     protected override async Task<IPage?> LoadResponse(string url, CancellationToken cancellationToken)
     {
-        if (_retry is null)
-            return await LoadOnce(url, null, cancellationToken);
-
         return await _retry.ExecuteAsync(
             (proxy, token) => AttemptLoad(url, proxy, token),
             () =>
             {
-                _logger.LogWarning("Exhausted proxy retries for '{url}'", url);
+                _logger.LogWarning("Exhausted retries for '{url}'", url);
                 return (IPage?)null;
             },
             cancellationToken);
     }
 
-    private async Task<ProxyAttempt<IPage?>> AttemptLoad(string url, ProxyInfo? proxy, CancellationToken cancellationToken)
+    private async Task<RetryAttempt<IPage?>> AttemptLoad(string url, ProxyInfo? proxy, CancellationToken cancellationToken)
     {
         var page = await AcquirePage(proxy);
 
@@ -56,27 +52,32 @@ public abstract class PuppeteerCrawler<TResult> : AbstractRobotsCrawler<IPage, I
         {
             response = await page.GoToAsync(url, GetNavigationOptions()).WaitAsync(cancellationToken);
         }
+        catch (OperationCanceledException)
+        {
+            await ClosePage(page);
+            throw;
+        }
         catch (PuppeteerException e)
         {
-            _logger.LogDebug("Proxy {proxy} failed on '{url}': {message}", proxy, url, e.Message);
+            _logger.LogDebug("Navigation to '{url}' via proxy {proxy} failed: {message}", url, proxy, e.Message);
             await ClosePage(page);
-            return ProxyAttempt<IPage?>.Failed(ProxyFailureKind.Connection);
+            return RetryAttempt<IPage?>.Failed(RetryReason.Connection);
         }
 
         if (response is null)
         {
             _logger.LogWarning("No response from '{url}' via proxy {proxy}", url, proxy);
             await ClosePage(page);
-            return ProxyAttempt<IPage?>.Failed(ProxyFailureKind.Connection);
+            return RetryAttempt<IPage?>.Failed(RetryReason.Connection);
         }
 
         var status = (int)response.Status;
-        var kind = ProxyFailureClassifier.Classify(status);
-        if (kind is not null)
+        var reason = RetryClassifier.Classify(status);
+        if (reason is not null)
         {
             _logger.LogDebug("Proxy {proxy} returned {code} on '{url}'", proxy, status, url);
             await ClosePage(page);
-            return ProxyAttempt<IPage?>.Failed(kind.Value);
+            return RetryAttempt<IPage?>.Failed(reason.Value);
         }
 
         _pageKeys[page] = BrowserProxyHelper.ContextKey(proxy);
@@ -84,40 +85,12 @@ public abstract class PuppeteerCrawler<TResult> : AbstractRobotsCrawler<IPage, I
         if (status.IsSuccessStatus())
         {
             _logger.LogDebug("Response '{code}' from url '{url}' via proxy {proxy}", status, url, proxy);
-            return ProxyAttempt<IPage?>.Ok(page);
+            return RetryAttempt<IPage?>.Ok(page);
         }
 
         _logger.LogWarning("Error {code} on url '{url}'", status, url);
         await DisposeResponse(page);
-        return ProxyAttempt<IPage?>.Ok(null);
-    }
-
-    private async Task<IPage?> LoadOnce(string url, ProxyInfo? proxy, CancellationToken cancellationToken)
-    {
-        cancellationToken.ThrowIfCancellationRequested();
-
-        var page = await AcquirePage(proxy);
-
-        var response = await page.GoToAsync(url, GetNavigationOptions()).WaitAsync(cancellationToken);
-        if (response == null)
-        {
-            _logger.LogWarning("No response from '{url}'", url);
-            await DisposeResponse(page);
-
-            return null;
-        }
-        else if (((int)response.Status).IsSuccessStatus())
-        {
-            _logger.LogDebug("Response '{code}' from url '{url}'", response.Status, url);
-            return page;
-        }
-        else
-        {
-            _logger.LogWarning("Error {code} on url '{url}'", response.Status, url);
-            await DisposeResponse(page);
-
-            return null;
-        }
+        return RetryAttempt<IPage?>.Ok(null);
     }
 
     private async ValueTask<IPage> AcquirePage(ProxyInfo? proxy)

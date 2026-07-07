@@ -1,4 +1,5 @@
 using SimpleCrawler.Core.Proxy;
+using SimpleCrawler.Core.Retry;
 
 namespace SimpleCrawler.Tests;
 
@@ -44,7 +45,7 @@ public class ProxyPoolTests
         var dead = a;
 
         for (var i = 0; i < 3; i++)
-            pool.ReportFailure(dead, ProxyFailureKind.Connection);
+            pool.ReportFailure(dead, RetryReason.Connection);
 
         for (var i = 0; i < 5; i++)
             Assert.Equal(b, pool.Acquire());
@@ -64,7 +65,7 @@ public class ProxyPoolTests
 
         var dead = pool.Acquire()!;
         for (var i = 0; i < 3; i++)
-            pool.ReportFailure(dead, ProxyFailureKind.Connection);
+            pool.ReportFailure(dead, RetryReason.Connection);
 
         await Task.Delay(130, TestContext.Current.CancellationToken);
 
@@ -85,7 +86,7 @@ public class ProxyPoolTests
             MinHealthyRatio = 0.6,
         });
 
-        pool.ReportFailure(Info("a"), ProxyFailureKind.Connection);
+        pool.ReportFailure(Info("a"), RetryReason.Connection);
 
         Assert.Null(pool.Acquire());
     }
@@ -101,8 +102,8 @@ public class ProxyPoolTests
             MinHealthyRatio = 0.3,
         });
 
-        pool.ReportFailure(proxies[0], ProxyFailureKind.Connection);
-        pool.ReportFailure(proxies[1], ProxyFailureKind.Connection);
+        pool.ReportFailure(proxies[0], RetryReason.Connection);
+        pool.ReportFailure(proxies[1], RetryReason.Connection);
 
         Assert.NotNull(pool.Acquire());
     }
@@ -118,7 +119,7 @@ public class ProxyPoolTests
             MinHealthyRatio = 0.99,
         });
 
-        pool.ReportFailure(only, ProxyFailureKind.Connection);
+        pool.ReportFailure(only, RetryReason.Connection);
 
         Assert.NotNull(pool.Acquire());
     }
@@ -131,8 +132,8 @@ public class ProxyPoolTests
 
         Assert.Equal(2, pool.Snapshot().Healthy);
 
-        pool.ReportFailure(proxies[0], ProxyFailureKind.Connection);
-        pool.ReportFailure(proxies[0], ProxyFailureKind.Connection);
+        pool.ReportFailure(proxies[0], RetryReason.Connection);
+        pool.ReportFailure(proxies[0], RetryReason.Connection);
 
         var snapshot = pool.Snapshot();
         Assert.Equal(1, snapshot.Healthy);
@@ -145,9 +146,9 @@ public class ProxyPoolTests
         var proxies = new[] { Info("a"), Info("b") };
         var pool = new ProxyPool(proxies, new ProxyPoolOptions { FailureThreshold = 2 });
 
-        pool.ReportFailure(proxies[0], ProxyFailureKind.Connection);
+        pool.ReportFailure(proxies[0], RetryReason.Connection);
         pool.ReportSuccess(proxies[0]);
-        pool.ReportFailure(proxies[0], ProxyFailureKind.Connection);
+        pool.ReportFailure(proxies[0], RetryReason.Connection);
 
         Assert.Equal(2, pool.Snapshot().Healthy);
     }

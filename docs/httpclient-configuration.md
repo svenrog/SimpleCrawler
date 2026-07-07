@@ -16,6 +16,7 @@ Two things worth knowing:
 - The hook is applied to **both** the page client and the internal `robots.txt`/sitemap client, so a site that puts those behind the same auth is fetched with the same credentials.
 - It runs *before* the crawler sets its defaults (HTTP/2, and the headers from the
   [`BrowserProfile`](./crawler-options.md#browserprofile)). A `User-Agent` (or any profile header) you set in the hook is kept — the crawler won't overwrite one that's already present.
+- The request timeout is left uncapped here on purpose, a per-attempt timeout in the retry layer bounds each attempt instead, so a `Timeout` set in the hook is overwritten. Tune it via [`Retry.AttemptTimeout`](./crawler-options.md#retry).
 
 ## Cookies
 

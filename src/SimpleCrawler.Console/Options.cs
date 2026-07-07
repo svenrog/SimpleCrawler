@@ -28,8 +28,20 @@ public sealed class Options
     [Option('p', "proxy", Required = false, HelpText = "A proxy to use for requests (or a reference to a list of proxies)")]
     public string? Proxy { get; set; }
 
-    [Option("proxyRetries", Required = false, Default = 3, HelpText = "Max proxy retries per request before surfacing the failure.")]
-    public int ProxyRetries { get; set; } = 3;
+    [Option("retries", Required = false, Default = 3, HelpText = "Max retry attempts per request before surfacing the failure (applies with or without proxies).")]
+    public int Retries { get; set; } = 3;
+
+    [Option("retryDelay", Required = false, Default = 500, HelpText = "Base backoff in milliseconds between retries; grows exponentially with jitter up to --maxRetryDelay.")]
+    public int RetryDelay { get; set; } = 500;
+
+    [Option("maxRetryDelay", Required = false, Default = 30000, HelpText = "Upper bound in milliseconds on the backoff between retries.")]
+    public int MaxRetryDelay { get; set; } = 30000;
+
+    [Option("attemptTimeout", Required = false, Default = 100000, HelpText = "Per-attempt timeout in milliseconds; a slower attempt is cancelled and retried. 0 disables it.")]
+    public int AttemptTimeout { get; set; } = 100000;
+
+    [Option("proxyRetries", Required = false, Hidden = true, HelpText = "Deprecated alias for --retries.")]
+    public int? ProxyRetries { get; set; }
 
     [Option("proxyCooldown", Required = false, Default = 60, HelpText = "Seconds a failing proxy is benched before being retried.")]
     public int ProxyCooldown { get; set; } = 60;

@@ -1,6 +1,7 @@
 using SimpleCrawler.Core;
 using SimpleCrawler.Core.Extensions;
 using SimpleCrawler.Core.Proxy;
+using SimpleCrawler.Core.Retry;
 using SimpleCrawler.Core.Robots;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -11,36 +12,31 @@ namespace SimpleCrawler.Puppeteer;
 public sealed class PuppeteerRobotClient : AbstractBrowserRobotClient
 {
     private readonly PuppeteerBrowserSession _session;
-    private readonly ProxyRetryExecutor? _retry;
+    private readonly RetryExecutor _retry;
     private readonly ILogger<PuppeteerRobotClient> _logger;
 
     public PuppeteerRobotClient(PuppeteerBrowserSession session, IOptions<HeadlessCrawlerOptions> options, ILogger<PuppeteerRobotClient> logger, IProxyPool? pool = null)
     {
         _session = session;
-        _retry = options.Value.ProxyPool is not null && pool is not null
-            ? new ProxyRetryExecutor(pool, options.Value.ProxyPool.MaxRetries)
-            : null;
+        _retry = new RetryExecutor(options.Value.Retry, pool);
         _logger = logger;
     }
 
     protected override async Task<RobotResourceResponse> FetchAsync(string url, CancellationToken cancellationToken)
     {
-        if (_retry is null)
-            return (await FetchClassified(url, null, cancellationToken)).Response;
-
         return await _retry.ExecuteWithDirectFallbackAsync(
             async (proxy, token) =>
             {
-                var (response, kind) = await FetchClassified(url, proxy, token);
-                return kind is null
-                    ? ProxyAttempt<RobotResourceResponse>.Ok(response)
-                    : ProxyAttempt<RobotResourceResponse>.Failed(kind.Value, response);
+                var (response, reason) = await FetchClassified(url, proxy, token);
+                return reason is null
+                    ? RetryAttempt<RobotResourceResponse>.Ok(response)
+                    : RetryAttempt<RobotResourceResponse>.Failed(reason.Value, response);
             },
             () => new RobotResourceResponse(0, null, null),
             cancellationToken);
     }
 
-    private async Task<(RobotResourceResponse Response, ProxyFailureKind? Kind)> FetchClassified(string url, ProxyInfo? proxy, CancellationToken cancellationToken)
+    private async Task<(RobotResourceResponse Response, RetryReason? Reason)> FetchClassified(string url, ProxyInfo? proxy, CancellationToken cancellationToken)
     {
         var page = await _session.NewPageAsync(proxy);
 
@@ -50,27 +46,27 @@ public sealed class PuppeteerRobotClient : AbstractBrowserRobotClient
             if (response is null)
             {
                 _logger.LogDebug("No response from '{url}'", url);
-                return (new RobotResourceResponse(0, null, null), ProxyFailureKind.Connection);
+                return (new RobotResourceResponse(0, null, null), RetryReason.Connection);
             }
 
             var status = (int)response.Status;
-            var kind = ProxyFailureClassifier.Classify(status);
+            var reason = RetryClassifier.Classify(status);
 
             // Only a successful response carries a body worth reading; mirroring the HttpClient robot
             // client, a non-success probe (e.g. an absent /sitemap.xml) is not a fetch error, and
             // reading its body would throw ("Unable to get response body").
             if (!status.IsSuccessStatus())
-                return (new RobotResourceResponse(status, null, null), kind);
+                return (new RobotResourceResponse(status, null, null), reason);
 
             var body = await response.BufferAsync().AsTask().WaitAsync(cancellationToken);
             response.Headers.TryGetValue("content-type", out var contentType);
 
-            return (new RobotResourceResponse(status, body, ParseMediaType(contentType)), kind);
+            return (new RobotResourceResponse(status, body, ParseMediaType(contentType)), reason);
         }
         catch (PuppeteerException e)
         {
             _logger.LogDebug("Failed to fetch '{url}': {message}", url, e.Message);
-            return (new RobotResourceResponse(0, null, null), ProxyFailureKind.Connection);
+            return (new RobotResourceResponse(0, null, null), RetryReason.Connection);
         }
         finally
         {

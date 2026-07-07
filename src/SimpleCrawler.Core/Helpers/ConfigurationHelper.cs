@@ -1,4 +1,5 @@
 ﻿using SimpleCrawler.Core.Proxy;
+using SimpleCrawler.Core.Retry;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -13,6 +14,10 @@ public static class ConfigurationHelper
         // Single-domain crawling benefits from HTTP/2 multiplexing; fall back to 1.1 where unsupported.
         client.DefaultRequestVersion = HttpVersion.Version20;
         client.DefaultVersionPolicy = HttpVersionPolicy.RequestVersionOrLower;
+
+        // The RetryHandler bounds each attempt (RetryOptions.AttemptTimeout); a global HttpClient timeout
+        // would instead cap the whole retry sequence and cancel mid-retry, so leave it uncapped.
+        client.Timeout = Timeout.InfiniteTimeSpan;
 
         var profile = options.BrowserProfile;
 
@@ -61,16 +66,23 @@ public static class ConfigurationHelper
     {
         var pool = provider.GetService<IProxyPool>();
         var options = provider.GetRequiredService<IOptions<CrawlerOptions>>().Value;
+        var logger = provider.GetRequiredService<ILogger<RetryHandler>>();
 
         if (pool is not null && options.ProxyPool is not null)
         {
-            return new ProxyRoutingHandler(
-                pool,
+            return new RetryHandler(
+                options.Retry,
                 provider.GetRequiredService<IProxyClientProvider>(),
-                options.ProxyPool,
-                provider.GetRequiredService<ILogger<ProxyRoutingHandler>>());
+                pool,
+                directInner: null,
+                logger);
         }
 
-        return CreatePrimaryHandler(options);
+        return new RetryHandler(
+            options.Retry,
+            clients: null,
+            pool: null,
+            directInner: CreatePrimaryHandler(options),
+            logger);
     }
 }
