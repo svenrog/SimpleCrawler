@@ -53,7 +53,7 @@ smpcrawl -e "<entry url>" -o "<output file>"
 ```
 multiple domains are supported too
 ```
-smpcrawl -e "<entry url 1>" -e "<entry url 2>" -o "urls.txt"
+smpcrawl -e "<entry url 1>" -e "<entry url 2>" ...
 ```
 
 Full list of possible options can be found [here](./src/SimpleCrawler.Console/Options.cs).
