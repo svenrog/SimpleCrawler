@@ -57,12 +57,19 @@ public sealed class PuppeteerRobotClient : AbstractBrowserRobotClient
             var response = await page.GoToAsync(url, Constants.DefaultNavigationOptions).WaitAsync(cancellationToken);
             if (response is null)
             {
-                _logger.LogWarning("No response from '{url}'", url);
+                _logger.LogDebug("No response from '{url}'", url);
                 return (new RobotResourceResponse(0, null, null), ProxyFailureKind.Connection);
             }
 
             var status = (int)response.Status;
             var kind = ProxyFailureClassifier.Classify(status);
+
+            // Only a successful response carries a body worth reading; mirroring the HttpClient robot
+            // client, a non-success probe (e.g. an absent /sitemap.xml) is not a fetch error, and
+            // reading its body would throw ("Unable to get response body").
+            if (status is < 200 or >= 300)
+                return (new RobotResourceResponse(status, null, null), kind);
+
             var body = await response.BufferAsync().AsTask().WaitAsync(cancellationToken);
             response.Headers.TryGetValue("content-type", out var contentType);
 
@@ -70,7 +77,7 @@ public sealed class PuppeteerRobotClient : AbstractBrowserRobotClient
         }
         catch (PuppeteerException e)
         {
-            _logger.LogWarning("Failed to fetch '{url}': {message}", url, e.Message);
+            _logger.LogDebug("Failed to fetch '{url}': {message}", url, e.Message);
             return (new RobotResourceResponse(0, null, null), ProxyFailureKind.Connection);
         }
         finally

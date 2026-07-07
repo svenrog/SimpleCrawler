@@ -57,19 +57,27 @@ public sealed class PlaywrightRobotClient : AbstractBrowserRobotClient
             var response = await page.GotoAsync(url, new PageGotoOptions { WaitUntil = WaitUntilState.DOMContentLoaded }).WaitAsync(cancellationToken);
             if (response is null)
             {
-                _logger.LogWarning("No response from '{url}'", url);
+                _logger.LogDebug("No response from '{url}'", url);
                 return (new RobotResourceResponse(0, null, null), ProxyFailureKind.Connection);
             }
 
-            var kind = ProxyFailureClassifier.Classify(response.Status);
+            var status = response.Status;
+            var kind = ProxyFailureClassifier.Classify(status);
+
+            // Only a successful response carries a body worth reading; mirroring the HttpClient robot
+            // client, a non-success probe (e.g. an absent /sitemap.xml) is not a fetch error, and
+            // reading its body would throw.
+            if (status is < 200 or >= 300)
+                return (new RobotResourceResponse(status, null, null), kind);
+
             var body = await response.BodyAsync().WaitAsync(cancellationToken);
             response.Headers.TryGetValue("content-type", out var contentType);
 
-            return (new RobotResourceResponse(response.Status, body, ParseMediaType(contentType)), kind);
+            return (new RobotResourceResponse(status, body, ParseMediaType(contentType)), kind);
         }
         catch (PlaywrightException e)
         {
-            _logger.LogWarning("Failed to fetch '{url}': {message}", url, e.Message);
+            _logger.LogDebug("Failed to fetch '{url}': {message}", url, e.Message);
             return (new RobotResourceResponse(0, null, null), ProxyFailureKind.Connection);
         }
         finally

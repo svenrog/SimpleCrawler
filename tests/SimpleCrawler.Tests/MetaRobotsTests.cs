@@ -19,7 +19,7 @@ public class MetaRobotsTests : IClassFixture<MetaRobotsHostFixture>
     public async Task Crawler_Excludes_Noindex_Pages_When_Respecting_Meta_Robots()
     {
         var subject = _context.ServiceProvider.GetRequiredService<DefaultHtmlAgilityPackCrawler>();
-        var result = await subject.Start(MetaRobotsHostFixture.HostName, _context.CancellationSource.Token);
+        var result = await subject.Start(MetaRobotsHostFixture.HostName, TestContext.Current.CancellationToken);
 
         Assert.DoesNotContain(MetaRobotsHostFixture.HiddenUrl, result.Urls);
 

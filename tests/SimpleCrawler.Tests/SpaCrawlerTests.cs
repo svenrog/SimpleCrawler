@@ -34,7 +34,7 @@ public class SpaCrawlerTests : IClassFixture<SpaHostFixture>
     public async Task PlaywrightCrawler_Can_Crawl(string framework)
     {
         var subject = _context.ServiceProvider.GetRequiredService<DefaultPlaywrightCrawler>();
-        var result = await subject.Start(SpaHostFixture.HostName(framework), _context.CancellationSource.Token);
+        var result = await subject.Start(SpaHostFixture.HostName(framework), TestContext.Current.CancellationToken);
 
         AssertResult(framework, result);
     }
@@ -44,7 +44,7 @@ public class SpaCrawlerTests : IClassFixture<SpaHostFixture>
     public async Task PuppeteerCrawler_Can_Crawl(string framework)
     {
         var subject = _context.ServiceProvider.GetRequiredService<DefaultPuppeteerCrawler>();
-        var result = await subject.Start(SpaHostFixture.HostName(framework), _context.CancellationSource.Token);
+        var result = await subject.Start(SpaHostFixture.HostName(framework), TestContext.Current.CancellationToken);
 
         AssertResult(framework, result);
     }
@@ -60,7 +60,7 @@ public class SpaCrawlerTests : IClassFixture<SpaHostFixture>
             Assert.Skip("Vue's createRenderer import is non-callable under Jint ESM evaluation (renders on V8).");
 
         var subject = _context.ServiceProvider.GetRequiredService<DefaultJintCrawler>();
-        var result = await subject.Start(SpaHostFixture.HostName(framework), _context.CancellationSource.Token);
+        var result = await subject.Start(SpaHostFixture.HostName(framework), TestContext.Current.CancellationToken);
 
         AssertResult(framework, result);
     }
@@ -72,7 +72,7 @@ public class SpaCrawlerTests : IClassFixture<SpaHostFixture>
         Assert.SkipUnless(V8Support.IsAvailable, V8Support.UnavailableReason);
 
         var subject = _context.ServiceProvider.GetRequiredService<DefaultV8Crawler>();
-        var result = await subject.Start(SpaHostFixture.HostName(framework), _context.CancellationSource.Token);
+        var result = await subject.Start(SpaHostFixture.HostName(framework), TestContext.Current.CancellationToken);
 
         AssertResult(framework, result);
     }
