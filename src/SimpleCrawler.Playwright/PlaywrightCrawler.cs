@@ -1,4 +1,5 @@
 using SimpleCrawler.Core;
+using SimpleCrawler.Core.Extensions;
 using SimpleCrawler.Core.Helpers;
 using SimpleCrawler.Core.Models;
 using SimpleCrawler.Core.Proxy;
@@ -81,7 +82,7 @@ public abstract class PlaywrightCrawler<TResult> : AbstractRobotsCrawler<IPage, 
 
         _pageKeys[page] = BrowserProxyHelper.ContextKey(proxy);
 
-        if (response.Status is >= 200 and < 300)
+        if (response.Status.IsSuccessStatus())
         {
             await WaitForNetworkIdle(page, cancellationToken);
             _logger.LogDebug("Response '{code}' from url '{url}' via proxy {proxy}", response.Status, url, proxy);
@@ -107,7 +108,7 @@ public abstract class PlaywrightCrawler<TResult> : AbstractRobotsCrawler<IPage, 
 
             return null;
         }
-        else if (response.Status >= 200 && response.Status < 300)
+        else if (response.Status.IsSuccessStatus())
         {
             await WaitForNetworkIdle(page, cancellationToken);
             _logger.LogDebug("Response '{code}' from url '{url}'", response.Status, url);

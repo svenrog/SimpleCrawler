@@ -2,6 +2,7 @@ using SimpleCrawler.Js.Abstractions;
 using SimpleCrawler.Js.Models;
 using SimpleCrawler.Js.Rendering;
 using SimpleCrawler.Core;
+using SimpleCrawler.Core.Extensions;
 using SimpleCrawler.Core.Helpers;
 using SimpleCrawler.Core.Models;
 using SimpleCrawler.Core.Robots;
@@ -29,7 +30,7 @@ public abstract class JsCrawler<TResult> : AbstractRobotsCrawler<JsExtract, JsEx
     {
         using var response = await _client.GetAsync(url, cancellationToken);
 
-        if (!response.IsSuccessStatusCode)
+        if (!response.IsSuccessStatus())
         {
             _logger.LogWarning("Error {code} on url '{url}'", response.StatusCode, url);
             return null;

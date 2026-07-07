@@ -25,7 +25,7 @@ public abstract class AbstractStaticHtmlCrawler<TDocument, TResult> : AbstractRo
     {
         using var response = await _client.GetAsync(url, cancellationToken);
 
-        if (!response.IsSuccessStatusCode)
+        if (!response.IsSuccessStatus())
         {
             _logger.LogWarning("Error {code} on url '{url}'", response.StatusCode, url);
 

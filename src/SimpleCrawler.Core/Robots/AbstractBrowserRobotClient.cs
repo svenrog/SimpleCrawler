@@ -1,5 +1,6 @@
 using System.Net.Mime;
 using System.Runtime.CompilerServices;
+using SimpleCrawler.Core.Extensions;
 
 namespace SimpleCrawler.Core.Robots;
 
@@ -29,7 +30,7 @@ public abstract class AbstractBrowserRobotClient : IRobotClient
     public async IAsyncEnumerable<UrlSetItem> LoadSitemapsAsync(Uri uri, DateTime? modifiedSince = null, [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         var response = await FetchAsync(uri.ToString(), cancellationToken);
-        if (response.Status is < 200 or >= 300 || response.Body is null)
+        if (!response.Status.IsSuccessStatus() || response.Body is null)
             yield break;
 
         using var stream = new MemoryStream(response.Body);

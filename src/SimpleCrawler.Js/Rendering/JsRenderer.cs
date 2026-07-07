@@ -3,6 +3,7 @@ using SimpleCrawler.Js.Errors;
 using SimpleCrawler.Js.Models;
 using SimpleCrawler.Js.Network;
 using SimpleCrawler.Js.Services;
+using SimpleCrawler.Core.Extensions;
 using Microsoft.Extensions.Logging;
 using System.Text;
 using System.Text.Json;
@@ -447,7 +448,7 @@ public sealed class JsRenderer
             return cached;
 
         using var response = await client.GetAsync(absolute, cancellationToken);
-        var source = response.IsSuccessStatusCode ? await response.Content.ReadAsStringAsync(cancellationToken) : null;
+        var source = response.IsSuccessStatus() ? await response.Content.ReadAsStringAsync(cancellationToken) : null;
         return sources.Store(absolute, source);
     }
 }
