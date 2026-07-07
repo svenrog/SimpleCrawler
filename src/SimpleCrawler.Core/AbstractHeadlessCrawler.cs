@@ -1,20 +1,16 @@
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using SimpleCrawler.Core.Extensions;
 using SimpleCrawler.Core.Helpers;
 using SimpleCrawler.Core.Models;
 using SimpleCrawler.Core.Proxy;
 using SimpleCrawler.Core.Retry;
 using SimpleCrawler.Core.Robots;
-using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
 using System.Collections.Concurrent;
 using System.Text.Json;
 
 namespace SimpleCrawler.Core;
 
-// Shared orchestration for headless (real-browser) backends: page-pool lifecycle keyed by proxy
-// context, the acquire/report/retry loop, and the single-evaluation page extraction. Each backend
-// (Playwright, Puppeteer) supplies only the vendor-specific primitives - open a page, navigate,
-// close it, run the extractor script - so the fetch pipeline lives in exactly one place.
 public abstract class AbstractHeadlessCrawler<TPage, TResult> : AbstractRobotsCrawler<TPage, TPage, TResult>
     where TPage : class
     where TResult : IScrapeResult
@@ -127,21 +123,14 @@ public abstract class AbstractHeadlessCrawler<TPage, TResult> : AbstractRobotsCr
         return Task.CompletedTask;
     }
 
-    // Opens a fresh page routed through the given proxy (null = direct).
     protected abstract Task<TPage> NewPageAsync(ProxyInfo? proxy);
 
-    // Navigates the page to the URL and returns the HTTP status, or null for a connection-level
-    // failure (the implementation logs the specific cause). Must throw OperationCanceledException on
-    // cancellation so the base can close the page and propagate.
     protected abstract Task<int?> NavigateAsync(TPage page, string url, ProxyInfo? proxy, CancellationToken cancellationToken);
 
-    // Closes a page, swallowing vendor-specific teardown exceptions.
     protected abstract Task ClosePageCore(TPage page);
 
-    // Runs the extraction script in the page and returns its JSON result.
     protected abstract Task<JsonElement> EvaluateExtractorAsync(TPage page, string script, CancellationToken cancellationToken);
 
-    // Optional post-load settling (e.g. waiting for network idle) once a page loads successfully.
     protected virtual Task AfterSuccessfulLoad(TPage page, CancellationToken cancellationToken)
     {
         return Task.CompletedTask;
