@@ -48,7 +48,7 @@ public abstract class JsCrawler<TResult> : AbstractRobotsCrawler<JsExtract, JsEx
 
     protected override ValueTask<PageExtract> ExtractPageData(JsExtract document)
     {
-        var extract = new PageExtract(GetAbsoluteUrl(document.CanonicalHref), IndexingHelper.ParseMetaRobots(document.RobotsContent), document.LinkHrefs);
+        var extract = new PageExtract(document.CanonicalHref, IndexingHelper.ParseMetaRobots(document.RobotsContent), document.LinkHrefs);
         return new ValueTask<PageExtract>(extract);
     }
 }

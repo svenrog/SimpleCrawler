@@ -13,8 +13,9 @@ public abstract class AbstractRobotsCrawler<TResponse, TDocument, TResult> : Abs
     private readonly ProductToken _productToken;
     private readonly ILogger _logger;
 
-    private IRobotRuleChecker? _robotRules;
-    private IRobotsTxt? _robots;
+    private Dictionary<string, IRobotRuleChecker> _rulesByHost;
+    private Dictionary<string, IRobotsTxt> _robotsByHost;
+    private Dictionary<string, double> _delayByHost;
 
     protected AbstractRobotsCrawler(IRobotClient robotClient, IOptions<CrawlerOptions> options, ILogger logger) : base(options, logger)
     {
@@ -22,6 +23,10 @@ public abstract class AbstractRobotsCrawler<TResponse, TDocument, TResult> : Abs
         _options = options.Value;
         _logger = logger;
         _productToken = ProductToken.Wildcard;
+
+        _rulesByHost = new Dictionary<string, IRobotRuleChecker>(StringComparer.OrdinalIgnoreCase);
+        _robotsByHost = new Dictionary<string, IRobotsTxt>(StringComparer.OrdinalIgnoreCase);
+        _delayByHost = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
 
         if (_options.BrowserProfile.UserAgent != null)
             _productToken = DeriveProductToken(_options.BrowserProfile.UserAgent);
@@ -36,20 +41,42 @@ public abstract class AbstractRobotsCrawler<TResponse, TDocument, TResult> : Abs
         return ProductToken.TryParse(name, out var token) ? token : ProductToken.Wildcard;
     }
 
-    protected override async ValueTask InitializeCrawl(string entry, CancellationToken cancellationToken)
+    protected override async ValueTask InitializeCrawl(IReadOnlyList<string> entries, CancellationToken cancellationToken)
     {
-        // Rules must be ready before base.InitializeCrawl enqueues the entry (Enqueue consults IsCrawlAllowed),
-        // so prime the site identity here and load robots.txt before delegating.
-        SetSiteIdentity(entry);
-        _robots = await _robotClient.LoadRobotsTxtAsync(SiteUri, cancellationToken);
+        // Rules must be ready before base.InitializeCrawl enqueues entries (Enqueue consults IsCrawlAllowed),
+        // so prime the site identities here and load each host's robots.txt before delegating. The scope is
+        // the exact entry-authority set, so every host that can ever be crawled is already known.
+        SetSiteIdentities(entries);
 
-        if (_options.RespectRobotsTxt && _robots.TryGetCrawlDelay(_productToken, out var crawlDelay))
-            _options.CrawlDelay = Math.Max(_options.CrawlDelay, crawlDelay);
+        _rulesByHost = new Dictionary<string, IRobotRuleChecker>(StringComparer.OrdinalIgnoreCase);
+        _robotsByHost = new Dictionary<string, IRobotsTxt>(StringComparer.OrdinalIgnoreCase);
+        _delayByHost = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
 
-        if (!_robots.TryGetRules(_productToken, out _robotRules))
-            _robotRules = RobotRuleChecker.Empty;
+        foreach (var (authority, entryUri) in EntryUris)
+        {
+            var delay = _options.CrawlDelay;
+            try
+            {
+                var robots = await _robotClient.LoadRobotsTxtAsync(entryUri, cancellationToken);
+                _robotsByHost[authority] = robots;
 
-        await base.InitializeCrawl(entry, cancellationToken);
+                if (_options.RespectRobotsTxt && robots.TryGetCrawlDelay(_productToken, out var crawlDelay))
+                    delay = Math.Max(delay, crawlDelay);
+
+                _rulesByHost[authority] = robots.TryGetRules(_productToken, out var rules) ? rules : RobotRuleChecker.Empty;
+            }
+            catch (Exception e) when (e is not OperationCanceledException)
+            {
+                // A single unreachable host must not abort a multi-host crawl; fall back to allowing the
+                // host so its own fetches decide reachability.
+                _logger.LogWarning("Could not load robots.txt for '{authority}': {message}", authority, e.Message);
+                _rulesByHost[authority] = RobotRuleChecker.Empty;
+            }
+
+            _delayByHost[authority] = delay;
+        }
+
+        await base.InitializeCrawl(entries, cancellationToken);
     }
 
     protected override async ValueTask BackgroundDiscovery(CancellationToken cancellationToken)
@@ -57,19 +84,23 @@ public abstract class AbstractRobotsCrawler<TResponse, TDocument, TResult> : Abs
         if (!_options.EnableSitemapDiscovery)
             return;
 
-        try
+        foreach (var (authority, entryUri) in EntryUris)
         {
-            var sitemap = _robots!.LoadSitemapAsync(SiteUri, null, cancellationToken);
-            await foreach (var item in sitemap)
-            {
-                var url = item.Location.ToString();
+            if (!_robotsByHost.TryGetValue(authority, out var robots))
+                continue;
 
-                DiscoverLink(url);
+            try
+            {
+                var sitemap = robots.LoadSitemapAsync(entryUri, null, cancellationToken);
+                await foreach (var item in sitemap)
+                {
+                    DiscoverLink(entryUri, item.Location.ToString());
+                }
             }
-        }
-        catch (Exception e) when (e is not OperationCanceledException)
-        {
-            _logger.LogWarning("Sitemap discovery failed: {message}", e.Message);
+            catch (Exception e) when (e is not OperationCanceledException)
+            {
+                _logger.LogWarning("Sitemap discovery failed for '{authority}': {message}", authority, e.Message);
+            }
         }
     }
 
@@ -78,15 +109,15 @@ public abstract class AbstractRobotsCrawler<TResponse, TDocument, TResult> : Abs
         if (!_options.RespectRobotsTxt)
             return true;
 
-        return _robotRules!.IsAllowed(GetSitePath(url));
+        var uri = new Uri(url);
+        if (!_rulesByHost.TryGetValue(uri.Authority, out var rules))
+            return true;
+
+        return rules.IsAllowed(uri.PathAndQuery);
     }
 
-    private string GetSitePath(string url)
+    protected override double GetCrawlDelay(string authority)
     {
-        var authority = SiteAuthority;
-        if (url.Length > authority.Length && url.StartsWith(authority, StringComparison.OrdinalIgnoreCase))
-            return url[authority.Length..];
-
-        return "/";
+        return _delayByHost.TryGetValue(authority, out var delay) ? delay : _options.CrawlDelay;
     }
 }

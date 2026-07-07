@@ -63,7 +63,7 @@ public abstract class PlaywrightCrawler<TResult> : AbstractRobotsCrawler<IPage, 
         var json = await response.EvaluateAsync(RenderedPageExtractor.Script);
         var (canonicalHref, robotsContent, linkHrefs) = RenderedPageExtractor.Parse(json.GetValueOrDefault());
 
-        return new PageExtract(GetAbsoluteUrl(canonicalHref), IndexingHelper.ParseMetaRobots(robotsContent), linkHrefs);
+        return new PageExtract(canonicalHref, IndexingHelper.ParseMetaRobots(robotsContent), linkHrefs);
     }
 
     private async Task WaitForNetworkIdle(IPage page)

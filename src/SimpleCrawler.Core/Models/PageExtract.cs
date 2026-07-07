@@ -1,3 +1,3 @@
 namespace SimpleCrawler.Core.Models;
 
-public readonly record struct PageExtract(string? CanonicalUrl, RobotsRules Robots, IReadOnlyList<string?> LinkHrefs);
+public readonly record struct PageExtract(string? CanonicalHref, RobotsRules Robots, IReadOnlyList<string?> LinkHrefs);

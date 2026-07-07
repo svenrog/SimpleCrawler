@@ -4,8 +4,8 @@ namespace SimpleCrawler.Console;
 
 public sealed class Options
 {
-    [Option('e', "entryPoint", Required = true, Default = "http://127.0.0.1/", HelpText = "First page to visit")]
-    public string Entry { get; set; } = "http://127.0.0.1/";
+    [Option('e', "entryPoint", Required = true, Min = 1, HelpText = "Entry page(s) to visit. Repeat -e or pass several after one -e (e.g. -e https://a.com -e https://b.com). The crawl stays within the exact hosts listed.")]
+    public IEnumerable<string> Entry { get; set; } = [];
 
     [Option('c', "cookie", Required = false, HelpText = "Sets cookie header")]
     public string? Cookie { get; set; }

@@ -25,6 +25,7 @@ internal static class Program
         {
             settings.HelpWriter = System.Console.Error;
             settings.CaseInsensitiveEnumValues = true;
+            settings.AllowMultiInstance = true;
         });
 
         var parseResult = parser.ParseArguments<Options>(arguments);
@@ -53,7 +54,14 @@ internal static class Program
         var options = host.Services.GetRequiredService<Options>();
         var crawler = host.Services.GetRequiredService<ICrawler>();
 
-        var result = await crawler.Start(options.Entry, tokenSource.Token);
+        var entries = options.Entry.ToList();
+        if (entries.Count == 0)
+        {
+            logger.LogError("At least one entry point (-e) is required.");
+            return;
+        }
+
+        var result = await crawler.Start(entries, tokenSource.Token);
 
         await File.WriteAllLinesAsync(options.Output, result.Urls, tokenSource.Token);
 
