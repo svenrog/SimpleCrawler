@@ -3,6 +3,7 @@ using SimpleCrawler.Console.Helper;
 using SimpleCrawler.Core;
 using SimpleCrawler.Core.Browser;
 using SimpleCrawler.Core.Proxy;
+using SimpleCrawler.Core.Retry;
 using SimpleCrawler.HtmlAgilityPack;
 using SystemConsole = System.Console;
 
@@ -32,6 +33,14 @@ internal static class ServiceCollectionExtensions
             RespectMetaRobots = options.RespectRobots,
             RespectRobotsTxt = options.RespectRobots,
             BrowserProfile = MapBrowserProfile(options),
+            Retry = new RetryOptions
+            {
+                // --proxyRetries is the deprecated alias; honour it when supplied, else --retries.
+                MaxRetries = options.ProxyRetries ?? options.Retries,
+                BaseDelay = TimeSpan.FromMilliseconds(options.RetryDelay),
+                MaxDelay = TimeSpan.FromMilliseconds(options.MaxRetryDelay),
+                AttemptTimeout = TimeSpan.FromMilliseconds(options.AttemptTimeout),
+            },
         };
     }
 
@@ -54,7 +63,6 @@ internal static class ServiceCollectionExtensions
 
         var poolOptions = new ProxyPoolOptions
         {
-            MaxRetries = options.ProxyRetries,
             Cooldown = TimeSpan.FromSeconds(options.ProxyCooldown),
             MinHealthyRatio = options.ProxyMinHealthy,
         };

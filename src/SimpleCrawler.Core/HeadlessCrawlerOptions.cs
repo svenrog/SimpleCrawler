@@ -1,9 +1,16 @@
+using SimpleCrawler.Core.Retry;
+
 namespace SimpleCrawler.Core;
 
 public sealed class HeadlessCrawlerOptions : CrawlerOptions
 {
+    // A headless navigation is far costlier than an HTTP GET, so retrying a persistently-dead URL
+    // several times hurts more than it helps; headless defaults to a smaller budget than static.
+    private const int _defaultHeadlessMaxRetries = 1;
+
     public HeadlessCrawlerOptions()
     {
+        Retry = new RetryOptions { MaxRetries = _defaultHeadlessMaxRetries };
     }
 
     public HeadlessCrawlerOptions(CrawlerOptions options)
@@ -17,6 +24,7 @@ public sealed class HeadlessCrawlerOptions : CrawlerOptions
         EnableSitemapDiscovery = options.EnableSitemapDiscovery;
         BrowserProfile = options.BrowserProfile;
         ProxyPool = options.ProxyPool;
+        Retry = options.Retry;
     }
 
     public bool BlockNonEssentialResources { get; set; } = true;

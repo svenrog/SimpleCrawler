@@ -1,3 +1,4 @@
+using SimpleCrawler.Core.Retry;
 using System.Diagnostics;
 
 namespace SimpleCrawler.Core.Proxy;
@@ -57,7 +58,7 @@ public sealed class ProxyPool : IProxyPool
             health.RecordSuccess();
     }
 
-    public void ReportFailure(ProxyInfo proxy, ProxyFailureKind kind)
+    public void ReportFailure(ProxyInfo proxy, RetryReason reason)
     {
         if (_byProxy.TryGetValue(proxy, out var health))
             health.RecordFailure();

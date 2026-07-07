@@ -14,6 +14,7 @@ This project stemmed from the need to crawl a single domain in preparation of lo
 | Robots.txt | :heavy_check_mark: |
 | Browser impersonation | :heavy_check_mark: |
 | Proxy pooling | :heavy_check_mark: |
+| Retries & backoff | :heavy_check_mark: |
 | Modern .NET features | :heavy_check_mark: |
 | Console colors | :rainbow: |
 
@@ -90,3 +91,8 @@ Among the test projects there are [TestHosts](./tests/SimpleCrawler.TestHost/Inf
 This implementation is based on the work of Adam Shirt that is found [here](https://github.com/drmathias/robots).
 The matching engine has been reworked by me for performance reasons.
 A full attributation and license can be found under [`SimpleCrawler.Core.Robots`](./src/SimpleCrawler.Core/Robots/).
+
+## Change log
+
+Changes are documented in [CHANGELOG.md](./CHANGELOG.md).
+

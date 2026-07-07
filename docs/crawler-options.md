@@ -35,6 +35,32 @@ Honor `<meta name="robots">`. `noindex` pages are fetched for their links but ex
 
 Seed from `sitemap.xml` (via `robots.txt`) in addition to following links. Disable to crawl only what's reachable from the entry URL (this is used for testing mainly).
 
+## Retry
+
+Every fetch is retried on transient failures, connection errors, timeouts, `429`, and `5xx` — across **all** backends, with or without a proxy pool. Backoff is exponential with jitter, and a per-attempt timeout cancels and retries a stalled request. Non-transient responses (`404`, `403`, …) are returned as-is, never retried.
+
+`RetryOptions` (`src/SimpleCrawler.Core/Retry/RetryOptions.cs`):
+
+| Option | Default | |
+| --- | --- | --- |
+| `MaxRetries` | `3` (headless `1`) | Extra attempts after the first. |
+| `BaseDelay` | `500ms` | First backoff; doubles each retry. |
+| `MaxDelay` | `30s` | Backoff ceiling. |
+| `JitterFactor` | `0.2` | ±20% randomisation on each delay. |
+| `DelayOnRateLimit` | `true` | Back off on `429` even when another proxy is free. |
+| `AttemptTimeout` | `100s` | Per-attempt cap; `0` disables. |
+
+```csharp
+using SimpleCrawler.Core.Retry;
+
+var options = new CrawlerOptions
+{
+    Retry = new RetryOptions { MaxRetries = 5, BaseDelay = TimeSpan.FromSeconds(1) },
+};
+```
+
+With a multi-proxy pool a retry rotates to the next proxy instantly (no delay); without one — or on a single-proxy pool — it backs off. See [proxy pooling](./httpclient-configuration.md#headless-backends). The CLI exposes `--retries`, `--retryDelay`, `--maxRetryDelay`, and `--attemptTimeout`.
+
 ## BrowserProfile
 
 The identity presented to the target: `User-Agent`, `Accept`/`Accept-Language`, `Locale`, and

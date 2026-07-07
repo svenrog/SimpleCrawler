@@ -1,3 +1,5 @@
+using SimpleCrawler.Core.Retry;
+
 namespace SimpleCrawler.Core.Proxy;
 
 public interface IProxyPool
@@ -8,7 +10,7 @@ public interface IProxyPool
 
     void ReportSuccess(ProxyInfo proxy);
 
-    void ReportFailure(ProxyInfo proxy, ProxyFailureKind kind);
+    void ReportFailure(ProxyInfo proxy, RetryReason reason);
 
     ProxyPoolSnapshot Snapshot();
 }
