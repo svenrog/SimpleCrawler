@@ -22,6 +22,10 @@ change to the library API under SemVer.
 - CLI flags `--retries`, `--retryDelay`, `--maxRetryDelay`, and `--attemptTimeout`.
 - New `SimpleCrawler.Core.Retry` namespace: `RetryExecutor`, `RetryClassifier`, `RetryReason`,
   `RetryAttempt<T>`, `RetryHandler`.
+- `AbstractHeadlessCrawler<TPage, TResult>` in `SimpleCrawler.Core`: a shared base for real-browser
+  backends that owns the proxy-keyed page pool, the acquire/retry loop, and single-evaluation
+  extraction. Backends supply four vendor primitives (`NewPageAsync`, `NavigateAsync`,
+  `ClosePageCore`, `EvaluateExtractorAsync`) plus an optional `AfterSuccessfulLoad` hook.
 
 ### Changed
 
@@ -32,6 +36,12 @@ change to the library API under SemVer.
 - Retry is installed at the HTTP layer for `HttpClient`-based backends, so `robots.txt`/sitemap
   probes and JS sub-resource fetches inherit it. The crawler `HttpClient` request timeout is left
   uncapped; `RetryOptions.AttemptTimeout` bounds each attempt instead.
+- `PlaywrightCrawler<TResult>` and `PuppeteerCrawler<TResult>` now derive from
+  `AbstractHeadlessCrawler<IPage, TResult>` instead of `AbstractRobotsCrawler<IPage, IPage, TResult>`,
+  removing ~90% of the duplication between them. This is source-compatible: the new base still
+  derives from `AbstractRobotsCrawler<IPage, IPage, TResult>`, no public member was removed, and
+  subclasses still need only override `GetResult`. Pre-compiled third-party subclasses should be
+  recompiled against the new base.
 
 ### Removed
 
