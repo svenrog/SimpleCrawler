@@ -61,6 +61,8 @@ public abstract class AbstractHeadlessCrawler<TPage, TResult> : AbstractRobotsCr
             return RetryAttempt<TPage?>.Failed(RetryReason.Connection);
         }
 
+        ReportResponse(url, status.Value, null, null);
+
         var reason = RetryClassifier.Classify(status.Value);
         if (reason is not null)
         {

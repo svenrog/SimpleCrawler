@@ -16,6 +16,9 @@ public sealed class Options
     [Option('o', "outputFile", Required = true, HelpText = "The file to output to.")]
     public string Output { get; set; } = string.Empty;
 
+    [Option("report", Required = false, HelpText = "Optional path to write a per-URL JSON report (status code, fetch/parse timing, size, link count, outcome) covering every fetched page, including failures.")]
+    public string? Report { get; set; }
+
     [Option('m', "maxPages", Required = false, Default = 10000, HelpText = "Max pages to visit.")]
     public int MaxPages { get; set; } = 10000;
 

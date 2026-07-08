@@ -44,6 +44,39 @@ public class CheckpointResumeTests
     }
 
     [Fact]
+    public async Task Resume_Preserves_Reports_From_Before_Checkpoint()
+    {
+        var priorReport = new UrlReport { Url = _urlA, StatusCode = 200, Outcome = CrawlOutcome.Success };
+        var store = new MemoryCheckpointStore
+        {
+            ToLoad = new CrawlState
+            {
+                Entries = [_entry],
+                Discovered = [_entry, _urlA, _urlB],
+                Processed = [_entry, _urlA],
+                Visited = [_entry, _urlA],
+                Reports = new ConcurrentDictionary<string, UrlReport>(
+                [
+                    new(_entry, new UrlReport { Url = _entry, StatusCode = 200, Outcome = CrawlOutcome.Success }),
+                    new(_urlA, priorReport),
+                ]),
+            },
+        };
+
+        var crawler = CreateCrawler(store, links: []);
+        var result = await crawler.Start(_entry, TestContext.Current.CancellationToken);
+
+        // Only the pending frontier is fetched this session, yet the report covers every page.
+        Assert.Equal([_urlB], crawler.Fetched);
+        Assert.Equal(3, result.Reports.Count);
+
+        // The pre-checkpoint report is carried through untouched, not re-created from a partial re-fetch.
+        Assert.Same(priorReport, Assert.Single(result.Reports, r => r.Url == _urlA));
+        Assert.Contains(result.Reports, r => r.Url == _entry);
+        Assert.Contains(result.Reports, r => r.Url == _urlB);
+    }
+
+    [Fact]
     public async Task Fresh_Crawl_Saves_Progress()
     {
         var store = new MemoryCheckpointStore();
@@ -129,7 +162,7 @@ public class CheckpointResumeTests
         }
 
         protected override ValueTask<ScrapeResult> GetResult(CancellationToken cancellationToken)
-            => new(new ScrapeResult { Urls = [.. Visited] });
+            => new(new ScrapeResult { Urls = [.. Visited], Reports = Reports });
     }
 
     private sealed class MemoryCheckpointStore : ICheckpointStore

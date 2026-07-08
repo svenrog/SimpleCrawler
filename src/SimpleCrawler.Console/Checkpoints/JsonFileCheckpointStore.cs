@@ -1,3 +1,4 @@
+using SimpleCrawler.Console.Serialization;
 using SimpleCrawler.Core.Checkpoints;
 using System.Text.Json;
 
@@ -20,7 +21,7 @@ public sealed class JsonFileCheckpointStore : ICheckpointStore
             return null;
 
         await using var stream = File.OpenRead(_path);
-        return await JsonSerializer.DeserializeAsync(stream, CheckpointJsonContext.Default.CrawlState, cancellationToken);
+        return await JsonSerializer.DeserializeAsync(stream, CrawlerJsonContext.Default.CrawlState, cancellationToken);
     }
 
     public async ValueTask SaveAsync(CrawlState state, CancellationToken cancellationToken)
@@ -31,7 +32,7 @@ public sealed class JsonFileCheckpointStore : ICheckpointStore
             var temp = _path + ".tmp";
 
             await using (var stream = File.Create(temp))
-                await JsonSerializer.SerializeAsync(stream, state, CheckpointJsonContext.Default.CrawlState, cancellationToken);
+                await JsonSerializer.SerializeAsync(stream, state, CrawlerJsonContext.Default.CrawlState, cancellationToken);
 
             File.Move(temp, _path, overwrite: true);
         }

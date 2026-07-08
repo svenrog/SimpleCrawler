@@ -28,6 +28,8 @@ public abstract class AbstractStaticHtmlCrawler<TDocument, TResult> : AbstractRo
 
         var authority = new Uri(url).Authority;
 
+        ReportResponse(url, (int)response.StatusCode, response.Content.Headers.ContentLength, response.Content.Headers.ContentType?.MediaType);
+
         if (!response.IsSuccessStatus())
         {
             var status = (int)response.StatusCode;

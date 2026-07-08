@@ -8,6 +8,7 @@ using SimpleCrawler.Core.Helpers;
 using SimpleCrawler.Core.Models;
 using SimpleCrawler.Core.Proxy;
 using SimpleCrawler.Core.Throttling;
+using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Threading.Channels;
 
@@ -35,6 +36,7 @@ public abstract class AbstractCrawler<TResponse, TDocument, TResult> : ICrawler<
     protected AdaptiveThrottler Throttling => _throttling;
     protected IReadOnlyDictionary<string, Uri> EntryUris => _entryByAuthority;
     protected ConcurrentHashSet<string> Visited => _state.Visited;
+    protected IReadOnlyCollection<UrlReport> Reports => _state.Reports.Values.ToArray();
 
     protected CancellationToken CrawlCancellationToken { get; private set; }
 
@@ -229,13 +231,19 @@ public abstract class AbstractCrawler<TResponse, TDocument, TResult> : ICrawler<
                     continue;
                 }
 
+                var entry = new UrlReport { Url = url, Timestamp = DateTimeOffset.UtcNow };
+                _state.Reports[url] = entry;
+
                 var handedOff = false;
                 try
                 {
                     var authority = new Uri(url).Authority;
                     await _throttling.WaitAsync(authority, GetCrawlDelay(authority), cancellationToken);
 
+                    var startTimestamp = Stopwatch.GetTimestamp();
                     var response = await LoadResponse(url, cancellationToken);
+                    entry.FetchDuration = Stopwatch.GetElapsedTime(startTimestamp);
+
                     if (response != null)
                     {
                         await _parseChannel.Writer.WriteAsync((url, response), cancellationToken);
@@ -248,20 +256,26 @@ public abstract class AbstractCrawler<TResponse, TDocument, TResult> : ICrawler<
                 }
                 catch (ProxyPoolExhaustedException)
                 {
+                    entry.Outcome = CrawlOutcome.Aborted;
                     Abort("proxy pool exhausted");
                 }
                 catch (TimeoutException ex)
                 {
+                    entry.Outcome = CrawlOutcome.Timeout;
+                    entry.Error = ex.Message;
                     _logger.LogWarning("Timeout fetching '{url}': {message}", url, ex.Message);
                 }
                 catch (Exception ex)
                 {
+                    entry.Outcome = CrawlOutcome.FetchError;
+                    entry.Error = ex.Message;
                     _logger.LogError(ex, "Encountered error fetching '{url}': {message}", url, ex.Message);
                 }
                 finally
                 {
                     if (!handedOff)
                     {
+                        FinalizeFetchFailure(entry);
                         _state.Processed.Add(url);
                         Interlocked.Increment(ref _processedCount);
                         CompleteUrl();
@@ -311,6 +325,31 @@ public abstract class AbstractCrawler<TResponse, TDocument, TResult> : ICrawler<
 
         Interlocked.Decrement(ref _outstanding);
         return false;
+    }
+
+    // Called by fetch backends once the HTTP status is known, to enrich the per-URL report with the
+    // facts only the backend can see. Safe to call for any URL currently being fetched.
+    protected void ReportResponse(string url, int statusCode, long? contentLength, string? contentType)
+    {
+        if (!_state.Reports.TryGetValue(url, out var entry))
+            return;
+
+        entry.StatusCode = statusCode;
+        entry.ContentLength = contentLength;
+        entry.ContentType = contentType;
+    }
+
+    // Runs only on the fetch-failure path (no response handed to parsing), so a still-default Success
+    // outcome means no catch classified it: derive the failure from whatever status the backend reported.
+    private static void FinalizeFetchFailure(UrlReport entry)
+    {
+        if (entry.Outcome != CrawlOutcome.Success)
+            return;
+
+        if (entry.StatusCode is int status)
+            entry.Outcome = status.IsSuccessStatus() ? CrawlOutcome.FetchError : CrawlOutcome.HttpError;
+        else
+            entry.Outcome = CrawlOutcome.RetriesExhausted;
     }
 
     protected abstract ValueTask<TResult> GetResult(CancellationToken cancellationToken);
@@ -404,15 +443,21 @@ public abstract class AbstractCrawler<TResponse, TDocument, TResult> : ICrawler<
     {
         _logger.LogInformation("Processing url '{url}'", url);
 
+        _state.Reports.TryGetValue(url, out var entry);
+
         var document = default(TDocument);
         var parsed = false;
         try
         {
+            var startTimestamp = Stopwatch.GetTimestamp();
             document = await ParseResponse(response);
             parsed = true;
 
             var pageBase = new Uri(url);
             var pageData = await ExtractPageData(document);
+
+            if (entry is not null)
+                entry.ParseDuration = Stopwatch.GetElapsedTime(startTimestamp);
 
             var resolvedUrl = UriHelper.GetAbsoluteUrl(pageBase, pageData.CanonicalHref) ?? url;
 
@@ -422,22 +467,31 @@ public abstract class AbstractCrawler<TResponse, TDocument, TResult> : ICrawler<
             if (robots.Index)
                 Visited.Add(resolvedUrl);
 
-            if (!robots.Follow)
-                return;
-
             var discovered = 0;
-            foreach (var href in pageData.LinkHrefs)
+            if (robots.Follow)
             {
-                var link = ResolveCrawlableUrl(pageBase, href);
-                if (link == null)
-                    continue;
+                foreach (var href in pageData.LinkHrefs)
+                {
+                    var link = ResolveCrawlableUrl(pageBase, href);
+                    if (link == null)
+                        continue;
 
-                if (Enqueue(link))
-                    discovered++;
+                    if (Enqueue(link))
+                        discovered++;
+                }
+
+                if (discovered > 0)
+                    _logger.LogDebug("Found {count} new outgoing links on '{url}'", discovered, resolvedUrl);
             }
 
-            if (discovered > 0)
-                _logger.LogDebug("Found {count} new outgoing links on '{url}'", discovered, resolvedUrl);
+            if (entry is not null)
+            {
+                entry.CanonicalUrl = resolvedUrl;
+                entry.Indexed = robots.Index;
+                entry.Followed = robots.Follow;
+                entry.LinkCount = discovered;
+                entry.Outcome = CrawlOutcome.Success;
+            }
         }
         catch (OperationCanceledException) when (CrawlCancellationToken.IsCancellationRequested)
         {
@@ -445,10 +499,20 @@ public abstract class AbstractCrawler<TResponse, TDocument, TResult> : ICrawler<
         }
         catch (TimeoutException ex)
         {
+            if (entry is not null)
+            {
+                entry.Outcome = CrawlOutcome.Timeout;
+                entry.Error = ex.Message;
+            }
             _logger.LogWarning("Timeout on url '{url}': {message}", url, ex.Message);
         }
         catch (Exception ex)
         {
+            if (entry is not null)
+            {
+                entry.Outcome = CrawlOutcome.ParseError;
+                entry.Error = ex.Message;
+            }
             _logger.LogError(ex, "Encountered error {message}", ex.Message);
         }
         finally

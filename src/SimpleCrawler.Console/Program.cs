@@ -6,8 +6,11 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Http;
 using Microsoft.Extensions.Logging;
 using SimpleCrawler.Console.Extensions;
+using SimpleCrawler.Console.Serialization;
 using SimpleCrawler.Core;
+using SimpleCrawler.Core.Models;
 using System.Diagnostics.CodeAnalysis;
+using System.Text.Json;
 using SystemConsole = System.Console;
 
 namespace SimpleCrawler.Console;
@@ -66,6 +69,18 @@ internal static class Program
         await File.WriteAllLinesAsync(options.Output, result.Urls, tokenSource.Token);
 
         logger.LogInformation("Wrote output file to '{path}'", options.Output);
+
+        if (!string.IsNullOrWhiteSpace(options.Report))
+        {
+            await WriteReport(options.Report, result.Reports, tokenSource.Token);
+            logger.LogInformation("Wrote report file to '{path}'", options.Report);
+        }
+    }
+
+    private static async Task WriteReport(string path, IReadOnlyCollection<UrlReport> reports, CancellationToken cancellationToken)
+    {
+        var json = JsonSerializer.Serialize(reports, CrawlerJsonContext.Default.IReadOnlyCollectionUrlReport);
+        await File.WriteAllTextAsync(path, json, cancellationToken);
     }
 
     private static void Fail(HostApplicationBuilder builder, IEnumerable<Error> errors)
