@@ -25,6 +25,8 @@ public sealed class HeadlessCrawlerOptions : CrawlerOptions
         BrowserProfile = options.BrowserProfile;
         ProxyPool = options.ProxyPool;
         Retry = options.Retry;
+        Throttling = options.Throttling;
+        Checkpoint = options.Checkpoint;
     }
 
     public bool BlockNonEssentialResources { get; set; } = true;

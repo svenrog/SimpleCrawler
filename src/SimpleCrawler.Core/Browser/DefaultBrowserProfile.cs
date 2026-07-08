@@ -1,6 +1,6 @@
 ﻿namespace SimpleCrawler.Core.Browser;
 
-public sealed class DefaultBrowserProfile : IBrowserProfile
+public sealed record DefaultBrowserProfile : IBrowserProfile
 {
     public string UserAgent { get; set; } = Defaults.UserAgent;
 
@@ -10,7 +10,7 @@ public sealed class DefaultBrowserProfile : IBrowserProfile
 
     public string AcceptLanguage => Defaults.AcceptLanguage;
 
-    public Dictionary<string, string> AdditionalHeaders => Defaults.AdditionalHeaders;
+    public Dictionary<string, string> AdditionalHeaders { get; } = [];
 
     public bool Impersonate => false;
 }

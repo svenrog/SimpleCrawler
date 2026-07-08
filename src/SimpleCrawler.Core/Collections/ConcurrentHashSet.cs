@@ -7,6 +7,7 @@ public class ConcurrentHashSet<T> : ICollection<T>, ISet<T>, IReadOnlyCollection
     where T : notnull
 {
     private readonly ConcurrentDictionary<T, bool> _dictionary;
+
     public ConcurrentHashSet()
     {
         _dictionary = new ConcurrentDictionary<T, bool>();
@@ -128,7 +129,8 @@ public class ConcurrentHashSet<T> : ICollection<T>, ISet<T>, IReadOnlyCollection
 
     public void UnionWith(IEnumerable<T> other)
     {
-        throw new NotSupportedException();
+        foreach (var item in other)
+            _dictionary.TryAdd(item, false);
     }
 
     void ICollection<T>.Add(T item)

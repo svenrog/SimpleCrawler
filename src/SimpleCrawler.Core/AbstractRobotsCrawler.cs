@@ -1,7 +1,8 @@
-﻿using SimpleCrawler.Core.Models;
-using SimpleCrawler.Core.Robots;
-using Microsoft.Extensions.Logging;
+﻿using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using SimpleCrawler.Core.Checkpoints;
+using SimpleCrawler.Core.Models;
+using SimpleCrawler.Core.Robots;
 
 namespace SimpleCrawler.Core;
 
@@ -17,7 +18,7 @@ public abstract class AbstractRobotsCrawler<TResponse, TDocument, TResult> : Abs
     private Dictionary<string, IRobotsTxt> _robotsByHost;
     private Dictionary<string, double> _delayByHost;
 
-    protected AbstractRobotsCrawler(IRobotClient robotClient, IOptions<CrawlerOptions> options, ILogger logger) : base(options, logger)
+    protected AbstractRobotsCrawler(IRobotClient robotClient, IOptions<CrawlerOptions> options, ILogger logger, ICheckpointStore? checkpoint = null) : base(options, logger, checkpoint)
     {
         _robotClient = robotClient;
         _options = options.Value;

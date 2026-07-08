@@ -1,6 +1,8 @@
 ﻿using SimpleCrawler.Core.Browser;
+using SimpleCrawler.Core.Checkpoints;
 using SimpleCrawler.Core.Proxy;
 using SimpleCrawler.Core.Retry;
+using SimpleCrawler.Core.Throttling;
 
 namespace SimpleCrawler.Core;
 
@@ -20,6 +22,8 @@ public class CrawlerOptions
     public IBrowserProfile BrowserProfile { get; set; } = new DefaultBrowserProfile();
     public ProxyPoolOptions? ProxyPool { get; set; }
     public RetryOptions Retry { get; set; } = new();
+    public ThrottleOptions Throttling { get; set; } = new();
+    public CheckpointOptions Checkpoint { get; set; } = new();
 
     public int EffectiveConcurrency => Math.Max(1, Concurrency);
     public int EffectiveParseConcurrency => ParseConcurrency > 0 ? ParseConcurrency : EffectiveConcurrency;

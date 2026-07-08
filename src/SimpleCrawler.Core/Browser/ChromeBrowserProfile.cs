@@ -1,6 +1,6 @@
 ﻿namespace SimpleCrawler.Core.Browser;
 
-public class ChromeBrowserProfile : IBrowserProfile
+public sealed record ChromeBrowserProfile : IBrowserProfile
 {
     private readonly Version _version;
     private readonly string _userAgent;

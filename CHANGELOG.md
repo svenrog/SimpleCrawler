@@ -6,6 +6,34 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Package versions are derived from git tags (`v*`) via MinVer.
 
+## [Unreleased]
+
+### Added
+
+- Custom request headers via a repeatable `-H`/`--header "Name: Value"` CLI flag. Headers are merged
+  into the active browser profile, so they apply to every backend (static, JS, and headless). `--cookie`
+  now flows through the same path and reaches headless backends too.
+- Adaptive per-host throttling (on by default): after repeated `429`/`503` responses a host's crawl
+  delay is raised — honouring the `Retry-After` header as a per-host grace — and eased back down on
+  sustained success. Configurable via `ThrottleOptions` on `CrawlerOptions.Throttling`
+  (`Enabled`, `MaxDelaySeconds`) and the CLI flag `--adaptiveThrottle` (pass `false` to disable).
+- Checkpoint/resume via `--checkpoint <file>`: the crawl frontier (discovered/processed/visited) is
+  saved periodically and on `Ctrl+C`, and resumed automatically when the file's entry points match.
+- New `SimpleCrawler.Core.Checkpoints` namespace (`ICheckpointStore`, `CrawlState`, `CheckpointOptions`)
+  and `SimpleCrawler.Core.Throttling` namespace (`AdaptiveThrottler`, `ThrottleOptions`).
+  `AbstractCrawler` gained an optional `ICheckpointStore` constructor parameter; autosave cadence is
+  configured via `CrawlerOptions.Checkpoint.Interval`.
+
+### Changed
+
+- Per-host throttling was extracted into an `AdaptiveThrottler` service and reworked from a semaphore
+  held across the delay to a lock-free next-slot reservation, so rate-limit reporting never blocks on
+  an in-flight wait. Internal and source-compatible; per-host request spacing is unchanged.
+
+### Removed
+
+- Retries in `smpcrawl` CLI `--proxyRetries` is removed, deprecation period over.
+
 ## [2.0.0] - 2026-07-07
 
 Public proxy types are removed and renamed (see _Removed_ and _Changed_), which is a breaking
@@ -59,5 +87,6 @@ change to the library API under SemVer.
 
 - Initial release.
 
+[Unreleased]: https://github.com/svenrog/SimpleCrawler/compare/v2.0.0...HEAD
 [2.0.0]: https://github.com/svenrog/SimpleCrawler/releases/tag/v2.0.0
 [1.0.0]: https://github.com/svenrog/SimpleCrawler/releases/tag/v1.0.0

@@ -4,13 +4,14 @@ using SimpleCrawler.Core.Robots;
 using HtmlAgilityPack;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using SimpleCrawler.Core.Checkpoints;
 
 namespace SimpleCrawler.HtmlAgilityPack;
 
 public abstract class HtmlAgilityPackCrawler<TResult> : AbstractStaticHtmlCrawler<HtmlDocument, TResult>
     where TResult : IScrapeResult
 {
-    protected HtmlAgilityPackCrawler(HttpClient client, IRobotClient robotClient, IOptions<CrawlerOptions> options, ILogger logger) : base(client, robotClient, options, logger)
+    protected HtmlAgilityPackCrawler(HttpClient client, IRobotClient robotClient, IOptions<CrawlerOptions> options, ILogger logger, ICheckpointStore? checkpoint = null) : base(client, robotClient, options, logger, checkpoint)
     {
     }
 

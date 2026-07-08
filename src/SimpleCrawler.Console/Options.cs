@@ -10,6 +10,9 @@ public sealed class Options
     [Option('c', "cookie", Required = false, HelpText = "Sets cookie header")]
     public string? Cookie { get; set; }
 
+    [Option('H', "header", Required = false, HelpText = "Extra request header as 'Name: Value'. Repeat -H for several. Sent on every request across all backends; overrides a matching default header.")]
+    public IEnumerable<string> Headers { get; set; } = [];
+
     [Option('o', "outputFile", Required = true, HelpText = "The file to output to.")]
     public string Output { get; set; } = string.Empty;
 
@@ -40,9 +43,6 @@ public sealed class Options
     [Option("attemptTimeout", Required = false, Default = 100000, HelpText = "Per-attempt timeout in milliseconds; a slower attempt is cancelled and retried. 0 disables it.")]
     public int AttemptTimeout { get; set; } = 100000;
 
-    [Option("proxyRetries", Required = false, Hidden = true, HelpText = "Deprecated alias for --retries.")]
-    public int? ProxyRetries { get; set; }
-
     [Option("proxyCooldown", Required = false, Default = 60, HelpText = "Seconds a failing proxy is benched before being retried.")]
     public int ProxyCooldown { get; set; } = 60;
 
@@ -57,4 +57,10 @@ public sealed class Options
 
     [Option("parseConcurrency", Required = false, Default = 0, HelpText = "Concurrent page parses. 0 = match --concurrency; lowering it below --concurrency can improve throughput on parse-heavy sites.")]
     public int ParseConcurrency { get; set; }
+
+    [Option("adaptiveThrottle", Required = false, Default = true, HelpText = "Automatically slow a host after repeated 429/503 responses (honouring Retry-After) and ease back off on sustained success. Pass 'false' to disable.")]
+    public bool AdaptiveThrottle { get; set; } = true;
+
+    [Option("checkpoint", Required = false, HelpText = "Path to a checkpoint file. Progress is saved here periodically and on Ctrl+C; if the file already exists for the same entry points, the crawl resumes from it.")]
+    public string? Checkpoint { get; set; }
 }

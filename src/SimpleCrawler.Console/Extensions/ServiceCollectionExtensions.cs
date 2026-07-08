@@ -1,9 +1,8 @@
 using Microsoft.Extensions.DependencyInjection;
-using SimpleCrawler.Console.Helper;
-using SimpleCrawler.Core;
-using SimpleCrawler.Core.Browser;
+using SimpleCrawler.Console.Checkpoints;
+using SimpleCrawler.Console.Helpers;
+using SimpleCrawler.Core.Checkpoints;
 using SimpleCrawler.Core.Proxy;
-using SimpleCrawler.Core.Retry;
 using SimpleCrawler.HtmlAgilityPack;
 using SystemConsole = System.Console;
 
@@ -15,40 +14,27 @@ internal static class ServiceCollectionExtensions
     {
         services.AddSingleton(options);
 
-        var crawlerOptions = MapCrawlerOptions(options);
-        ConfigureProxyPool(services, options, crawlerOptions);
+        var proxyOptions = ConfigureProxyPool(services, options);
+        var crawlerOptions = CrawlerOptionsMapper.Map(options, proxyOptions);
 
-        services.AddHtmlAgilityPackCrawler(crawlerOptions, (provider, client) =>
-            ConfigureHttpClient(client, options));
+        ConfigureCheckpoint(services, options);
+
+        services.AddHtmlAgilityPackCrawler(crawlerOptions);
     }
 
-    private static CrawlerOptions MapCrawlerOptions(Options options)
+    private static void ConfigureCheckpoint(IServiceCollection services, Options options)
     {
-        return new CrawlerOptions
-        {
-            MaxPages = options.MaxPages,
-            Concurrency = options.Concurrency,
-            ParseConcurrency = options.ParseConcurrency,
-            CrawlDelay = options.CrawlDelay,
-            RespectMetaRobots = options.RespectRobots,
-            RespectRobotsTxt = options.RespectRobots,
-            BrowserProfile = MapBrowserProfile(options),
-            Retry = new RetryOptions
-            {
-                // --proxyRetries is the deprecated alias; honour it when supplied, else --retries.
-                MaxRetries = options.ProxyRetries ?? options.Retries,
-                BaseDelay = TimeSpan.FromMilliseconds(options.RetryDelay),
-                MaxDelay = TimeSpan.FromMilliseconds(options.MaxRetryDelay),
-                AttemptTimeout = TimeSpan.FromMilliseconds(options.AttemptTimeout),
-            },
-        };
+        if (string.IsNullOrWhiteSpace(options.Checkpoint))
+            return;
+
+        services.AddSingleton<ICheckpointStore>(new JsonFileCheckpointStore(options.Checkpoint));
     }
 
-    private static void ConfigureProxyPool(IServiceCollection services, Options options, CrawlerOptions crawlerOptions)
+    private static ProxyPoolOptions? ConfigureProxyPool(IServiceCollection services, Options options)
     {
         var manifest = ProxyCollector.Collect(options.Proxy);
         if (manifest.Length == 0)
-            return;
+            return null;
 
         SystemConsole.WriteLine($"Resolving {manifest.Length} proxy entries...");
 
@@ -58,7 +44,7 @@ internal static class ServiceCollectionExtensions
         if (proxies.Count == 0)
         {
             SystemConsole.WriteLine("No usable proxies resolved; crawling without a proxy.");
-            return;
+            return null;
         }
 
         var poolOptions = new ProxyPoolOptions
@@ -67,27 +53,11 @@ internal static class ServiceCollectionExtensions
             MinHealthyRatio = options.ProxyMinHealthy,
         };
 
-        crawlerOptions.ProxyPool = poolOptions;
         services.AddSingleton<IProxyPool>(_ => new ProxyPool(proxies, poolOptions));
         services.AddSingleton<IProxyClientProvider, ProxyHandlerProvider>();
 
         SystemConsole.WriteLine($"Proxy pool initialised with {proxies.Count} proxies.");
-    }
 
-    private static IBrowserProfile MapBrowserProfile(Options options)
-    {
-        if (options.Impersonate == BrowserImpersonation.Chrome)
-            return BrowserProfiles.Chrome;
-
-        if (!string.IsNullOrEmpty(options.UserAgent))
-            return new DefaultBrowserProfile { UserAgent = options.UserAgent };
-
-        return BrowserProfiles.Default;
-    }
-
-    private static void ConfigureHttpClient(HttpClient httpClient, Options options)
-    {
-        if (!string.IsNullOrEmpty(options.Cookie))
-            httpClient.DefaultRequestHeaders.Add("Cookie", options.Cookie);
+        return poolOptions;
     }
 }
