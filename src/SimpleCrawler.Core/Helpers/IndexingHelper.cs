@@ -9,8 +9,9 @@ public static class IndexingHelper
         if (contentValue == null)
             return RobotsRules.All;
 
-        var index = false;
-        var follow = false;
+        // robots-meta defaults to index + follow; directives only negate, so "index" alone still follows.
+        var index = true;
+        var follow = true;
 
         var span = contentValue.AsSpan();
         foreach (var range in span.SplitAny(", \t"))
