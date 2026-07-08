@@ -9,7 +9,7 @@ using System.Globalization;
 
 namespace SimpleCrawler.Js.V8;
 
-internal sealed class V8JsEngine : IJsEngine
+internal sealed class V8JsEngine : IJsEngine, IDisposable
 {
     private const int _moduleEvaluationTimeoutMs = 30000;
     private const int _stackTraceContextRadius = 48;

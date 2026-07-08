@@ -1,10 +1,10 @@
+using Microsoft.Extensions.Logging;
+using SimpleCrawler.Core.Extensions;
 using SimpleCrawler.Js.Abstractions;
 using SimpleCrawler.Js.Errors;
 using SimpleCrawler.Js.Models;
 using SimpleCrawler.Js.Network;
 using SimpleCrawler.Js.Services;
-using SimpleCrawler.Core.Extensions;
-using Microsoft.Extensions.Logging;
 using System.Text;
 using System.Text.Json;
 
@@ -58,24 +58,27 @@ public sealed class JsRenderer
         var fetcher = new HttpModuleFetcher(client, _sources, cancellationToken);
 
         var createTime = RenderProfiler.Start();
-        var rawEngine = _engineFactory.Create(fetcher, pageUri);
+        var baseEngine = _engineFactory.Create(fetcher, pageUri);
+        using var disposableEngine = baseEngine as IDisposable;
+
         RenderProfiler.Stop("phase.engineCreate", createTime);
 
-        using var engine = RenderProfiler.Enabled ? new ProfilingJsEngine(rawEngine) : rawEngine;
-
+        var engine = RenderProfiler.Enabled ? new ProfilingJsEngine(baseEngine) : baseEngine;
         var setupTime = RenderProfiler.Start();
-        // A reused pooled realm (Jint) resets its per-page state inside BeginPage and returns false, so the big
-        // dom.js prelude is only re-evaluated on a fresh realm. The smaller fetch/indexeddb preludes below are
-        // separate IIFEs the renderer still runs every page, so they stay correct on a reused realm.
+
         if (engine.BeginPage())
             RunPrelude(engine, JsPreludes.Dom);
+
         engine.CallGlobal("__crawlerSetLocation", pageUrl);
         engine.CallGlobal("__crawlerSetViewport", (int)_options.Viewport.Width, (int)_options.Viewport.Height);
+
         ConfigureScriptLogging(engine);
         if (_options.EnableIndexedDb)
             RunPrelude(engine, JsPreludes.IndexedDb);
+
         if (DomProfiler.Enabled)
             engine.CallGlobal("__crawlerEnableDomProfile");
+
         RenderProfiler.Stop("phase.setupGlobals", setupTime);
 
         var parseTime = RenderProfiler.Start();
@@ -135,8 +138,10 @@ public sealed class JsRenderer
         var result = finalize(engine);
         RenderProfiler.Stop("phase.finalize", finalizeTime);
         RenderProfiler.Stop("phase.total", totalTime);
+
         if (DomProfiler.Enabled)
             DomProfiler.Add(engine.Evaluate<string>("__crawlerDomProfileDump()"));
+
         return result;
     }
 

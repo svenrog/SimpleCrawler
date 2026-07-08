@@ -1,15 +1,15 @@
-using SimpleCrawler.Js.Abstractions;
-using SimpleCrawler.Js.Errors;
-using SimpleCrawler.Js.Models;
 using Jint;
 using Jint.Native;
 using Jint.Runtime;
 using Jint.Runtime.Interop;
+using SimpleCrawler.Js.Abstractions;
+using SimpleCrawler.Js.Errors;
+using SimpleCrawler.Js.Models;
 using System.Globalization;
 
 namespace SimpleCrawler.Js.Jint;
 
-internal sealed class JintJsEngine : IJsEngine
+internal sealed class JintJsEngine : IJsEngine, IDisposable
 {
     private readonly Engine _engine;
     private readonly JintModuleCache _moduleCache;
@@ -150,6 +150,6 @@ internal sealed class JintJsEngine : IJsEngine
 
     public void Dispose()
     {
-        (_engine as IDisposable)?.Dispose();
+        _engine.Dispose();
     }
 }
