@@ -20,6 +20,6 @@ public sealed class DefaultV8Crawler : JsCrawler<ScrapeResult>, ICrawler
 
     protected override ValueTask<ScrapeResult> GetResult(CancellationToken cancellationToken)
     {
-        return ValueTask.FromResult(new ScrapeResult { Urls = Visited });
+        return ValueTask.FromResult(new ScrapeResult { Urls = Visited, Reports = Reports });
     }
 }

@@ -15,6 +15,6 @@ public sealed class DefaultPuppeteerCrawler : PuppeteerCrawler<ScrapeResult>, IC
 
     protected override ValueTask<ScrapeResult> GetResult(CancellationToken cancellationToken)
     {
-        return ValueTask.FromResult(new ScrapeResult { Urls = Visited });
+        return ValueTask.FromResult(new ScrapeResult { Urls = Visited, Reports = Reports });
     }
 }

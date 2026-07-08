@@ -15,9 +15,13 @@ For big page results, use a lower `ParseConcurrency` than `Concurrency`.
 
 This is a soft cap on pages processed (since threads are in flight, there might be a number of fetch threads additionally on this count). It can limit the crawler from continuing infinitely if a site has quirky query parameter handling that doesn't use canonical urls.
 
-## CrawlDelay (default 0)
+## MaxResponseBodySize (default 10 MiB)
 
-Minimum seconds between fetches (global, not per-worker). `0` = no delay. If `RespectRobotsTxt` is on, a `robots.txt` `Crawl-delay` overrides upward.
+Cap on the decompressed response body, in bytes. A response that exceeds it is skipped (logged, not parsed) rather than buffered into memory — a guard against a single oversized asset blowing up a many-worker crawl. `0` or less disables the cap. **Static backends only**; headless backends stream through the browser.
+
+## CrawlDelay (default 1)
+
+Minimum seconds between fetches to a host (per-host, not per-worker). `0` = no delay. If `RespectRobotsTxt` is on, a `robots.txt` `Crawl-delay` overrides upward. [Adaptive throttling](#throttling) can raise the effective delay further after rate-limit responses.
 
 ## RespectRobotsTxt (default true)
 
@@ -29,7 +33,13 @@ Honor `<meta name="robots">`. `noindex` pages are fetched for their links but ex
 
 ## BlockNonEssentialResources (default true)
 
-**When using a headless crawler only.** Aborts images/CSS/fonts/media so the browser loads only what's needed for links. Large bandwidth/time saving, no effect on extraction. Ignored by static/JS crawlers.
+**Headless crawlers only.** Aborts images/CSS/fonts/media so the browser loads only what's needed for links. Large bandwidth/time saving, no effect on extraction. Ignored by static/JS crawlers.
+
+> `BlockNonEssentialResources` and `NetworkIdleGraceMs` live on `HeadlessCrawlerOptions` (`src/SimpleCrawler.Core/HeadlessCrawlerOptions.cs`), a subclass of `CrawlerOptions`. Construct it from an existing `CrawlerOptions` with `new HeadlessCrawlerOptions(options) { … }`, or on its own. All the options above apply to it too.
+
+## NetworkIdleGraceMs (default 2000)
+
+**Headless crawlers only.** Upper bound, in milliseconds, on the best-effort wait for network idle after a page loads. A page that never goes idle — constant analytics/tracking traffic — is extracted once this elapses rather than failing, so it caps per-page latency rather than guaranteeing idle.
 
 ## EnableSitemapDiscovery (default true)
 
@@ -61,6 +71,39 @@ var options = new CrawlerOptions
 
 With a multi-proxy pool a retry rotates to the next proxy instantly (no delay); without one — or on a single-proxy pool — it backs off. See [proxy pooling](./httpclient-configuration.md#headless-backends). The CLI exposes `--retries`, `--retryDelay`, `--maxRetryDelay`, and `--attemptTimeout`.
 
+## Throttling
+
+Adaptive per-host throttling (on by default). After repeated `429`/`503` responses a host's effective delay is raised — honouring the response's `Retry-After` header as a per-host grace period — and eased back down again on sustained success. It layers on top of the fixed [`CrawlDelay`](#crawldelay) floor and reacts to a host that is actively pushing back, so you don't have to hand-tune a single delay for the whole crawl.
+
+`ThrottleOptions` (`src/SimpleCrawler.Core/Throttling/ThrottleOptions.cs`):
+
+| Option | Default | |
+| --- | --- | --- |
+| `Enabled` | `true` | Set `false` for a fixed `CrawlDelay` only. |
+| `MaxDelaySeconds` | `60` | Ceiling on the total effective delay (base + rate-limit penalty) for a host. |
+
+The CLI toggles it with `--adaptiveThrottle` (pass `false` to disable).
+
+## Checkpoint
+
+When a checkpoint store is registered, the full crawl state — the discovered/processed frontier, the visited result set, and the [per-URL report](#reporting) — is snapshotted periodically and on `Ctrl+C`, and a matching checkpoint resumes the crawl instead of starting over. Because the whole `CrawlState` is persisted, a resumed crawl's `Reports` stays consistent with `Urls` rather than losing pre-checkpoint pages.
+
+`CheckpointOptions` (`src/SimpleCrawler.Core/Checkpoints/CheckpointOptions.cs`):
+
+| Option | Default | |
+| --- | --- | --- |
+| `Interval` | `15s` | Autosave cadence while crawling. |
+
+The store itself is an `ICheckpointStore` passed to the crawler constructor; the CLI wires a JSON-file store via `--checkpoint <file>` and resumes automatically when the file's entry points match.
+
+## ProxyPool
+
+Optional health-aware, per-request proxy pool (`ProxyPoolOptions`). Off unless set. Configuration, rotation, SOCKS support, and authentication are covered under [HttpClient configuration](./httpclient-configuration.md); the CLI accepts a proxy or proxy-list reference via `--proxy` plus `--proxyCooldown` and `--proxyMinHealthy`.
+
+## Reporting
+
+Independent of options, every crawl result (`IScrapeResult`) carries a `Reports` collection alongside `Urls`. `Urls` is the indexable set; `Reports` has one `UrlReport` per **fetched** page — successes *and* failures (`404`/`5xx`, timeouts, retries-exhausted) — with the status code, fetch/parse durations, content length/type, discovered link count, index/follow flags, timestamp, `CrawlOutcome`, and any error. The CLI writes it as JSON with `--report <file>`; the plain URL list output is unchanged.
+
 ## BrowserProfile
 
 The identity presented to the target: `User-Agent`, `Accept`/`Accept-Language`, `Locale`, and
@@ -78,3 +121,7 @@ var options = new CrawlerOptions
 
 `BrowserProfiles.Default` / `BrowserProfiles.Chrome` expose shared instances; the CLI selects
 between them with the `--impersonate` flag (`none` / `chrome`).
+
+Extra headers layer on top of the chosen profile and apply to **every** backend (static, JS, headless):
+the CLI adds them with the repeatable `-H`/`--header "Name: Value"` flag, and `--cookie` sets the
+`Cookie` header through the same path. A supplied header overrides a matching profile default.

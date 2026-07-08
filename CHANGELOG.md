@@ -23,6 +23,14 @@ Package versions are derived from git tags (`v*`) via MinVer.
   and `SimpleCrawler.Core.Throttling` namespace (`AdaptiveThrottler`, `ThrottleOptions`).
   `AbstractCrawler` gained an optional `ICheckpointStore` constructor parameter; autosave cadence is
   configured via `CrawlerOptions.Checkpoint.Interval`.
+- Per-URL reporting on `IScrapeResult` via a new `Reports` collection of `UrlReport` (in
+  `SimpleCrawler.Core.Models`, alongside the `CrawlOutcome` enum). Every fetched page — success or
+  failure — is reported with its status code, fetch/parse durations, content length/type, discovered
+  link count, index/follow flags, timestamp, outcome, and any error. `Urls` is unchanged (still the
+  indexable subset). Reports live in `CrawlState`, so they are checkpointed and restored on resume in
+  step with `Urls`.
+- Optional `--report <file>` CLI flag that writes the per-URL report as JSON. The existing plain
+  URL-per-line output is unchanged.
 
 ### Changed
 
