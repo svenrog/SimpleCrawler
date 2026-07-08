@@ -11,8 +11,6 @@ public interface IJsEngine
 
     void EmbedHostObject(string name, object value);
 
-    void EmbedHostType(string name, Type type);
-
     void EmbedFunction(string name, VFunc function);
 
     void Execute(string script);
@@ -22,12 +20,6 @@ public interface IJsEngine
     void EvaluateModule(string specifier, string source, bool cache);
 
     T Evaluate<T>(string expression);
-
-    object GetGlobalObject();
-
-    object CreateArray(IReadOnlyList<object?> items);
-
-    void InvokeCallback(object callback);
 
     void CallGlobal(string name, params object?[] args);
 
