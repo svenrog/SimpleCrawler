@@ -27,8 +27,6 @@ internal sealed class ProfilingJsEngine : IJsEngine
     public void CallGlobal(string name, params object?[] args) => Time("engine.CallGlobal", () => _inner.CallGlobal(name, args));
     public void RunMicrotasks() => Time("engine.RunMicrotasks", () => _inner.RunMicrotasks());
 
-    public void Dispose() => _inner.Dispose();
-
     private static void Time(string bucket, Action action)
     {
         var start = RenderProfiler.Start();

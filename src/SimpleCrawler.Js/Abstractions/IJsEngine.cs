@@ -2,11 +2,11 @@ using SimpleCrawler.Js.Models;
 
 namespace SimpleCrawler.Js.Abstractions;
 
-public interface IJsEngine : IDisposable
+public interface IJsEngine
 {
-    // Begins a page on this engine. Returns true when the caller must install the DOM prelude (a fresh realm —
-    // always the case for V8, and the first use of a pooled Jint engine); returns false when the engine reused
-    // an existing realm and has already reset its per-page state, so the ~90KB dom.js re-eval can be skipped.
+    // Begins a page on this engine. Returns true when the caller must install the DOM prelude — always the case
+    // today, since each engine renders exactly one page on a fresh realm (V8 a fresh context, Jint a fresh
+    // Engine). The bool is kept so the renderer stays agnostic to how an engine provisions each page's realm.
     bool BeginPage();
 
     void EmbedHostObject(string name, object value);
