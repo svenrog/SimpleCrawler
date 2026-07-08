@@ -31,16 +31,41 @@ Package versions are derived from git tags (`v*`) via MinVer.
   step with `Urls`.
 - Optional `--report <file>` CLI flag that writes the per-URL report as JSON. The existing plain
   URL-per-line output is unchanged.
+- Opt-in WHATWG Streams surface for the JS backends via `JsRenderOptions.EnableStreams` (off by
+  default). It installs `ReadableStream`, `TransformStream`, `TextDecoderStream`, and a
+  `Response.body`/`arrayBuffer` from a dedicated `stream.js` prelude kept out of `dom.js`, so the
+  default render neither evaluates it nor exposes the stream globals. Bodies are buffered-complete —
+  spec-compliant reader/transform semantics, not incremental transport streaming. A streaming hydration
+  bundle (e.g. Next.js App Router RSC) can otherwise tear down the server markup without rebuilding it
+  in this single-pass render, so the renderer captures a pre-script anchor baseline and restores it at
+  finalize when the live tree regresses below the shell's links.
 
 ### Changed
 
 - Per-host throttling was extracted into an `AdaptiveThrottler` service and reworked from a semaphore
   held across the delay to a lock-free next-slot reservation, so rate-limit reporting never blocks on
   an in-flight wait. Internal and source-compatible; per-host request spacing is unchanged.
+- `IJsEngine` no longer requires `IDisposable`. The concrete engines own their teardown — `V8JsEngine`
+  returns its pooled isolate lease and disposes the native engine, `JintJsEngine` disposes the Jint
+  engine — and `JsRenderer` disposes the concrete engine on every exit path so the V8 pool never leaks
+  isolates. **Breaking** for custom `IJsEngine` implementers: the interface no longer extends
+  `IDisposable`.
 
 ### Removed
 
 - Retries in `smpcrawl` CLI `--proxyRetries` is removed, deprecation period over.
+- **Breaking:** removed the dead bridge-era members `GetGlobalObject`, `CreateArray`,
+  `InvokeCallback`, and `EmbedHostType` from the public `IJsEngine` interface — relics of the
+  C#↔JS DOM bridge (cut in Phase 6), never invoked by any renderer path or test. The unreachable
+  `__crawlerReset` realm-reset machinery was also deleted from the JS DOM prelude; it existed only for
+  the since-removed Jint realm pool and is internal cleanup.
+
+### Fixed
+
+- robots-meta parsing started `index`/`follow` at `false`, so a lone `content="index"` (no explicit
+  `follow`) parsed as `follow=false` and the crawler dropped every link on the page. The spec defaults
+  are `index, follow` and directives only negate, so the flags now start `true`; lone and combined
+  directives keep their permissive defaults. Pinned by `IndexingHelperTests`.
 
 ## [2.0.0] - 2026-07-07
 
