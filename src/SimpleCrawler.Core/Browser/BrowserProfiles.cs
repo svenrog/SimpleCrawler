@@ -2,6 +2,6 @@ namespace SimpleCrawler.Core.Browser;
 
 public static class BrowserProfiles
 {
-    public static readonly IBrowserProfile Default = new DefaultBrowserProfile();
-    public static readonly IBrowserProfile Chrome = new ChromeBrowserProfile();
+    public static IBrowserProfile Default => new DefaultBrowserProfile();
+    public static IBrowserProfile Chrome => new ChromeBrowserProfile();
 }

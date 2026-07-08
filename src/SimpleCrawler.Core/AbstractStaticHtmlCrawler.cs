@@ -4,6 +4,7 @@ using SimpleCrawler.Core.Models;
 using SimpleCrawler.Core.Robots;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using SimpleCrawler.Core.Checkpoints;
 
 namespace SimpleCrawler.Core;
 
@@ -14,7 +15,7 @@ public abstract class AbstractStaticHtmlCrawler<TDocument, TResult> : AbstractRo
     private readonly ILogger _logger;
     private readonly long _maxResponseBodySize;
 
-    protected AbstractStaticHtmlCrawler(HttpClient client, IRobotClient robotClient, IOptions<CrawlerOptions> options, ILogger logger) : base(robotClient, options, logger)
+    protected AbstractStaticHtmlCrawler(HttpClient client, IRobotClient robotClient, IOptions<CrawlerOptions> options, ILogger logger, ICheckpointStore? checkpoint = null) : base(robotClient, options, logger, checkpoint)
     {
         _client = client;
         _logger = logger;
@@ -25,12 +26,20 @@ public abstract class AbstractStaticHtmlCrawler<TDocument, TResult> : AbstractRo
     {
         using var response = await _client.GetAsync(url, cancellationToken);
 
+        var authority = new Uri(url).Authority;
+
         if (!response.IsSuccessStatus())
         {
+            var status = (int)response.StatusCode;
+            if (status is 429 or 503)
+                Throttling.ReportRateLimited(authority, GetRetryAfter(response));
+
             _logger.LogWarning("Error {code} on url '{url}'", response.StatusCode, url);
 
             return null;
         }
+
+        Throttling.ReportSuccess(authority);
 
         _logger.LogDebug("Response '{code}' from url '{url}'", response.StatusCode, url);
 
@@ -55,6 +64,24 @@ public abstract class AbstractStaticHtmlCrawler<TDocument, TResult> : AbstractRo
 
         var extract = new PageExtract(canonicalHref, IndexingHelper.ParseMetaRobots(robotsContent), hrefs);
         return new ValueTask<PageExtract>(extract);
+    }
+
+    private static TimeSpan? GetRetryAfter(HttpResponseMessage response)
+    {
+        var retryAfter = response.Headers.RetryAfter;
+        if (retryAfter is null)
+            return null;
+
+        if (retryAfter.Delta is { } delta)
+            return delta;
+
+        if (retryAfter.Date is { } date)
+        {
+            var wait = date - DateTimeOffset.UtcNow;
+            return wait > TimeSpan.Zero ? wait : null;
+        }
+
+        return null;
     }
 
     protected abstract TDocument ParseDocument(byte[] response);

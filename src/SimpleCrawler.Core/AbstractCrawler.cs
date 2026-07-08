@@ -1,12 +1,13 @@
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
+using SimpleCrawler.Core.Checkpoints;
 using SimpleCrawler.Core.Collections;
 using SimpleCrawler.Core.Comparers;
 using SimpleCrawler.Core.Extensions;
 using SimpleCrawler.Core.Helpers;
 using SimpleCrawler.Core.Models;
 using SimpleCrawler.Core.Proxy;
-using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
-using System.Diagnostics;
+using SimpleCrawler.Core.Throttling;
 using System.Diagnostics.CodeAnalysis;
 using System.Threading.Channels;
 
@@ -16,8 +17,11 @@ public abstract class AbstractCrawler<TResponse, TDocument, TResult> : ICrawler<
     where TResult : IScrapeResult
 {
     private readonly CrawlerOptions _options;
-    private readonly ConcurrentHashSet<string> _discovered;
+    private readonly AdaptiveThrottler _throttling;
+    private readonly CheckpointCoordinator? _checkpoints;
     private readonly ILogger _logger;
+
+    private CrawlState _state;
 
     private Channel<string> _urlChannel;
     private Channel<(string Url, TResponse Response)> _parseChannel;
@@ -27,29 +31,24 @@ public abstract class AbstractCrawler<TResponse, TDocument, TResult> : ICrawler<
 
     private HashSet<string> _scopeAuthorities;
     private Dictionary<string, Uri> _entryByAuthority;
-    private Dictionary<string, HostThrottle> _throttles;
 
-    // Every crawlable host is an entry host (scope is the exact entry-authority set), so the per-host
-    // scheme+host Uri needed to load robots.txt is always known here.
+    protected AdaptiveThrottler Throttling => _throttling;
     protected IReadOnlyDictionary<string, Uri> EntryUris => _entryByAuthority;
+    protected ConcurrentHashSet<string> Visited => _state.Visited;
 
-    protected readonly ConcurrentHashSet<string> Visited;
-
-    // The token passed to Start, invariant for the crawl. Exposed so parse-stage hooks (ParseResponse,
-    // ExtractPageData, AnalyzeDocument) whose signatures don't carry a token can still observe cancellation.
     protected CancellationToken CrawlCancellationToken { get; private set; }
 
-    protected AbstractCrawler(IOptions<CrawlerOptions> options, ILogger logger)
+    protected AbstractCrawler(IOptions<CrawlerOptions> options, ILogger logger, ICheckpointStore? checkpoint = null)
     {
         _options = options.Value;
         _logger = logger;
+        _throttling = new AdaptiveThrottler(_options.Throttling, logger);
+        _checkpoints = checkpoint is not null ? new CheckpointCoordinator(checkpoint, _options.Checkpoint.Interval, logger) : null;
 
         _scopeAuthorities = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         _entryByAuthority = new Dictionary<string, Uri>(StringComparer.OrdinalIgnoreCase);
-        _throttles = new Dictionary<string, HostThrottle>(StringComparer.OrdinalIgnoreCase);
+        _state = new CrawlState();
 
-        Visited = [];
-        _discovered = [];
         _urlChannel = CreateUrlChannel();
         _parseChannel = CreateParseChannel();
     }
@@ -89,18 +88,32 @@ public abstract class AbstractCrawler<TResponse, TDocument, TResult> : ICrawler<
         for (var i = 0; i < parseCount; i++)
             tasks[index++] = RunParseWorker(cancellationToken);
 
-        await Task.WhenAll(tasks);
+        using var autosaveCts = _checkpoints is not null ? CancellationTokenSource.CreateLinkedTokenSource(cancellationToken) : null;
+        var autosave = autosaveCts is not null ? _checkpoints!.RunAutosaveAsync(() => _state, autosaveCts.Token) : null;
+
+        try
+        {
+            await Task.WhenAll(tasks);
+        }
+        finally
+        {
+            if (autosave is not null)
+            {
+                autosaveCts!.Cancel();
+                await autosave;
+            }
+
+            if (_checkpoints is not null)
+                await _checkpoints.SaveAsync(_state, CancellationToken.None);
+        }
 
         return await GetResult(cancellationToken);
     }
 
     // Fully resets per-crawl state so a single crawler instance can be reused across Start calls.
-    protected virtual ValueTask InitializeCrawl(IReadOnlyList<string> entries, CancellationToken cancellationToken)
+    protected virtual async ValueTask InitializeCrawl(IReadOnlyList<string> entries, CancellationToken cancellationToken)
     {
         SetSiteIdentities(entries);
-
-        Visited.Clear();
-        _discovered.Clear();
 
         _urlChannel = CreateUrlChannel();
         _parseChannel = CreateParseChannel();
@@ -108,14 +121,33 @@ public abstract class AbstractCrawler<TResponse, TDocument, TResult> : ICrawler<
         _processedCount = 0;
         _aborted = 0;
 
-        _throttles = new Dictionary<string, HostThrottle>(StringComparer.OrdinalIgnoreCase);
-        foreach (var authority in _scopeAuthorities)
-            _throttles[authority] = new HostThrottle();
+        _throttling.Reset(_scopeAuthorities);
+
+        var restored = _checkpoints is not null ? await _checkpoints.LoadAsync(entries, cancellationToken) : null;
+        _state = restored ?? new CrawlState(entries);
+
+        if (restored is not null)
+        {
+            EnqueuePending();
+            return;
+        }
 
         foreach (var entry in entries)
             Enqueue(entry);
+    }
 
-        return ValueTask.CompletedTask;
+    // Re-queues the frontier left by a restored checkpoint: every discovered URL that was not yet processed.
+    private void EnqueuePending()
+    {
+        var pending = 0;
+        foreach (var url in _state.Discovered)
+        {
+            if (!_state.Processed.Contains(url) && EnqueueAllowed(url))
+                pending++;
+        }
+
+        _logger.LogInformation("Resuming from checkpoint: {processed} processed, {pending} pending.",
+            _state.Processed.Count, pending);
     }
 
     protected void SetSiteIdentities(IReadOnlyList<string> entries)
@@ -200,7 +232,8 @@ public abstract class AbstractCrawler<TResponse, TDocument, TResult> : ICrawler<
                 var handedOff = false;
                 try
                 {
-                    await Throttle(new Uri(url).Authority, cancellationToken);
+                    var authority = new Uri(url).Authority;
+                    await _throttling.WaitAsync(authority, GetCrawlDelay(authority), cancellationToken);
 
                     var response = await LoadResponse(url, cancellationToken);
                     if (response != null)
@@ -229,6 +262,7 @@ public abstract class AbstractCrawler<TResponse, TDocument, TResult> : ICrawler<
                 {
                     if (!handedOff)
                     {
+                        _state.Processed.Add(url);
                         Interlocked.Increment(ref _processedCount);
                         CompleteUrl();
                     }
@@ -250,38 +284,6 @@ public abstract class AbstractCrawler<TResponse, TDocument, TResult> : ICrawler<
         }
     }
 
-    // Throttles per host: each authority keeps its own slot timeline so one host's Crawl-delay never
-    // stalls fetches to another. GetCrawlDelay is read live so robots.txt Crawl-delay (resolved after
-    // construction) is honoured.
-    protected virtual async Task Throttle(string authority, CancellationToken cancellationToken)
-    {
-        var delaySeconds = GetCrawlDelay(authority);
-        if (delaySeconds <= 0)
-            return;
-
-        if (!_throttles.TryGetValue(authority, out var throttle))
-            return;
-
-        var delay = TimeSpan.FromSeconds(delaySeconds);
-
-        await throttle.Gate.WaitAsync(cancellationToken);
-        try
-        {
-            var now = Stopwatch.GetTimestamp();
-            if (throttle.NextSlot > now)
-            {
-                var wait = TimeSpan.FromSeconds((double)(throttle.NextSlot - now) / Stopwatch.Frequency);
-                await Task.Delay(wait, cancellationToken);
-            }
-
-            throttle.NextSlot = Stopwatch.GetTimestamp() + (long)(delay.TotalSeconds * Stopwatch.Frequency);
-        }
-        finally
-        {
-            throttle.Gate.Release();
-        }
-    }
-
     protected virtual double GetCrawlDelay(string authority)
     {
         return _options.CrawlDelay;
@@ -289,9 +291,16 @@ public abstract class AbstractCrawler<TResponse, TDocument, TResult> : ICrawler<
 
     private bool Enqueue(string url)
     {
-        if (!_discovered.Add(url))
+        if (!_state.Discovered.Add(url))
             return false;
 
+        return EnqueueAllowed(url);
+    }
+
+    // Schedules a URL already recorded in Discovered (e.g. restored from a checkpoint), bypassing the
+    // discovered-set dedupe that Enqueue performs.
+    private bool EnqueueAllowed(string url)
+    {
         if (!IsCrawlAllowed(url))
             return false;
 
@@ -364,6 +373,33 @@ public abstract class AbstractCrawler<TResponse, TDocument, TResult> : ICrawler<
         return false;
     }
 
+    protected virtual void DiscoverLink(Uri pageBase, string? href)
+    {
+        var url = ResolveCrawlableUrl(pageBase, href);
+        if (url == null)
+            return;
+
+        Enqueue(url);
+    }
+
+    protected virtual string? ResolveCrawlableUrl(Uri pageBase, string? href)
+    {
+        if (InvalidateHref(href))
+            return null;
+
+        var url = UriHelper.GetAbsoluteUrl(pageBase, href);
+        if (url == null)
+            return null;
+
+        if (!Uri.TryCreate(url, UriKind.Absolute, out var absolute))
+            return null;
+
+        if (!_scopeAuthorities.Contains(absolute.Authority))
+            return null;
+
+        return url;
+    }
+
     private async Task ProcessPage(string url, TResponse response)
     {
         _logger.LogInformation("Processing url '{url}'", url);
@@ -417,6 +453,7 @@ public abstract class AbstractCrawler<TResponse, TDocument, TResult> : ICrawler<
         }
         finally
         {
+            _state.Processed.Add(url);
             Interlocked.Increment(ref _processedCount);
 
             if (parsed)
@@ -426,38 +463,5 @@ public abstract class AbstractCrawler<TResponse, TDocument, TResult> : ICrawler<
 
             CompleteUrl();
         }
-    }
-
-    protected virtual void DiscoverLink(Uri pageBase, string? href)
-    {
-        var url = ResolveCrawlableUrl(pageBase, href);
-        if (url == null)
-            return;
-
-        Enqueue(url);
-    }
-
-    protected virtual string? ResolveCrawlableUrl(Uri pageBase, string? href)
-    {
-        if (InvalidateHref(href))
-            return null;
-
-        var url = UriHelper.GetAbsoluteUrl(pageBase, href);
-        if (url == null)
-            return null;
-
-        if (!Uri.TryCreate(url, UriKind.Absolute, out var absolute))
-            return null;
-
-        if (!_scopeAuthorities.Contains(absolute.Authority))
-            return null;
-
-        return url;
-    }
-
-    private sealed class HostThrottle
-    {
-        public readonly SemaphoreSlim Gate = new(1, 1);
-        public long NextSlot;
     }
 }
