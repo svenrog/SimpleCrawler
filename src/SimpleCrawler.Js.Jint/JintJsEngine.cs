@@ -1,7 +1,5 @@
 using Jint;
-using Jint.Native;
 using Jint.Runtime;
-using Jint.Runtime.Interop;
 using SimpleCrawler.Js.Abstractions;
 using SimpleCrawler.Js.Errors;
 using SimpleCrawler.Js.Models;
@@ -46,11 +44,6 @@ internal sealed class JintJsEngine : IJsEngine, IDisposable
     public void EmbedHostObject(string name, object value)
     {
         _engine.SetValue(name, value);
-    }
-
-    public void EmbedHostType(string name, Type type)
-    {
-        _engine.SetValue(name, TypeReference.CreateTypeReference(_engine, type));
     }
 
     public void EmbedFunction(string name, VFunc function)
@@ -108,34 +101,6 @@ internal sealed class JintJsEngine : IJsEngine, IDisposable
             return typed;
 
         return (T)Convert.ChangeType(value!, typeof(T), CultureInfo.InvariantCulture);
-    }
-
-    // The native global object reference (not ToObject()'d), so a host getter like document.defaultView
-    // can hand the bundle back the same `window` it already reads through globalThis.
-    public object GetGlobalObject() => _engine.Evaluate("globalThis");
-
-    public object CreateArray(IReadOnlyList<object?> items)
-    {
-        var array = items as object?[] ?? [.. items];
-        return JsValue.FromObject(_engine, array);
-    }
-
-    public void InvokeCallback(object callback)
-    {
-        // Invoke through the engine, not the marshalled Func delegate directly: the delegate path runs the
-        // body without an active evaluation context, so a callee's default-parameter eval throws a bare NRE.
-        var function = (callback as Delegate)?.Target as JsValue ?? callback as JsValue;
-        try
-        {
-            if (function is not null)
-                _engine.Invoke(function);
-            else if (callback is Func<JsValue, JsValue[], JsValue> raw)
-                raw(JsValue.Undefined, []);
-        }
-        catch (JavaScriptException ex)
-        {
-            throw new JsException(ex.Message, ex.JavaScriptStackTrace, ex);
-        }
     }
 
     public void CallGlobal(string name, params object?[] args)

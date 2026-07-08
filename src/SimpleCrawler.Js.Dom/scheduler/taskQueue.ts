@@ -40,14 +40,6 @@ export function pendingCount(): number {
     return _tasks.length;
 }
 
-// Drops any tasks left queued from the previous page when the engine's realm is reused (Jint pool). A
-// settled drain leaves this empty, but a page that hit the drain cap can leave stragglers; the id counter
-// is kept monotonic so a stale id from the previous page can never alias a live one.
-export function resetTasks(): void {
-    _tasks.length = 0;
-    _byId.clear();
-}
-
 export function pumpTasks(): number {
     if (!_tasks.length) return 0;
     const batch = _tasks.splice(0, _tasks.length);

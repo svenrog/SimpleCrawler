@@ -35,7 +35,6 @@ internal sealed class V8JsEngine : IJsEngine, IDisposable
     private readonly V8ScriptEngine _engine;
     private readonly V8ModuleLoader _loader;
     private readonly V8StackTraceFormatter _stackTraceFormatter = new(_stackTraceContextRadius);
-    private ScriptObject? _arrayFactory;
 
     public V8JsEngine(IModuleFetcher fetcher, Uri baseUri, V8RuntimePool pool)
     {
@@ -58,11 +57,6 @@ internal sealed class V8JsEngine : IJsEngine, IDisposable
     public void EmbedHostObject(string name, object value)
     {
         _engine.AddHostObject(name, value);
-    }
-
-    public void EmbedHostType(string name, Type type)
-    {
-        _engine.AddHostType(name, type);
     }
 
     public void EmbedFunction(string name, VFunc function)
@@ -125,31 +119,6 @@ internal sealed class V8JsEngine : IJsEngine, IDisposable
             return typed;
 
         return (T)Convert.ChangeType(value!, typeof(T), CultureInfo.InvariantCulture);
-    }
-
-    // The native global object reference (not ToObject()'d), so a host getter like document.defaultView
-    // can hand the bundle back the same `window` it already reads through globalThis.
-    public object GetGlobalObject() => _engine.Evaluate("globalThis");
-
-    public object CreateArray(IReadOnlyList<object?> items)
-    {
-        // A plain .NET array reaches JS as a host object without a JS `length`, which breaks
-        // Array.prototype.slice.call on it; spreading through a cached JS function yields a real array.
-        _arrayFactory ??= (ScriptObject)_engine.Evaluate("(function(){return Array.prototype.slice.call(arguments);})");
-        var args = items as object?[] ?? [.. items];
-        return _arrayFactory.InvokeAsFunction(args);
-    }
-
-    public void InvokeCallback(object callback)
-    {
-        try
-        {
-            ((ScriptObject)callback).InvokeAsFunction();
-        }
-        catch (ScriptEngineException ex)
-        {
-            throw new JsException(ex.Message, _stackTraceFormatter.Format(ex.Message, ex.ErrorDetails), ex);
-        }
     }
 
     public void CallGlobal(string name, params object?[] args)

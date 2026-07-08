@@ -498,11 +498,6 @@
   function pendingResourceCount() {
     return _pending.length;
   }
-  function resetResources() {
-    _pending.length = 0;
-    _byId.clear();
-    _seen = /* @__PURE__ */ new WeakSet();
-  }
   function fireResourceEvent(id, type) {
     const node = _byId.get(id);
     if (!node) return;
@@ -1136,15 +1131,6 @@
         this._pending.delete(tag);
         for (const w of waiters) w(ctor);
       }
-    }
-    // Forgets every definition and pending whenDefined waiter so a reused realm (Jint pool) starts the next
-    // page with an empty registry — otherwise a second page's `define` of the same tag would silently no-op
-    // against the previous page's constructor. _doc is kept: the singleton document is reused, not rebuilt.
-    reset() {
-      this._definitions.clear();
-      this._pending.clear();
-      this._nameStack.length = 0;
-      this._upgradeTarget = null;
     }
     get(name) {
       const def = this._definitions.get(String(name).toLowerCase());
@@ -2028,18 +2014,6 @@
     }
     // Browsers expose document.location as an alias of window.location; scripts (analytics, Clerk's CDN
     // loader) read document.location.protocol/href, which threw on undefined when only window.location existed.
-    // Clears per-page document state when the engine's realm is reused (Jint pool). The tree/head/body are
-    // reassigned wholesale by the next parse (wireDocument), but cookies, adopted stylesheets and a dangling
-    // currentScript would otherwise bleed into the next page, so they are dropped here.
-    reset() {
-      this.childNodes = [];
-      this.documentElement = null;
-      this.head = null;
-      this.body = null;
-      this.currentScript = null;
-      this.styleSheets.length = 0;
-      this._cookies.clear();
-    }
     get location() {
       return this.defaultView ? this.defaultView.location : null;
     }
@@ -2279,10 +2253,6 @@
   }
   function pendingCount() {
     return _tasks.length;
-  }
-  function resetTasks() {
-    _tasks.length = 0;
-    _byId2.clear();
   }
   function pumpTasks() {
     if (!_tasks.length) return 0;
@@ -2728,9 +2698,8 @@
   // browser/globals.ts
   var doc = new Document(globalThis);
   documentRef.current = doc;
-  var _windowListeners = {};
-  var _baseGlobals = null;
   function installDOM(global) {
+    const _windowListeners = {};
     global.document = doc;
     global.window = global;
     global.self = global;
@@ -2833,22 +2802,6 @@
     installScrollApi(global);
     for (const ctor of [EventTarget, Node, Element, CharacterData, Document, DocumentFragment, HTMLElement]) {
       markPrototypeNative(ctor);
-    }
-  }
-  function snapshotBaseline(global) {
-    _baseGlobals = new Set(Object.keys(global));
-  }
-  function resetGlobals(global) {
-    _windowListeners = {};
-    if (global.localStorage && typeof global.localStorage.clear === "function") global.localStorage.clear();
-    if (global.sessionStorage && typeof global.sessionStorage.clear === "function") global.sessionStorage.clear();
-    if (!_baseGlobals) return;
-    for (const key of Object.keys(global)) {
-      if (_baseGlobals.has(key)) continue;
-      try {
-        delete global[key];
-      } catch {
-      }
     }
   }
 
@@ -3176,17 +3129,7 @@
     walk(doc.documentElement);
     return { anchors, canonical, robots };
   }
-  function resetDom(global) {
-    doc.reset();
-    customElements.reset();
-    resetTasks();
-    resetResources();
-    resetGlobals(global);
-  }
   function installCrawlerApi(global) {
-    global.__crawlerReset = () => {
-      resetDom(global);
-    };
     global.__crawlerSetLocation = (url) => {
       applyUrl(url);
     };
@@ -3220,5 +3163,4 @@
   installDOM(globalThis);
   installConsole(globalThis);
   installCrawlerApi(globalThis);
-  snapshotBaseline(globalThis);
 })();

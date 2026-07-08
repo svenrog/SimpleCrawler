@@ -32,19 +32,6 @@ export class Document extends Node {
 
     // Browsers expose document.location as an alias of window.location; scripts (analytics, Clerk's CDN
     // loader) read document.location.protocol/href, which threw on undefined when only window.location existed.
-    // Clears per-page document state when the engine's realm is reused (Jint pool). The tree/head/body are
-    // reassigned wholesale by the next parse (wireDocument), but cookies, adopted stylesheets and a dangling
-    // currentScript would otherwise bleed into the next page, so they are dropped here.
-    reset(): void {
-        this.childNodes = [];
-        this.documentElement = null;
-        this.head = null;
-        this.body = null;
-        this.currentScript = null;
-        this.styleSheets.length = 0;
-        this._cookies.clear();
-    }
-
     get location(): any {
         return this.defaultView ? this.defaultView.location : null;
     }

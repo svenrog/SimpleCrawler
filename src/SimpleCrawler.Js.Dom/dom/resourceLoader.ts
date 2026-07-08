@@ -13,7 +13,7 @@ interface PendingResource {
 let _counter = 0;
 const _pending: PendingResource[] = [];
 const _byId = new Map<number, any>();
-let _seen = new WeakSet<object>();
+const _seen = new WeakSet<object>();
 
 export function registerResource(node: any): void {
     const tag = node.localName;
@@ -34,14 +34,6 @@ export function takeResources(): string {
 
 export function pendingResourceCount(): number {
     return _pending.length;
-}
-
-// Clears the pending queue and the seen-node set when the engine's realm is reused (Jint pool); the fresh
-// WeakSet matters because the next page builds a brand-new node tree, so nothing should still count as seen.
-export function resetResources(): void {
-    _pending.length = 0;
-    _byId.clear();
-    _seen = new WeakSet<object>();
 }
 
 export function fireResourceEvent(id: number, type: string): void {
