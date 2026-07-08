@@ -65,36 +65,53 @@ internal static partial class ProfileHarness
         await host.DisposeAsync();
     }
 
-    public static async Task RenderSize(string combo, string framework)
+    public static async Task RenderSize(string combo, string framework, string? url = null, bool enableFetch = false, bool enableStreams = false)
     {
         var tokenSource = new CancellationTokenSource();
-        var host = SpaWebApplicationFactory.Create(_entry, framework);
-        _ = host.StartAsync(tokenSource.Token);
-        await Task.Delay(1500);
+        IAsyncDisposable? host = null;
+        var entry = _entry;
+        if (url is null)
+        {
+            var spaHost = SpaWebApplicationFactory.Create(_entry, framework);
+            host = spaHost;
+            _ = spaHost.StartAsync(tokenSource.Token);
+            await Task.Delay(1500);
+        }
+        else
+        {
+            entry = url;
+        }
 
         var provider = BuildProvider(combo, out var engineKey);
         var factory = provider.GetRequiredKeyedService<IJsEngineFactory>(engineKey);
-        var renderOptions = provider.GetRequiredService<IOptions<JsRenderOptions>>().Value;
-        var renderer = new JsRenderer(factory, renderOptions, NullLogger.Instance);
+        var renderOptions = url is null
+            ? provider.GetRequiredService<IOptions<JsRenderOptions>>().Value
+            : new JsRenderOptions { EnableFetch = enableFetch, EnableStreams = enableStreams, ScriptLogging = LogLevel.Warning };
+        ILogger logger = url is null ? NullLogger.Instance : new ConsoleLogger();
+        var renderer = new JsRenderer(factory, renderOptions, logger);
 
         using var client = new HttpClient();
-        var shell = await client.GetByteArrayAsync(_entry, tokenSource.Token);
-        var htmlBytes = await renderer.RenderAsync(shell, _entry, client, tokenSource.Token);
+        var shell = await client.GetByteArrayAsync(entry, tokenSource.Token);
+        var htmlBytes = await renderer.RenderAsync(shell, entry, client, tokenSource.Token);
         var html = Encoding.UTF8.GetString(htmlBytes);
 
         var elements = Elements().Count(html);
         var anchors = Anchors().Count(html);
 
-        var dumpPath = Path.Combine(Path.GetTempPath(), $"rendersize-{framework}-{combo}.html");
+        var label = url is null ? framework : "live";
+        var flags = url is null ? "" : $" (fetch={enableFetch}, streams={enableStreams})";
+        var suffix = url is null ? "" : $"-streams{enableStreams}";
+        var dumpPath = Path.Combine(Path.GetTempPath(), $"rendersize-{label}-{combo}{suffix}.html");
         await File.WriteAllTextAsync(dumpPath, html, tokenSource.Token);
 
         Console.WriteLine();
-        Console.WriteLine($"=== rendersize {combo} / {framework}: {elements} elements, {anchors} anchors, " +
+        Console.WriteLine($"=== rendersize {combo} / {label}{flags}: {elements} elements, {anchors} anchors, " +
             $"{html.Length / 1024.0:F0} KB ===");
         Console.WriteLine($"HTML dumped to {dumpPath}");
 
         await tokenSource.CancelAsync();
-        await host.DisposeAsync();
+        if (host is not null)
+            await host.DisposeAsync();
     }
 
     private static Func<CancellationToken, Task> BuildCrawl(string combo)
@@ -133,6 +150,14 @@ internal static partial class ProfileHarness
         engine(services);
         services.AddSingleton<ILogger>(NullLogger.Instance);
         return services.BuildServiceProvider();
+    }
+
+    private sealed class ConsoleLogger : ILogger
+    {
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+        public bool IsEnabled(LogLevel logLevel) => true;
+        public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
+            => Console.WriteLine($"[{logLevel}] {formatter(state, exception)}");
     }
 
     [GeneratedRegex("<a[\\s>]")]

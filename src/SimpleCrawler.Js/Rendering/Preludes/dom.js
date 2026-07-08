@@ -3129,6 +3129,31 @@
     walk(doc.documentElement);
     return { anchors, canonical, robots };
   }
+  function countAnchors() {
+    if (!doc.documentElement) return 0;
+    let count = 0;
+    function walk(n) {
+      for (const c of n.childNodes) {
+        if (c.nodeType !== 1 /* Element */) continue;
+        if (c.localName === "a") count++;
+        walk(c);
+      }
+    }
+    walk(doc.documentElement);
+    return count;
+  }
+  var _baselineHtml = null;
+  var _baselineAnchors = 0;
+  function captureBaseline() {
+    _baselineHtml = doc.documentElement ? serializeNode(doc.documentElement) : null;
+    _baselineAnchors = countAnchors();
+  }
+  function guardRegression() {
+    if (_baselineHtml == null) return -1;
+    if (countAnchors() >= _baselineAnchors) return -1;
+    parseHTML(doc, _baselineHtml);
+    return _baselineAnchors;
+  }
   function installCrawlerApi(global) {
     global.__crawlerSetLocation = (url) => {
       applyUrl(url);
@@ -3153,6 +3178,10 @@
       fireResourceEvent(id, type);
     };
     global.__crawlerSerialize = () => doc.documentElement ? serializeNode(doc.documentElement) : "";
+    global.__crawlerCaptureBaseline = () => {
+      captureBaseline();
+    };
+    global.__crawlerGuardRegression = () => guardRegression();
     global.__crawlerEnableDomProfile = () => {
       enableDomProfile();
     };

@@ -10,4 +10,13 @@ public sealed class RenderSizeOptions
 
     [Value(1, MetaName = "framework", Default = "preact", HelpText = "SPA framework: react | preact | vue | svelte | solid")]
     public string Framework { get; set; } = "preact";
+
+    [Option("url", HelpText = "Render an arbitrary live URL instead of the test-host SPA.")]
+    public string? Url { get; set; }
+
+    [Option("fetch", HelpText = "Enable the fetch/XHR shim (JsRenderOptions.EnableFetch).")]
+    public bool EnableFetch { get; set; }
+
+    [Option("streams", HelpText = "Enable the WHATWG Streams shim (JsRenderOptions.EnableStreams).")]
+    public bool EnableStreams { get; set; }
 }

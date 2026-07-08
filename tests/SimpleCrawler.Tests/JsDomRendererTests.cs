@@ -1423,4 +1423,187 @@ public class JsDomRendererTests
             return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent("<!doctype html><html><body>fallback</body></html>") });
         }
     }
+
+    // EnableStreams installs a WHATWG Streams shim: a standalone ReadableStream can be driven to completion
+    // through getReader().read(), with chunks decoded back to text via TextDecoder. Read promises settle on
+    // the same drain that runs the rest of the render, so an anchor injected only after the stream ends still
+    // makes it into the output on both engines.
+    [Theory]
+    [InlineData(JsEngine.Jint)]
+    [InlineData(JsEngine.V8)]
+    public async Task JsMode_Streams_StandaloneReadableStream_DrainsToText(JsEngine engine)
+    {
+        if (engine == JsEngine.V8)
+            Assert.SkipUnless(V8Support.IsAvailable, V8Support.UnavailableReason);
+
+        const string html = """
+            <!doctype html><html><body>
+            <script>
+              var rs = new ReadableStream({
+                start: function (c) { c.enqueue(new TextEncoder().encode('<a href="/streamed"></a>')); c.close(); }
+              });
+              var reader = rs.getReader();
+              var dec = new TextDecoder();
+              (function pump(acc) {
+                reader.read().then(function (res) {
+                  if (res.done) {
+                    var m = acc.match(/href="([^"]+)"/);
+                    var a = document.createElement('a');
+                    a.setAttribute('href', m ? m[1] : '/nomatch');
+                    document.body.appendChild(a);
+                    return;
+                  }
+                  pump(acc + dec.decode(res.value));
+                });
+              })('');
+            </script>
+            </body></html>
+            """;
+
+        var renderer = CreateJsRenderer(engine, new JsRenderOptions { EnableStreams = true });
+        var result = await renderer.RenderAsync(Encoding.UTF8.GetBytes(html), "https://example.test/", new HttpClient(), CancellationToken.None);
+        var rendered = Encoding.UTF8.GetString(result);
+
+        Assert.Contains("href=\"/streamed\"", rendered);
+    }
+
+    // With both flags on, Response.body is a readable stream over the buffered body and pipes through a
+    // TextDecoderStream — the idiom RSC/Flight consumers use to read a response. The link only exists inside
+    // the fetched payload, so its presence proves the body streamed through the transform and decoded.
+    [Theory]
+    [InlineData(JsEngine.Jint)]
+    [InlineData(JsEngine.V8)]
+    public async Task JsMode_Streams_ResponseBody_PipesThroughTextDecoderStream(JsEngine engine)
+    {
+        if (engine == JsEngine.V8)
+            Assert.SkipUnless(V8Support.IsAvailable, V8Support.UnavailableReason);
+
+        const string html = """
+            <!doctype html><html><body>
+            <script>
+              fetch('/data').then(function (res) {
+                var reader = res.body.pipeThrough(new TextDecoderStream()).getReader();
+                (function pump(acc) {
+                  reader.read().then(function (r) {
+                    if (r.done) {
+                      var m = acc.match(/href="([^"]+)"/);
+                      var a = document.createElement('a');
+                      a.setAttribute('href', m ? m[1] : '/nomatch');
+                      document.body.appendChild(a);
+                      return;
+                    }
+                    pump(acc + r.value);
+                  });
+                })('');
+              });
+            </script>
+            </body></html>
+            """;
+
+        using var client = new HttpClient(new StreamBodyHandler());
+        var renderer = CreateJsRenderer(engine, new JsRenderOptions { EnableFetch = true, EnableStreams = true });
+        var result = await renderer.RenderAsync(Encoding.UTF8.GetBytes(html), "https://example.test/", client, CancellationToken.None);
+        var rendered = Encoding.UTF8.GetString(result);
+
+        Assert.Contains("href=\"/streamed-body\"", rendered);
+    }
+
+    // The flag is genuinely off by default: no stream globals are installed and Response.body stays null,
+    // exactly as a browser without a stream body. Fetch is enabled here only so the Response global exists to
+    // probe; streams remain absent.
+    [Theory]
+    [InlineData(JsEngine.Jint)]
+    [InlineData(JsEngine.V8)]
+    public async Task JsMode_Streams_OffByDefault_NoGlobals_AndNullBody(JsEngine engine)
+    {
+        if (engine == JsEngine.V8)
+            Assert.SkipUnless(V8Support.IsAvailable, V8Support.UnavailableReason);
+
+        const string html = """
+            <!doctype html><html><body>
+            <script>
+              var out;
+              if (typeof ReadableStream !== 'undefined') out = '/stream-defined';
+              else out = new Response('x').body === null ? '/no-stream' : '/has-body';
+              var a = document.createElement('a');
+              a.setAttribute('href', out);
+              document.body.appendChild(a);
+            </script>
+            </body></html>
+            """;
+
+        using var client = new HttpClient(new FixedResponseHandler());
+        var renderer = CreateJsRenderer(engine, new JsRenderOptions { EnableFetch = true });
+        var result = await renderer.RenderAsync(Encoding.UTF8.GetBytes(html), "https://example.test/", client, CancellationToken.None);
+        var rendered = Encoding.UTF8.GetString(result);
+
+        Assert.Contains("href=\"/no-stream\"", rendered);
+    }
+
+    // Safety net for streaming/hydration bundles: if the script path tears down the server-rendered tree
+    // and this single-pass render can't rebuild it (the Next.js RSC failure mode), the renderer must not
+    // ship fewer links than the shell arrived with. Here a script wipes the body; with EnableStreams the
+    // pre-script baseline (its two SSR anchors) is restored rather than emitting an empty page.
+    [Theory]
+    [InlineData(JsEngine.Jint)]
+    [InlineData(JsEngine.V8)]
+    public async Task JsMode_Streams_RegressionGuard_RestoresBaselineWhenBundleWipesSsr(JsEngine engine)
+    {
+        if (engine == JsEngine.V8)
+            Assert.SkipUnless(V8Support.IsAvailable, V8Support.UnavailableReason);
+
+        const string html = """
+            <!doctype html><html><body>
+            <a href="/ssr-1">one</a><a href="/ssr-2">two</a>
+            <script>document.body.innerHTML = '';</script>
+            </body></html>
+            """;
+
+        var renderer = CreateJsRenderer(engine, new JsRenderOptions { EnableStreams = true });
+        var result = await renderer.RenderAsync(Encoding.UTF8.GetBytes(html), "https://example.test/", new HttpClient(), CancellationToken.None);
+        var rendered = Encoding.UTF8.GetString(result);
+
+        Assert.Contains("href=\"/ssr-1\"", rendered);
+        Assert.Contains("href=\"/ssr-2\"", rendered);
+    }
+
+    // The guard must never clobber a healthy render: when the bundle adds links (the normal SPA case), the
+    // richer post-script tree is kept because it does not regress below the baseline anchor count.
+    [Theory]
+    [InlineData(JsEngine.Jint)]
+    [InlineData(JsEngine.V8)]
+    public async Task JsMode_Streams_RegressionGuard_KeepsRicherRenderWhenBundleAddsAnchors(JsEngine engine)
+    {
+        if (engine == JsEngine.V8)
+            Assert.SkipUnless(V8Support.IsAvailable, V8Support.UnavailableReason);
+
+        const string html = """
+            <!doctype html><html><body>
+            <a href="/ssr-1">one</a>
+            <script>
+              var d = document.body;
+              ['/added-1', '/added-2'].forEach(function (h) {
+                var a = document.createElement('a'); a.setAttribute('href', h); d.appendChild(a);
+              });
+            </script>
+            </body></html>
+            """;
+
+        var renderer = CreateJsRenderer(engine, new JsRenderOptions { EnableStreams = true });
+        var result = await renderer.RenderAsync(Encoding.UTF8.GetBytes(html), "https://example.test/", new HttpClient(), CancellationToken.None);
+        var rendered = Encoding.UTF8.GetString(result);
+
+        Assert.Contains("href=\"/ssr-1\"", rendered);
+        Assert.Contains("href=\"/added-1\"", rendered);
+        Assert.Contains("href=\"/added-2\"", rendered);
+    }
+
+    private sealed class StreamBodyHandler : HttpMessageHandler
+    {
+        protected override HttpResponseMessage Send(HttpRequestMessage request, CancellationToken cancellationToken)
+            => new(HttpStatusCode.OK) { Content = new StringContent("<a href=\"/streamed-body\"></a>") };
+
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+            => Task.FromResult(Send(request, cancellationToken));
+    }
 }
