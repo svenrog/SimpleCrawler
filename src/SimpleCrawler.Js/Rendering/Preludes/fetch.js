@@ -58,11 +58,38 @@
     }
   };
 
+  // browser/TextEncoder.ts
+  var TextEncoder = class {
+    constructor() {
+      this.encoding = "utf-8";
+    }
+    encode(input) {
+      const s = input == null ? "" : String(input);
+      const out = [];
+      for (let i = 0; i < s.length; ) {
+        const c = s.charCodeAt(i++);
+        if (c < 128) {
+          out.push(c);
+        } else if (c < 2048) {
+          out.push(192 | c >> 6, 128 | c & 63);
+        } else if (c >= 55296 && c <= 56319 && i < s.length) {
+          const c2 = s.charCodeAt(i++);
+          const cp = 65536 + ((c & 1023) << 10) + (c2 & 1023);
+          out.push(240 | cp >> 18, 128 | cp >> 12 & 63, 128 | cp >> 6 & 63, 128 | cp & 63);
+        } else {
+          out.push(224 | c >> 12, 128 | c >> 6 & 63, 128 | c & 63);
+        }
+      }
+      return new Uint8Array(out);
+    }
+  };
+
   // network/types/Response.ts
   var Response = class _Response {
     constructor(body, init) {
       init = init || {};
       this._bodyText = body == null ? "" : String(body);
+      this._bodyStream = void 0;
       this.status = init.status === void 0 ? 200 : init.status;
       this.ok = this.status >= 200 && this.status < 300;
       this.statusText = init.statusText || "";
@@ -71,6 +98,24 @@
       this.type = "default";
       this.headers = init.headers instanceof Headers ? init.headers : new Headers(init.headers);
       this.bodyUsed = false;
+    }
+    // Exposes the buffered body as a ReadableStream only when the Streams shim (EnableStreams) is
+    // installed; otherwise null, as in a browser without a stream body. Cached so repeat access returns
+    // the same stream (spec) and reflects bodyUsed once read.
+    get body() {
+      const g = globalThis;
+      if (typeof g.ReadableStream !== "function") return null;
+      if (this._bodyStream === void 0) {
+        const bytes = new TextEncoder().encode(this._bodyText);
+        this._bodyStream = new g.ReadableStream({
+          start: (controller) => {
+            if (bytes.length) controller.enqueue(bytes);
+            controller.close();
+            this.bodyUsed = true;
+          }
+        });
+      }
+      return this._bodyStream;
     }
     text() {
       this.bodyUsed = true;
@@ -82,6 +127,10 @@
       } catch (e) {
         return Promise.reject(e);
       }
+    }
+    arrayBuffer() {
+      this.bodyUsed = true;
+      return Promise.resolve(new TextEncoder().encode(this._bodyText).buffer);
     }
     clone() {
       const c = new _Response(this._bodyText, { status: this.status, statusText: this.statusText, headers: this.headers });

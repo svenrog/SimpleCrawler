@@ -17,7 +17,9 @@ The compiled bundles are committed as embedded resources; editing TypeScript doe
 
 ## Scope boundary
 
-Shim missing browser APIs so SPAs hydrate, but don't reimplement runtimes. Streaming-response rendering (e.g. server components over `ReadableStream`) is out of scope — route such sites to the Playwright/Puppeteer backends instead of growing the shim surface.
+Shim missing browser APIs so SPAs hydrate, but don't reimplement runtimes. The WHATWG Streams surface (`ReadableStream`/`TransformStream`/`TextDecoderStream`/`Response.body`) is now shimmed behind the opt-in `EnableStreams` flag (`stream/` → `stream.js`), but it delivers a **buffered-complete** body — the fetch path already materializes the whole response, so consumers get spec-compliant reader/transform semantics, not incremental transport. Genuinely chunked-over-time / server-push rendering (RSC Flight streamed across many packets) stays out of scope — route those sites to the Playwright/Puppeteer backends instead of growing the shim surface.
+
+Because enabling streams lets a Next.js App Router RSC bundle run its streaming path — which, in a single-pass render, can tear down the server markup and fail to rebuild it — the renderer captures a pre-script baseline (`__crawlerCaptureBaseline` in `crawler/api.ts`) and, at finalize, restores it (`__crawlerGuardRegression`) if the live tree's anchor count regressed below the shell. This guarantees `EnableStreams` never yields fewer links than the server HTML; it does not make such sites render fully. See the `EnableStreams` XML doc in `JsRenderOptions`.
 
 Types that page code extends or `instanceof`-checks must be JS classes here (engine host types have no usable prototype chain). Framework code also sniffs for `[native code]` in `toString()` — see `browser/native.ts` (`markPrototypeNative`) when adding globals jQuery-era libraries probe.
 

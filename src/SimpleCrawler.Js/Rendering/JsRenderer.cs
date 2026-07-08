@@ -76,6 +76,9 @@ public sealed class JsRenderer
         if (_options.EnableIndexedDb)
             RunPrelude(engine, JsPreludes.IndexedDb);
 
+        if (_options.EnableStreams)
+            RunPrelude(engine, JsPreludes.Stream);
+
         if (DomProfiler.Enabled)
             engine.CallGlobal("__crawlerEnableDomProfile");
 
@@ -107,6 +110,12 @@ public sealed class JsRenderer
             return Finalize(engine, finalize, totalTime);
         }
 
+        // Snapshot the parsed-but-unscripted tree so a streaming/hydration bundle that tears down the
+        // server markup without rebuilding it can't leave the render worse off than the shell it started
+        // from. Only under EnableStreams, the one path that lets such bundles run.
+        if (_options.EnableStreams)
+            engine.CallGlobal("__crawlerCaptureBaseline");
+
         if (_options.EnableFetch)
         {
             engine.EmbedHostObject("__http", new JsHttp(client, pageUri, _logger, cancellationToken));
@@ -128,6 +137,13 @@ public sealed class JsRenderer
         var drainTime = RenderProfiler.Start();
         await DrainJsAsync(engine, documentBaseUri, pageUri, client, pageUrl, cancellationToken);
         RenderProfiler.Stop("phase.drain", drainTime);
+
+        if (_options.EnableStreams)
+        {
+            var restored = engine.Evaluate<int>("__crawlerGuardRegression()");
+            if (restored >= 0)
+                _logger.LogDebug("JS render regressed below the server-rendered shell on '{url}'; restored baseline ({anchors} anchors).", pageUrl, restored);
+        }
 
         return Finalize(engine, finalize, totalTime);
     }

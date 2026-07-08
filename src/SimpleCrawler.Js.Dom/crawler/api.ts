@@ -105,6 +105,41 @@ function collectLinks(): { anchors: (string | null)[]; canonical: string | null;
     return { anchors, canonical, robots };
 }
 
+function countAnchors(): number {
+    if (!doc.documentElement) return 0;
+    let count = 0;
+    function walk(n: any): void {
+        for (const c of n.childNodes) {
+            if (c.nodeType !== NodeType.Element) continue;
+            if (c.localName === "a") count++;
+            walk(c);
+        }
+    }
+    walk(doc.documentElement);
+    return count;
+}
+
+// A client-side framework that streams/hydrates can tear down the server-rendered tree and, in this
+// single-pass render, fail to rebuild it — leaving fewer links than the shell shipped with (seen with
+// Next.js App Router RSC when EnableStreams lets its streaming path run). Snapshot the pre-script tree
+// so the render can fall back to it if the bundle regresses the link count below the baseline.
+let _baselineHtml: string | null = null;
+let _baselineAnchors = 0;
+
+function captureBaseline(): void {
+    _baselineHtml = doc.documentElement ? serializeNode(doc.documentElement) : null;
+    _baselineAnchors = countAnchors();
+}
+
+// Returns the restored anchor count if the live tree regressed below the baseline (and restores it),
+// otherwise -1. The restore reparses the snapshot, which wireDocument swaps in wholesale.
+function guardRegression(): number {
+    if (_baselineHtml == null) return -1;
+    if (countAnchors() >= _baselineAnchors) return -1;
+    parseHTML(doc, _baselineHtml);
+    return _baselineAnchors;
+}
+
 export function installCrawlerApi(global: any): void {
     global.__crawlerSetLocation = (url: string) => { applyUrl(url); };
     global.__crawlerSetViewport = (width: number, height: number) => { setViewport(width, height); };
@@ -119,6 +154,8 @@ export function installCrawlerApi(global: any): void {
     global.__crawlerPendingResources = () => pendingResourceCount();
     global.__crawlerFireResourceEvent = (id: number, type: string) => { fireResourceEvent(id, type); };
     global.__crawlerSerialize = () => doc.documentElement ? serializeNode(doc.documentElement) : "";
+    global.__crawlerCaptureBaseline = () => { captureBaseline(); };
+    global.__crawlerGuardRegression = () => guardRegression();
     global.__crawlerEnableDomProfile = () => { enableDomProfile(); };
     global.__crawlerDomProfileDump = () => dumpDomProfile();
 }

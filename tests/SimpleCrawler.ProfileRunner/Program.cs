@@ -10,4 +10,4 @@ using var parser = new Parser(settings =>
 var result = parser.ParseArguments<ProfileOptions, RenderSizeOptions>(args);
 
 await result.WithParsedAsync<ProfileOptions>(o => ProfileHarness.Run(o.Combo, o.Iterations, o.Framework));
-await result.WithParsedAsync<RenderSizeOptions>(o => ProfileHarness.RenderSize(o.Combo, o.Framework));
+await result.WithParsedAsync<RenderSizeOptions>(o => ProfileHarness.RenderSize(o.Combo, o.Framework, o.Url, o.EnableFetch, o.EnableStreams));
