@@ -1,10 +1,10 @@
 ﻿using CommandLine;
-using Crude.Logging.Console.Extensions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Http;
 using Microsoft.Extensions.Logging;
+using Simple.Logging.Console.Extensions;
 using SimpleCrawler.Console.Extensions;
 using SimpleCrawler.Console.Serialization;
 using SimpleCrawler.Core;

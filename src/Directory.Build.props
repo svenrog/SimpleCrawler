@@ -26,4 +26,11 @@
     <None Include="$(MSBuildThisFileDirectory)..\assets\icon-128.png" Pack="true" PackagePath="icon.png" Visible="false" />
   </ItemGroup>
 
+  <!-- dotnet publish (unlike dotnet pack) never needs .pdb in its output; keeps the CLI's publish
+       folder to just the runtime closure. Scoped to _IsPublishing so IncludeSymbols/.snupkg
+       packing above is unaffected, as is dotnet build/F5 debugging. -->
+  <PropertyGroup Condition="'$(_IsPublishing)' == 'true'">
+    <DebugType>None</DebugType>
+  </PropertyGroup>
+
 </Project>

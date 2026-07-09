@@ -8,20 +8,65 @@
 		<PublishAot>true</PublishAot>
 		<InvariantGlobalization>true</InvariantGlobalization>
 		<ServerGarbageCollection>true</ServerGarbageCollection>
-		<AssemblyName>smpcrawl</AssemblyName>
 		<IsPackable>false</IsPackable>
+	</PropertyGroup>
+	
+	<!-- CrawlerBackend selects the HTML/rendering backend wired into the CLI. Pass -p:CrawlerBackend=V8 to
+	     dotnet build/publish to switch; defaults to HtmlAgilityPack for plain builds and IDE editing. -->
+	<PropertyGroup>
+		<CrawlerBackend Condition="'$(CrawlerBackend)' == ''">HtmlAgilityPack</CrawlerBackend>
+		<DefineConstants>$(DefineConstants);BACKEND_$(CrawlerBackend.ToUpperInvariant())</DefineConstants>
+		<AssemblyName Condition="'$(CrawlerBackend)' == 'HtmlAgilityPack'">smpcrawl</AssemblyName>
+		<AssemblyName Condition="'$(CrawlerBackend)' != 'HtmlAgilityPack'">smpcrawl-$(CrawlerBackend.ToLowerInvariant())</AssemblyName>
+	</PropertyGroup>
+
+	<!-- Group symbols alongside the per-backend BACKEND_* one, so code shared by a family of
+	     backends (JS engines, headless browsers) only needs to branch once. -->
+	<PropertyGroup Condition="'$(CrawlerBackend)' == 'Jint' OR '$(CrawlerBackend)' == 'V8'">
+		<DefineConstants>$(DefineConstants);JS</DefineConstants>
+	</PropertyGroup>
+
+	<!-- Playwright/Puppeteer drive an out-of-process browser over CDP/BiDi using reflection-based
+	     JSON serialization that isn't trim-safe; ILC "succeeds" but the reflection paths break at
+	     runtime once trimmed. These backends publish self-contained but JIT, not AOT. -->
+	<PropertyGroup Condition="'$(CrawlerBackend)' == 'Playwright' OR '$(CrawlerBackend)' == 'Puppeteer'">
+		<DefineConstants>$(DefineConstants);HEADLESS</DefineConstants>
+		<PublishAot>false</PublishAot>
 	</PropertyGroup>
 
 	<ItemGroup>
 		<PackageReference Include="CommandLineParser" Version="2.9.1" />
-		<PackageReference Include="Crude.Logging.Console" Version="1.0.2" />
+		<PackageReference Include="Simple.Logging.Console" Version="1.0.1" />
 		<PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.8" />
 		<PackageReference Include="Microsoft.Extensions.Http" Version="10.0.8" />
 	</ItemGroup>
 
 	<ItemGroup>
 		<ProjectReference Include="..\SimpleCrawler.Core\SimpleCrawler.Core.csproj" />
+	</ItemGroup>
+
+	<ItemGroup Condition="'$(CrawlerBackend)' == 'HtmlAgilityPack'">
 		<ProjectReference Include="..\SimpleCrawler.HtmlAgilityPack\SimpleCrawler.HtmlAgilityPack.csproj" />
+	</ItemGroup>
+
+	<ItemGroup Condition="'$(CrawlerBackend)' == 'V8'">
+		<ProjectReference Include="..\SimpleCrawler.Js.V8\SimpleCrawler.Js.V8.csproj" />
+	</ItemGroup>
+
+	<ItemGroup Condition="'$(CrawlerBackend)' == 'AngleSharp'">
+		<ProjectReference Include="..\SimpleCrawler.AngleSharp\SimpleCrawler.AngleSharp.csproj" />
+	</ItemGroup>
+
+	<ItemGroup Condition="'$(CrawlerBackend)' == 'Jint'">
+		<ProjectReference Include="..\SimpleCrawler.Js.Jint\SimpleCrawler.Js.Jint.csproj" />
+	</ItemGroup>
+
+	<ItemGroup Condition="'$(CrawlerBackend)' == 'Playwright'">
+		<ProjectReference Include="..\SimpleCrawler.Playwright\SimpleCrawler.Playwright.csproj" />
+	</ItemGroup>
+
+	<ItemGroup Condition="'$(CrawlerBackend)' == 'Puppeteer'">
+		<ProjectReference Include="..\SimpleCrawler.Puppeteer\SimpleCrawler.Puppeteer.csproj" />
 	</ItemGroup>
 
 </Project>

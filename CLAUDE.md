@@ -21,7 +21,7 @@ A high-performance single-domain web crawler (CLI: `smpcrawl`) built to gather U
   - `SimpleCrawler.Js` (in-process JS rendering over a pure-JS DOM) with one engine project each for `SimpleCrawler.Js.Jint` and `SimpleCrawler.Js.V8`; `SimpleCrawler.Js.Dom` is the TypeScript source the embedded JS preludes are built from.
   - `SimpleCrawler.Playwright` and `SimpleCrawler.Puppeteer` (headless browser).
 - Every project under `/src` is part of the solution; there are no out-of-solution experiments.
-- The CLI (`SimpleCrawler.Console`) is wired to one backend at a time. To switch, change the `AddHtmlAgilityPackCrawler(...)` call in `src/SimpleCrawler.Console/Extensions/ServiceCollectionExtensions.cs` to the target backend's `AddXyzCrawler` extension and add the project reference to `SimpleCrawler.Console.csproj`.
+- The CLI (`SimpleCrawler.Console`) is wired to one backend at a time, selected at build/publish time via `-p:CrawlerBackend=<HtmlAgilityPack|V8|AngleSharp|Jint|Playwright|Puppeteer>` (defaults to `HtmlAgilityPack`). The property drives a `BACKEND_*` define constant, the matching `AddXyzCrawler(...)` call in `src/SimpleCrawler.Console/Extensions/ServiceCollectionExtensions.cs`, the conditional `ProjectReference` in `SimpleCrawler.Console.csproj`, and the output `AssemblyName` (`smpcrawl`, or `smpcrawl-<backend>` for non-default backends). `publish.ps1` publishes all six. Playwright/Puppeteer drive an out-of-process browser via reflection-heavy CDP/BiDi client libraries that aren't trim-safe, so those two backends publish self-contained JIT rather than NativeAOT (`PublishAot` is forced off for them); the rest publish NativeAOT.
 
 ## Code style
 
