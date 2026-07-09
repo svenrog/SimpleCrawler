@@ -30,13 +30,6 @@ Use if memory management is needed or dependencies can't be installed.
 - **Memory lives outside the .NET heap.** The V8 isolate has its own native heap, so managed profilers understate real footprint, the low "Allocated" numbers in [performance](./performance.md) are misleading. Size host RAM for it, especially at high `ParseConcurrency`.
 - Ships a version-locked, per-platform native binary.
 
-## HTML parser
-
-The shell HTML is tokenised into the DOM by `dom.js` before scripts run — there is no parser to choose.
-Pluggable native C# pre-parsers (AngleSharp, HtmlAgilityPack) feeding the tree in were tried and removed:
-on a realistic render the parse is a rounding error next to bundle execution, so they measured no faster
-and, on V8, allocated *more* (they build a managed DOM tree to marshal across). See [performance](./performance.md).
-
 ## JsRenderOptions
 
 Passed to `AddJintCrawler`/`AddV8Crawler`.
