@@ -96,6 +96,24 @@ public class CheckpointResumeTests
     }
 
     [Fact]
+    public async Task Start_Persists_Checkpoint_When_Cancelled()
+    {
+        var store = new MemoryCheckpointStore();
+        var crawler = CreateCrawler(store, links: [], block: true);
+
+        using var cts = new CancellationTokenSource();
+        var run = crawler.Start(_entry, cts.Token);
+
+        await crawler.FetchStarted.WaitAsync(TimeSpan.FromSeconds(5));
+
+        cts.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => run);
+
+        Assert.NotNull(store.Saved);
+    }
+
+    [Fact]
     public async Task Checkpoint_For_Different_Entries_Is_Ignored()
     {
         var store = new MemoryCheckpointStore
@@ -115,7 +133,7 @@ public class CheckpointResumeTests
         Assert.Contains(_entry, crawler.Fetched);
     }
 
-    private static RecordingCrawler CreateCrawler(ICheckpointStore store, Dictionary<string, IReadOnlyList<string?>> links)
+    private static RecordingCrawler CreateCrawler(ICheckpointStore store, Dictionary<string, IReadOnlyList<string?>> links, bool block = false)
     {
         var options = new CrawlerOptions
         {
@@ -126,30 +144,40 @@ public class CheckpointResumeTests
             EnableSitemapDiscovery = false,
         };
 
-        return new RecordingCrawler(new StubRobotClient(), Options.Create(options), NullLogger.Instance, links, store);
+        return new RecordingCrawler(new StubRobotClient(), Options.Create(options), NullLogger.Instance, links, store, block);
     }
 
     private sealed class RecordingCrawler : AbstractRobotsCrawler<string, string, ScrapeResult>
     {
         private readonly IReadOnlyDictionary<string, IReadOnlyList<string?>> _links;
+        private readonly bool _block;
 
         public RecordingCrawler(
             IRobotClient robotClient,
             IOptions<CrawlerOptions> options,
             ILogger logger,
             IReadOnlyDictionary<string, IReadOnlyList<string?>> links,
-            ICheckpointStore checkpoint)
+            ICheckpointStore checkpoint,
+            bool block = false)
             : base(robotClient, options, logger, checkpoint)
         {
             _links = links;
+            _block = block;
         }
 
         public ConcurrentBag<string> Fetched { get; } = [];
+        private readonly TaskCompletionSource _firstFetch = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public Task FetchStarted => _firstFetch.Task;
 
-        protected override Task<string?> LoadResponse(string url, CancellationToken cancellationToken)
+        protected override async Task<string?> LoadResponse(string url, CancellationToken cancellationToken)
         {
             Fetched.Add(url);
-            return Task.FromResult<string?>(url);
+            _firstFetch.TrySetResult();
+
+            if (_block)
+                await Task.Delay(Timeout.Infinite).WaitAsync(cancellationToken);
+
+            return url;
         }
 
         protected override ValueTask<string> ParseResponse(string response)

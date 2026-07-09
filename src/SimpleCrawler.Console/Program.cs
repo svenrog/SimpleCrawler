@@ -26,7 +26,7 @@ internal static class Program
 
         using var parser = new Parser(settings =>
         {
-            settings.HelpWriter = System.Console.Error;
+            settings.HelpWriter = SystemConsole.Error;
             settings.CaseInsensitiveEnumValues = true;
             settings.AllowMultiInstance = true;
         });
@@ -48,11 +48,6 @@ internal static class Program
         using var host = builder.Build();
         using var tokenSource = new CancellationTokenSource();
 
-        SystemConsole.CancelKeyPress += delegate (object? sender, ConsoleCancelEventArgs e)
-        {
-            tokenSource.Cancel();
-        };
-
         var logger = host.Services.GetRequiredService<ILogger<ICrawler>>();
         var options = host.Services.GetRequiredService<Options>();
         var crawler = host.Services.GetRequiredService<ICrawler>();
@@ -64,16 +59,43 @@ internal static class Program
             return;
         }
 
-        var result = await crawler.Start(entries, tokenSource.Token);
-
-        await File.WriteAllLinesAsync(options.Output, result.Urls, tokenSource.Token);
-
-        logger.LogInformation("Wrote output file to '{path}'", options.Output);
-
-        if (!string.IsNullOrWhiteSpace(options.Report))
+        var cancelled = false;
+        SystemConsole.CancelKeyPress += OnCancel;
+        try
         {
-            await WriteReport(options.Report, result.Reports, tokenSource.Token);
-            logger.LogInformation("Wrote report file to '{path}'", options.Report);
+            var result = await crawler.Start(entries, tokenSource.Token);
+
+            await File.WriteAllLinesAsync(options.Output, result.Urls, tokenSource.Token);
+
+            logger.LogInformation("Wrote output file to '{path}'", options.Output);
+
+            if (!string.IsNullOrWhiteSpace(options.Report))
+            {
+                await WriteReport(options.Report, result.Reports, tokenSource.Token);
+                logger.LogInformation("Wrote report file to '{path}'", options.Report);
+            }
+        }
+        catch (OperationCanceledException) when (tokenSource.IsCancellationRequested)
+        {
+            logger.LogInformation("Crawl interrupted; checkpoint saved. Re-run to resume from where it stopped.");
+        }
+        finally
+        {
+            SystemConsole.CancelKeyPress -= OnCancel;
+        }
+
+        void OnCancel(object? sender, ConsoleCancelEventArgs e)
+        {
+            if (cancelled)
+            {
+                e.Cancel = false;
+                return;
+            }
+
+            cancelled = true;
+            e.Cancel = true;
+            tokenSource.Cancel();
+            logger.LogInformation("Cancellation requested; finishing in-flight requests and saving checkpoint...");
         }
     }
 
