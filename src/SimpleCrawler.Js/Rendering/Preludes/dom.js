@@ -1140,6 +1140,9 @@
       }
       return this._sheet;
     }
+    getAnimations() {
+      return [];
+    }
   };
 
   // dom/DocumentFragment.ts
@@ -2231,6 +2234,17 @@
     }
   };
 
+  // dom/Animation.ts
+  var Animation = class extends EventTarget {
+  };
+
+  // dom/CSSTransition.ts
+  var CSSTransition = class extends Animation {
+    get transitionProperty() {
+      return "";
+    }
+  };
+
   // dom/htmlInterfaces.ts
   var htmlInterfaces_exports = {};
   __export(htmlInterfaces_exports, {
@@ -2852,7 +2866,7 @@
       }
       reportSwallowed("reportError", error);
     });
-    global.getComputedStyle = () => ({ getPropertyValue: () => "" });
+    global.getComputedStyle = () => ({ getPropertyValue: () => null });
     global.getSelection = () => ({
       rangeCount: 0,
       type: "None",
@@ -2908,6 +2922,7 @@
     global.DocumentFragment = DocumentFragment;
     global.HTMLElement = HTMLElement;
     global.HTMLTemplateElement = HTMLTemplateElement;
+    global.CSSTransition = CSSTransition;
     global.Image = HTMLImageElement;
     for (const name in htmlInterfaces_exports) global[name] = htmlInterfaces_exports[name];
     global.customElements = customElements;

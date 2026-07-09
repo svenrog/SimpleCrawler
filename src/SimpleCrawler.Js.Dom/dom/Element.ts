@@ -8,6 +8,8 @@ import { serializeChildren, serializeNode } from "../html/serializer";
 import { parserRef } from "../html/parserRef";
 import { registerResource } from "./resourceLoader";
 import { viewportWidth, viewportHeight } from "../browser/viewport";
+import { Animatable } from "./Animatable";
+import { Animation } from "./Animation";
 
 function attrNode(name: string, value: string, owner: Element): any {
     return { name, value, localName: name, namespaceURI: null, ownerElement: owner };
@@ -21,7 +23,7 @@ function nthAttrNode(attrs: Map<string, string>, index: number, owner: Element):
     return undefined;
 }
 
-export class Element extends Node {
+export class Element extends Node implements Animatable {
     localName: string;
     tagName: string;
     nodeName: string;
@@ -468,5 +470,9 @@ export class Element extends Node {
             };
         }
         return this._sheet;
+    }
+
+    getAnimations(): Animation[] {
+        return [];
     }
 }
