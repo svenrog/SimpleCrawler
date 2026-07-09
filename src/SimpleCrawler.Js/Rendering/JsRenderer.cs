@@ -109,9 +109,6 @@ public sealed class JsRenderer
         // ran: finalize against the parsed-only tree.
         if (regularScripts.Count == 0 && moduleEntries.Count == 0)
         {
-            if (ContainsScriptTag(shell))
-                _logger.LogDebug("Shell has <script> tags but none were collected as executable on '{url}'", pageUrl);
-
             return Finalize(engine, finalize, totalTime);
         }
 
