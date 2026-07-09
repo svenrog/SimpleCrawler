@@ -77,7 +77,7 @@ internal static class Program
         }
         catch (OperationCanceledException) when (tokenSource.IsCancellationRequested)
         {
-            logger.LogInformation("Crawl interrupted; checkpoint saved. Re-run to resume from where it stopped.");
+            logger.LogInformation("Crawl interrupted.");
         }
         finally
         {
@@ -95,7 +95,7 @@ internal static class Program
             cancelled = true;
             e.Cancel = true;
             tokenSource.Cancel();
-            logger.LogInformation("Cancellation requested; finishing in-flight requests and saving checkpoint...");
+            logger.LogInformation("Cancellation requested; finishing in-flight requests...");
         }
     }
 
