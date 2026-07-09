@@ -1,4 +1,5 @@
 import { doc } from "../browser/globals";
+import { Event } from "../browser/Event";
 import { parseHTML } from "../html/parser";
 import { serializeNode } from "../html/serializer";
 import { applyUrl } from "../url/resolve";
@@ -140,6 +141,16 @@ function guardRegression(): number {
     return _baselineAnchors;
 }
 
+// Fired once, after the bundle's top-level script code has all executed but before the drain loop starts
+// pumping timers/microtasks — so a script that does `addEventListener('DOMContentLoaded', cb)` during its
+// own top-level execution is already registered by the time this fires, matching how a real page's
+// synchronous/deferred scripts run before the event. document.readyState is "complete" from the start
+// (this render has no real loading phase), which independently satisfies the more common
+// `readyState === 'loading' ? addEventListener(...) : cb()` gate without needing the event at all.
+function fireDomContentLoaded(): void {
+    doc.dispatchEvent(new Event("DOMContentLoaded"));
+}
+
 export function installCrawlerApi(global: any): void {
     global.__crawlerSetLocation = (url: string) => { applyUrl(url); };
     global.__crawlerSetViewport = (width: number, height: number) => { setViewport(width, height); };
@@ -153,6 +164,7 @@ export function installCrawlerApi(global: any): void {
     global.__crawlerTakeResources = () => takeResources();
     global.__crawlerPendingResources = () => pendingResourceCount();
     global.__crawlerFireResourceEvent = (id: number, type: string) => { fireResourceEvent(id, type); };
+    global.__crawlerFireDomContentLoaded = () => { fireDomContentLoaded(); };
     global.__crawlerSerialize = () => doc.documentElement ? serializeNode(doc.documentElement) : "";
     global.__crawlerCaptureBaseline = () => { captureBaseline(); };
     global.__crawlerGuardRegression = () => guardRegression();

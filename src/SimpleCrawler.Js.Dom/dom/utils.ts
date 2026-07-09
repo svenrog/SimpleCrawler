@@ -33,6 +33,17 @@ export function collectByTag(node: Node, tag: string, out: Node[]): void {
     }
 }
 
+export function collectByPredicate(node: Node, pred: (e: Node) => boolean, out: Node[]): void {
+    const children = node.childNodes;
+    for (let i = 0; i < children.length; i++) {
+        const c = children[i];
+        if (c.nodeType === NodeType.Element) {
+            if (pred(c)) out.push(c);
+            collectByPredicate(c, pred, out);
+        }
+    }
+}
+
 export function collectByClass(node: Node, className: string, out: Node[]): void {
     const children = node.childNodes;
     for (let i = 0; i < children.length; i++) {

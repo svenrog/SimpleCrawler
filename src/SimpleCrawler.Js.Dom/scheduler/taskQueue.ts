@@ -1,3 +1,5 @@
+import { reportSwallowed } from "../diagnostics";
+
 type Callback = () => void;
 
 interface Task {
@@ -46,7 +48,7 @@ export function pumpTasks(): number {
     for (const task of batch) {
         _byId.delete(task.id);
         if (task.cancelled) continue;
-        try { task.cb(); } catch { /* a failing callback must not abort the drain */ }
+        try { task.cb(); } catch (e) { reportSwallowed("scheduled task", e); }
     }
     return _tasks.length;
 }

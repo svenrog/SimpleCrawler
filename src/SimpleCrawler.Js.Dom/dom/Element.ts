@@ -9,6 +9,18 @@ import { parserRef } from "../html/parserRef";
 import { registerResource } from "./resourceLoader";
 import { viewportWidth, viewportHeight } from "../browser/viewport";
 
+function attrNode(name: string, value: string, owner: Element): any {
+    return { name, value, localName: name, namespaceURI: null, ownerElement: owner };
+}
+
+function nthAttrNode(attrs: Map<string, string>, index: number, owner: Element): any {
+    let i = 0;
+    for (const [name, value] of attrs) {
+        if (i++ === index) return attrNode(name, value, owner);
+    }
+    return undefined;
+}
+
 export class Element extends Node {
     localName: string;
     tagName: string;
@@ -69,19 +81,36 @@ export class Element extends Node {
         return Array.from(this.attrs.keys());
     }
 
-    // A NamedNodeMap-ish snapshot: custom-element upgrade code walks `el.attributes` by index reading
-    // `.length`/`[i].name`/`[i].value`, so it must be array-like with attr entries, not undefined.
+    // A live NamedNodeMap-ish view: custom-element upgrade code walks `el.attributes` by index reading
+    // `.length`/`[i].name`/`[i].value`, and React's singleton-attribute teardown does
+    // `for (c = el.attributes; c.length;) el.removeAttributeNode(c[0])` — that loop only terminates if
+    // `.length` is read live off the current attribute set, not snapshotted once when `.attributes` is accessed.
     get attributes(): any {
-        const list: any[] = [];
-        for (const [name, value] of this.attrs) {
-            list.push({ name, value, localName: name, namespaceURI: null, ownerElement: this });
-        }
-        (list as any).getNamedItem = (name: string) => list.find((a) => a.name === name) || null;
-        (list as any).item = (i: number) => list[i] || null;
-        return list;
+        const el = this;
+        return new Proxy({}, {
+            get(_t, prop) {
+                if (prop === "length") return el.attrs.size;
+                if (prop === "item") return (i: number) => nthAttrNode(el.attrs, i, el);
+                if (prop === "getNamedItem") return (name: string) => el.getAttributeNode(name);
+                if (typeof prop === "string" && /^\d+$/.test(prop)) return nthAttrNode(el.attrs, Number(prop), el);
+                return undefined;
+            },
+        });
     }
 
-    setAttributeNode(): void { }
+    getAttributeNode(name: string): any {
+        return this.attrs.has(name) ? attrNode(name, this.attrs.get(name)!, this) : null;
+    }
+
+    setAttributeNode(attr: any): any {
+        if (attr && attr.name != null) this.attrs.set(String(attr.name), attr.value == null ? "" : String(attr.value));
+        return null;
+    }
+
+    removeAttributeNode(attr: any): any {
+        if (attr && attr.name != null) this.attrs.delete(String(attr.name));
+        return attr;
+    }
 
     getElementsByTagName(tag: string): Element[] {
         const out: Node[] = [];

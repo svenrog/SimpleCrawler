@@ -1,4 +1,5 @@
 import { Event } from "../browser/Event";
+import { reportSwallowed } from "../diagnostics";
 
 // A <script src> or <link> the bundle appends at runtime (webpack lazy-route JS/CSS chunks, React 18's
 // stylesheet loading, analytics loaders). The host drains these between turns: a same-origin <script> is
@@ -44,9 +45,9 @@ export function fireResourceEvent(id: number, type: string): void {
     event.target = node;
     const handler = type === "load" ? node.onload : node.onerror;
     if (typeof handler === "function") {
-        try { handler.call(node, event); } catch { /* a failing handler must not abort the drain */ }
+        try { handler.call(node, event); } catch (e) { reportSwallowed("resource " + type + " handler", e); }
     }
     if (typeof node.dispatchEvent === "function") {
-        try { node.dispatchEvent(event); } catch { /* same */ }
+        try { node.dispatchEvent(event); } catch (e) { reportSwallowed("resource " + type + " dispatch", e); }
     }
 }
