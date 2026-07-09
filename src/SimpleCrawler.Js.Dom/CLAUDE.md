@@ -8,7 +8,6 @@ The compiled bundles are committed as embedded resources; editing TypeScript doe
 
 - `npm run build` — all bundles.
 - `npm run build:dom` → `../SimpleCrawler.Js/Rendering/Preludes/dom.js`; `build:fetch` → `fetch.js`; `build:indexeddb` → `indexeddb.js`.
-- `npm run build:jint` → `../SimpleCrawler.Js.Jint/Preludes/shims.js` (Jint-only engine-compat shims).
 - `npm run typecheck` before committing.
 
 ## Contract with C#

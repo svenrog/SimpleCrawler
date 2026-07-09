@@ -29,8 +29,6 @@ internal sealed class JintJsEngine : IJsEngine, IDisposable
                 .EnableModules(loader)
                 .CatchClrExceptions();
         });
-
-        _engine.Execute(Shim.Source);
     }
 
     // Each engine renders exactly one page, so the DOM prelude is always installed fresh — returns true. On
