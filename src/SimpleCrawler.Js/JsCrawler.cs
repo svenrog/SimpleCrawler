@@ -2,6 +2,7 @@ using SimpleCrawler.Js.Abstractions;
 using SimpleCrawler.Js.Models;
 using SimpleCrawler.Js.Rendering;
 using SimpleCrawler.Core;
+using SimpleCrawler.Core.Checkpoints;
 using SimpleCrawler.Core.Extensions;
 using SimpleCrawler.Core.Helpers;
 using SimpleCrawler.Core.Models;
@@ -18,8 +19,8 @@ public abstract class JsCrawler<TResult> : AbstractRobotsCrawler<JsExtract, JsEx
     private readonly JsRenderer _renderer;
     private readonly ILogger _logger;
 
-    protected JsCrawler(HttpClient client, IJsEngineFactory engineFactory, IRobotClient robotClient, IOptions<CrawlerOptions> options, IOptions<JsRenderOptions> renderOptions, ILogger logger)
-        : base(robotClient, options, logger)
+    protected JsCrawler(HttpClient client, IJsEngineFactory engineFactory, IRobotClient robotClient, IOptions<CrawlerOptions> options, IOptions<JsRenderOptions> renderOptions, ILogger logger, ICheckpointStore? checkpoint = null)
+        : base(robotClient, options, logger, checkpoint)
     {
         _client = client;
         _renderer = new JsRenderer(engineFactory, renderOptions.Value, logger);
