@@ -1261,10 +1261,27 @@
   var customElements = new CustomElementRegistry();
 
   // dom/HTMLElement.ts
+  var ValidityStateAllValid = Object.freeze({
+    valueMissing: false,
+    typeMismatch: false,
+    patternMismatch: false,
+    tooLong: false,
+    tooShort: false,
+    rangeUnderflow: false,
+    rangeOverflow: false,
+    stepMismatch: false,
+    badInput: false,
+    customError: false,
+    valid: true
+  });
   var HTMLElement = class extends Element {
     constructor(tag, ns) {
       super(tag || customElements.currentName() || "", ns);
       this.shadowRoot = null;
+      // Constraint Validation API. Frameworks grab a form control ref and call setCustomValidity during
+      // render, so the methods must exist; they no-op and report valid.
+      this.willValidate = true;
+      this.validationMessage = "";
       hideOwnFields(this);
       const target = customElements.takeUpgradeTarget();
       if (target) return target;
@@ -1280,6 +1297,17 @@
     focus() {
     }
     blur() {
+    }
+    get validity() {
+      return ValidityStateAllValid;
+    }
+    checkValidity() {
+      return true;
+    }
+    reportValidity() {
+      return true;
+    }
+    setCustomValidity(_error) {
     }
     connectedCallback() {
     }
@@ -2685,6 +2713,21 @@
   DOMException.INVALID_NODE_TYPE_ERR = 24;
   DOMException.DATA_CLONE_ERR = 25;
 
+  // browser/FileList.ts
+  var FileList = class {
+    constructor() {
+      this.length = 0;
+    }
+    item(_index) {
+      return null;
+    }
+    [Symbol.iterator]() {
+      return { next() {
+        return { value: void 0, done: true };
+      } };
+    }
+  };
+
   // browser/base64.ts
   var _chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
   function btoa(input) {
@@ -2845,6 +2888,7 @@
     global.structuredClone = global.structuredClone || ((value) => value == null ? value : JSON.parse(JSON.stringify(value)));
     global.Blob = Blob;
     global.DOMException = global.DOMException || DOMException;
+    global.FileList = global.FileList || FileList;
     global.btoa = global.btoa || btoa;
     global.atob = global.atob || atob;
     URL.createObjectURL = URL.createObjectURL || (() => "blob:" + Math.random().toString(36).slice(2));

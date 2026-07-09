@@ -1,3 +1,6 @@
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using SimpleCrawler.Core;
 using SimpleCrawler.Js.Abstractions;
 using SimpleCrawler.Js.Jint;
@@ -6,9 +9,6 @@ using SimpleCrawler.Js.Rendering;
 using SimpleCrawler.Js.V8;
 using SimpleCrawler.Tests.Helpers;
 using SimpleCrawler.Tests.Models;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Logging.Abstractions;
 using System.Net;
 using System.Text;
 
@@ -1062,6 +1062,80 @@ public class JsDomRendererTests
         var rendered = Encoding.UTF8.GetString(result);
 
         Assert.Contains("href=\"/blob-11-text/plain-true\"", rendered);
+    }
+
+    [Theory]
+    [InlineData(JsEngine.Jint)]
+    [InlineData(JsEngine.V8)]
+    public async Task JsMode_FormControlsExposeConstraintValidation(JsEngine engine)
+    {
+        if (engine == JsEngine.V8)
+            Assert.SkipUnless(V8Support.IsAvailable, V8Support.UnavailableReason);
+
+        const string html = """
+            <!doctype html><html><head></head><body><input id="q" />
+            <script>
+            try {
+              var input = document.getElementById('q');
+              input.setCustomValidity('oops');
+              var ok = input.willValidate === true &&
+                       input.checkValidity() === true &&
+                       input.reportValidity() === true &&
+                       input.validationMessage === '' &&
+                       input.validity.valid === true &&
+                       input.validity.valueMissing === false;
+              var a = document.createElement('a'); a.setAttribute('href', ok ? '/ok' : '/bad'); document.body.appendChild(a);
+            } catch (err) {
+              var b = document.createElement('a'); b.setAttribute('href', '/err'); document.body.appendChild(b);
+            }
+            </script>
+            </body></html>
+            """;
+
+        var renderer = CreateJsRenderer(engine);
+        var result = await renderer.RenderAsync(Encoding.UTF8.GetBytes(html), "http://localhost:5000/", new HttpClient(), CancellationToken.None);
+        var rendered = Encoding.UTF8.GetString(result);
+
+        Assert.DoesNotContain("href=\"/err\"", rendered);
+        Assert.DoesNotContain("href=\"/bad\"", rendered);
+        Assert.Contains("href=\"/ok\"", rendered);
+    }
+
+    [Theory]
+    [InlineData(JsEngine.Jint)]
+    [InlineData(JsEngine.V8)]
+    public async Task JsMode_FileListGlobal_IsAvailable(JsEngine engine)
+    {
+        if (engine == JsEngine.V8)
+            Assert.SkipUnless(V8Support.IsAvailable, V8Support.UnavailableReason);
+
+        const string html = """
+            <html><body><div id="t"></div>
+            <script>
+            try {
+              var list = new FileList();
+              var spread = 0;
+              for (var f of list) spread++;
+              var ok = typeof FileList === 'function' &&
+                       list instanceof FileList &&
+                       list.length === 0 &&
+                       list.item(0) === null &&
+                       spread === 0;
+              var a = document.createElement('a'); a.setAttribute('href', ok ? '/ok' : '/bad'); document.getElementById('t').appendChild(a);
+            } catch (err) {
+              var b = document.createElement('a'); b.setAttribute('href', '/err'); document.getElementById('t').appendChild(b);
+            }
+            </script>
+            </body></html>
+            """;
+
+        var renderer = CreateJsRenderer(engine);
+        var result = await renderer.RenderAsync(Encoding.UTF8.GetBytes(html), "http://localhost:5000/", new HttpClient(), CancellationToken.None);
+        var rendered = Encoding.UTF8.GetString(result);
+
+        Assert.DoesNotContain("href=\"/err\"", rendered);
+        Assert.DoesNotContain("href=\"/bad\"", rendered);
+        Assert.Contains("href=\"/ok\"", rendered);
     }
 
     // Lazy-mount-on-visible blocks (e.g. AntD skeletons) stay placeholders until an IntersectionObserver
