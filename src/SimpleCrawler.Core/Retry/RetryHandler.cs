@@ -1,5 +1,5 @@
-using SimpleCrawler.Core.Proxy;
 using Microsoft.Extensions.Logging;
+using SimpleCrawler.Core.Proxy;
 
 namespace SimpleCrawler.Core.Retry;
 
@@ -30,7 +30,7 @@ public sealed class RetryHandler : HttpMessageHandler
         // of the next attempt.
         HttpResponseMessage? lastResponse = null;
 
-        var result = await _retry.ExecuteAsync<HttpResponseMessage?>(
+        var result = await _retry.ExecuteAsync(
             async (proxy, token) =>
             {
                 lastResponse?.Dispose();

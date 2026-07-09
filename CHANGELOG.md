@@ -42,6 +42,13 @@ Package versions are derived from git tags (`v*`) via MinVer.
   every silent settle into a named exception with a stack. The message is emitted before
   the stack: Jint's `error.stack` is frames-only, so reporting the stack alone dropped 
   what identifies the failure.
+- Cross-page render fetch cache for the JS backends (`EnableFetch`). Cache hits log at
+  `Debug` as `Render fetch (cache hit)`. The cache honours the standard opt-outs — request
+  `Cache-Control: no-store`/`no-cache` and `Pragma: no-cache`, response `Cache-Control`
+  `no-store`/`no-cache`/`private`/`max-age=0` and `Vary: *`. It stores only successful (2xx) responses,
+  so a transient `429`/`5xx` responses are never replayed.
+- Next.js App Router RSC prefetches (requests carrying `Next-Router-Prefetch`) are now short-circuited with
+  an empty `204`.
 
 ### Changed
 
