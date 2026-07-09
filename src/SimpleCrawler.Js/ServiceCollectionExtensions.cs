@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using SimpleCrawler.Core;
 using SimpleCrawler.Core.Helpers;
 using SimpleCrawler.Core.Robots;
@@ -21,14 +22,14 @@ public static class ServiceCollectionExtensions
         return services;
     }
 
-    public static IHttpClientBuilder AddCrawlerHttpClient<TClient>(this IServiceCollection services, Action<IServiceProvider, HttpClient>? config)
+    public static IHttpClientBuilder AddCrawlerHttpClient<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] TClient>(this IServiceCollection services, Action<IServiceProvider, HttpClient>? config)
         where TClient : class
     {
         return services.AddHttpClient<TClient>((provider, client) => ConfigureClient(provider, client, config))
             .ConfigurePrimaryHttpMessageHandler(ConfigurationHelper.CreatePrimaryHandler);
     }
 
-    public static IHttpClientBuilder AddCrawlerHttpClient<TClient, TImplementation>(this IServiceCollection services, Action<IServiceProvider, HttpClient>? config)
+    public static IHttpClientBuilder AddCrawlerHttpClient<TClient, [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] TImplementation>(this IServiceCollection services, Action<IServiceProvider, HttpClient>? config)
         where TClient : class
         where TImplementation : class, TClient
     {
