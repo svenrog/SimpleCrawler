@@ -1,10 +1,10 @@
 ﻿using CommandLine;
-using Crude.Logging.Console.Extensions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Http;
 using Microsoft.Extensions.Logging;
+using Simple.Logging.Console.Extensions;
 using SimpleCrawler.Console.Extensions;
 using SimpleCrawler.Console.Serialization;
 using SimpleCrawler.Core;
@@ -77,7 +77,7 @@ internal static class Program
         }
         catch (OperationCanceledException) when (tokenSource.IsCancellationRequested)
         {
-            logger.LogInformation("Crawl interrupted; checkpoint saved. Re-run to resume from where it stopped.");
+            logger.LogInformation("Crawl interrupted.");
         }
         finally
         {
@@ -95,7 +95,7 @@ internal static class Program
             cancelled = true;
             e.Cancel = true;
             tokenSource.Cancel();
-            logger.LogInformation("Cancellation requested; finishing in-flight requests and saving checkpoint...");
+            logger.LogInformation("Cancellation requested; finishing in-flight requests...");
         }
     }
 

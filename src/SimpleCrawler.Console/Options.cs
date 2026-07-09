@@ -66,4 +66,15 @@ public sealed class Options
 
     [Option("checkpoint", Required = false, HelpText = "Path to a checkpoint file. Progress is saved here periodically and on Ctrl+C; if the file already exists for the same entry points, the crawl resumes from it.")]
     public string? Checkpoint { get; set; }
+
+#if JS
+    [Option("fetch", Required = false, HelpText = "Apply if rendering should enable Fetch API")]
+    public bool Fetch { get; set; }
+
+    [Option("streaming", Required = false, HelpText = "Apply if rendering should emulate WHATWG Streams (required for Next.js sites)")]
+    public bool Streaming { get; set; }
+
+    [Option("indexedDb", Required = false, HelpText = "Apply if rendering should stub IndexedDb")]
+    public bool IndexedDb { get; set; }
+#endif
 }
