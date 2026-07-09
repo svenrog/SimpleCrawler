@@ -1,4 +1,5 @@
 using SimpleCrawler.Core;
+using SimpleCrawler.Core.Checkpoints;
 using SimpleCrawler.Core.Models;
 using SimpleCrawler.Core.Proxy;
 using SimpleCrawler.Core.Robots;
@@ -15,7 +16,7 @@ public abstract class PuppeteerCrawler<TResult> : AbstractHeadlessCrawler<IPage,
     private readonly PuppeteerBrowserSession _session;
     private readonly ILogger _logger;
 
-    protected PuppeteerCrawler(IRobotClient robotClient, PuppeteerBrowserSession session, IOptions<HeadlessCrawlerOptions> options, ILogger logger, IProxyPool? pool = null) : base(robotClient, options, logger, pool)
+    protected PuppeteerCrawler(IRobotClient robotClient, PuppeteerBrowserSession session, IOptions<HeadlessCrawlerOptions> options, ILogger logger, IProxyPool? pool = null, ICheckpointStore? checkpoint = null) : base(robotClient, options, logger, pool, checkpoint)
     {
         _session = session;
         _logger = logger;

@@ -1,4 +1,5 @@
 using SimpleCrawler.Core;
+using SimpleCrawler.Core.Checkpoints;
 using SimpleCrawler.Core.Models;
 using SimpleCrawler.Core.Proxy;
 using SimpleCrawler.Core.Robots;
@@ -16,7 +17,7 @@ public abstract class PlaywrightCrawler<TResult> : AbstractHeadlessCrawler<IPage
     private readonly float _networkIdleGraceMs;
     private readonly ILogger _logger;
 
-    protected PlaywrightCrawler(IRobotClient robotClient, PlaywrightBrowserSession session, IOptions<HeadlessCrawlerOptions> options, ILogger logger, IProxyPool? pool = null) : base(robotClient, options, logger, pool)
+    protected PlaywrightCrawler(IRobotClient robotClient, PlaywrightBrowserSession session, IOptions<HeadlessCrawlerOptions> options, ILogger logger, IProxyPool? pool = null, ICheckpointStore? checkpoint = null) : base(robotClient, options, logger, pool, checkpoint)
     {
         _session = session;
         _networkIdleGraceMs = options.Value.NetworkIdleGraceMs;

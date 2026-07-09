@@ -3,6 +3,22 @@ import { DocumentFragment } from "./DocumentFragment";
 import { customElements } from "./customElements";
 import { hideOwnFields } from "./utils";
 
+// A frozen, always-valid ValidityState: no user interaction happens in a single-pass crawl, so every
+// field reports valid and framework validation reads no failures.
+const ValidityStateAllValid = Object.freeze({
+    valueMissing: false,
+    typeMismatch: false,
+    patternMismatch: false,
+    tooLong: false,
+    tooShort: false,
+    rangeUnderflow: false,
+    rangeOverflow: false,
+    stepMismatch: false,
+    badInput: false,
+    customError: false,
+    valid: true,
+});
+
 // The base bundles extend (`class X extends HTMLElement`). It has to be a real JS class — ClearScript
 // host types have no prototype, so the C#-bridge mode could only stub it. Here the constructor pulls its
 // tag from the registry's name stack when the registry is constructing it, so a subclass `super()` lands
@@ -29,6 +45,15 @@ export class HTMLElement extends Element {
     focus(): void { }
 
     blur(): void { }
+
+    // Constraint Validation API. Frameworks grab a form control ref and call setCustomValidity during
+    // render, so the methods must exist; they no-op and report valid.
+    willValidate: boolean = true;
+    validationMessage: string = "";
+    get validity(): any { return ValidityStateAllValid; }
+    checkValidity(): boolean { return true; }
+    reportValidity(): boolean { return true; }
+    setCustomValidity(_error: string): void { }
 
     connectedCallback(): void { }
 

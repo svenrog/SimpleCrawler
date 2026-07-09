@@ -30,6 +30,7 @@ import { installViewport } from "./viewport";
 import { IntersectionObserver } from "./IntersectionObserver";
 import { Blob } from "./Blob";
 import { DOMException } from "./DOMException";
+import { FileList } from "./FileList";
 import { btoa, atob } from "./base64";
 import { documentRef } from "../dom/documentRef";
 import { installScrollApi } from "./scroll";
@@ -98,6 +99,7 @@ export function installDOM(global: any): void {
     global.structuredClone = global.structuredClone || ((value: any) => value == null ? value : JSON.parse(JSON.stringify(value)));
     global.Blob = Blob;
     global.DOMException = global.DOMException || DOMException;
+    global.FileList = global.FileList || FileList;
     global.btoa = global.btoa || btoa;
     global.atob = global.atob || atob;
     // Blobs never leave the render, so an object URL only needs to be a unique, revocable token.

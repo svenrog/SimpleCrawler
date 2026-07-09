@@ -15,6 +15,11 @@ internal sealed class JintScriptCache
 
     public Prepared<Script> GetOrPrepare(string key, string source)
     {
-        return _scripts.GetOrAdd(key, source, static (location, code) => Engine.PrepareScript(code, location));
+        return _scripts.GetOrAdd(key, source, static (location, code) =>
+        {
+            var prepared = Engine.PrepareScript(code, location);
+            JintFunctionSourceTagger.Tag(prepared.Program, code);
+            return prepared;
+        });
     }
 }

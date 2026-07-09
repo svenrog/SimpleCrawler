@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using SimpleCrawler.Core.Checkpoints;
 using SimpleCrawler.Core.Extensions;
 using SimpleCrawler.Core.Helpers;
 using SimpleCrawler.Core.Models;
@@ -20,7 +21,7 @@ public abstract class AbstractHeadlessCrawler<TPage, TResult> : AbstractRobotsCr
     private readonly ConcurrentDictionary<TPage, string> _pageKeys;
     private readonly ILogger _logger;
 
-    protected AbstractHeadlessCrawler(IRobotClient robotClient, IOptions<HeadlessCrawlerOptions> options, ILogger logger, IProxyPool? pool = null) : base(robotClient, options, logger)
+    protected AbstractHeadlessCrawler(IRobotClient robotClient, IOptions<HeadlessCrawlerOptions> options, ILogger logger, IProxyPool? pool = null, ICheckpointStore? checkpoint = null) : base(robotClient, options, logger, checkpoint)
     {
         _retry = new RetryExecutor(options.Value.Retry, pool);
         _pagePools = new ConcurrentDictionary<string, ConcurrentQueue<TPage>>();
