@@ -99,6 +99,7 @@ Package versions are derived from git tags (`v*`) via MinVer.
   that call `setCustomValidity`/`checkValidity`/`reportValidity` on a form-control ref, or touch a file
   input's `.files`, threw during hydration. Added a no-op-but-spec-shaped Constraint Validation API
   (`willValidate`, `validity`, `checkValidity`, `reportValidity`, `setCustomValidity`) and a `FileList` global.
+  Also added shim for `CSSTransition` and adjusted `getComputedStyle` to return null values.
 - Jint's `Function.prototype.toString()` defaulted to a hardcoded `"[native code]"` stub for every
   ordinary script function (unlike V8/real browsers, which print real source), making bundle-authored
   functions indistinguishable from the host DOM methods `browser/native.ts` deliberately marks as native

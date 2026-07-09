@@ -10,6 +10,7 @@ import { DocumentFragment } from "../dom/DocumentFragment";
 import { HTMLElement } from "../dom/HTMLElement";
 import { HTMLImageElement } from "../dom/HTMLImageElement";
 import { HTMLTemplateElement } from "../dom/HTMLTemplateElement";
+import { CSSTransition } from "../dom/CSSTransition";
 import * as htmlInterfaces from "../dom/htmlInterfaces";
 import { customElements } from "../dom/customElements";
 import { navigator } from "./navigator";
@@ -72,7 +73,7 @@ export function installDOM(global: any): void {
         }
         reportSwallowed("reportError", error);
     });
-    global.getComputedStyle = () => ({ getPropertyValue: () => "" });
+    global.getComputedStyle = () => ({ getPropertyValue: () => null });
     global.getSelection = () => ({
         rangeCount: 0,
         type: "None",
@@ -119,6 +120,7 @@ export function installDOM(global: any): void {
     global.DocumentFragment = DocumentFragment;
     global.HTMLElement = HTMLElement;
     global.HTMLTemplateElement = HTMLTemplateElement;
+    global.CSSTransition = CSSTransition;
     global.Image = HTMLImageElement;
     for (const name in htmlInterfaces) global[name] = (htmlInterfaces as any)[name];
     global.customElements = customElements;
