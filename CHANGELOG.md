@@ -60,6 +60,7 @@ Package versions are derived from git tags (`v*`) via MinVer.
   engine — and `JsRenderer` disposes the concrete engine on every exit path so the V8 pool never leaks
   isolates. **Breaking** for custom `IJsEngine` implementers: the interface no longer extends
   `IDisposable`.
+- Updated `PuppeteerSharp` dependency to >= 25.0.4.
 
 ### Removed
 
