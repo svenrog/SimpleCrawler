@@ -28,6 +28,10 @@ internal sealed class JintJsEngine : IJsEngine, IDisposable
             options
                 .EnableModules(loader)
                 .CatchClrExceptions();
+
+            // Preserves correctness after 4.11 change https://github.com/sebastienros/jint/issues/2560
+            // https://github.com/sebastienros/jint/pull/2562
+            options.RetainFunctionSourceText = true;
         });
     }
 
