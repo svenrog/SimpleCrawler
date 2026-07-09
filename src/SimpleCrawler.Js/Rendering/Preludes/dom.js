@@ -497,10 +497,16 @@
     try {
       const report = globalThis.__crawlerDiagnostic;
       if (typeof report !== "function") return;
-      const detail = error instanceof Error ? error.stack || error.message || String(error) : String(error);
-      report("swallowed exception in " + context + ": " + detail);
+      report("swallowed exception in " + context + ": " + describeError(error));
     } catch {
     }
+  }
+  function describeError(error) {
+    if (!(error instanceof Error)) return String(error);
+    const message = error.message || String(error);
+    const stack = error.stack;
+    if (!stack) return message;
+    return stack.indexOf(message) >= 0 ? stack : message + "\n" + stack;
   }
 
   // dom/resourceLoader.ts
