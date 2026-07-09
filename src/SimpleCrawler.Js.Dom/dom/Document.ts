@@ -10,7 +10,7 @@ import { Range } from "./Range";
 import { HTMLTemplateElement } from "./HTMLTemplateElement";
 import { reflectedElementFactories } from "./reflectedElements";
 import { customElements } from "./customElements";
-import { collectByTag, walkFind, hideOwnFields, collectByClass } from "./utils";
+import { collectByTag, walkFind, hideOwnFields, collectByClass, collectByPredicate } from "./utils";
 import { querySelectorAll } from "../selector/querySelector";
 
 export class Document extends Node {
@@ -22,6 +22,11 @@ export class Document extends Node {
     // The <script> currently executing, set by the host around each classic script. Next's webpack
     // auto-public-path asserts it `instanceof HTMLScriptElement` and reads its src; outside execution it's null.
     currentScript: Element | null = null;
+    // Real navigation transitions loading→interactive→complete over time; this render parses the whole
+    // document synchronously before any script runs, so by the time script code can observe it there is
+    // nothing left "loading" — frameworks that gate on readyState (Next's Flight stream close among them)
+    // see "complete" immediately instead of stalling behind a state that never advances.
+    readyState: string = "complete";
     private _cookies = new Map<string, string>();
 
     constructor(defaultView?: any) {
@@ -111,6 +116,12 @@ export class Document extends Node {
     getElementsByClassName(className: string): Element[] {
         const out: Node[] = [];
         if (this.documentElement) collectByClass(this.documentElement, String(className), out);
+        return out as unknown as Element[];
+    }
+
+    getElementsByName(name: string): Element[] {
+        const out: Node[] = [];
+        if (this.documentElement) collectByPredicate(this.documentElement, (e) => (e as any).getAttribute("name") === name, out);
         return out as unknown as Element[];
     }
 

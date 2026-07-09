@@ -33,6 +33,16 @@
       }
     }
   }
+  function collectByPredicate(node, pred, out) {
+    const children = node.childNodes;
+    for (let i = 0; i < children.length; i++) {
+      const c = children[i];
+      if (c.nodeType === 1 /* Element */) {
+        if (pred(c)) out.push(c);
+        collectByPredicate(c, pred, out);
+      }
+    }
+  }
   function collectByClass(node, className, out) {
     const children = node.childNodes;
     for (let i = 0; i < children.length; i++) {
@@ -215,6 +225,13 @@
     }
     isSameNode(other) {
       return other === this;
+    }
+    // React's getHoistableRoot falls back to `container.getRootNode?.() ?? container.ownerDocument` when the
+    // container is the document itself (whose ownerDocument is null) — without this, that lookup throws.
+    getRootNode() {
+      let n = this;
+      while (n.parentNode) n = n.parentNode;
+      return n;
     }
   };
   function asNode(value) {
@@ -475,6 +492,17 @@
     }
   };
 
+  // diagnostics.ts
+  function reportSwallowed(context, error) {
+    try {
+      const report = globalThis.__crawlerDiagnostic;
+      if (typeof report !== "function") return;
+      const detail = error instanceof Error ? error.stack || error.message || String(error) : String(error);
+      report("swallowed exception in " + context + ": " + detail);
+    } catch {
+    }
+  }
+
   // dom/resourceLoader.ts
   var _counter = 0;
   var _pending = [];
@@ -508,13 +536,15 @@
     if (typeof handler === "function") {
       try {
         handler.call(node, event);
-      } catch {
+      } catch (e) {
+        reportSwallowed("resource " + type + " handler", e);
       }
     }
     if (typeof node.dispatchEvent === "function") {
       try {
         node.dispatchEvent(event);
-      } catch {
+      } catch (e) {
+        reportSwallowed("resource " + type + " dispatch", e);
       }
     }
   }
@@ -692,6 +722,16 @@
   }
 
   // dom/Element.ts
+  function attrNode(name, value, owner) {
+    return { name, value, localName: name, namespaceURI: null, ownerElement: owner };
+  }
+  function nthAttrNode(attrs, index, owner) {
+    let i = 0;
+    for (const [name, value] of attrs) {
+      if (i++ === index) return attrNode(name, value, owner);
+    }
+    return void 0;
+  }
   var Element = class _Element extends Node {
     constructor(tag, ns) {
       super(1 /* Element */);
@@ -736,18 +776,32 @@
     getAttributeNames() {
       return Array.from(this.attrs.keys());
     }
-    // A NamedNodeMap-ish snapshot: custom-element upgrade code walks `el.attributes` by index reading
-    // `.length`/`[i].name`/`[i].value`, so it must be array-like with attr entries, not undefined.
+    // A live NamedNodeMap-ish view: custom-element upgrade code walks `el.attributes` by index reading
+    // `.length`/`[i].name`/`[i].value`, and React's singleton-attribute teardown does
+    // `for (c = el.attributes; c.length;) el.removeAttributeNode(c[0])` — that loop only terminates if
+    // `.length` is read live off the current attribute set, not snapshotted once when `.attributes` is accessed.
     get attributes() {
-      const list = [];
-      for (const [name, value] of this.attrs) {
-        list.push({ name, value, localName: name, namespaceURI: null, ownerElement: this });
-      }
-      list.getNamedItem = (name) => list.find((a) => a.name === name) || null;
-      list.item = (i) => list[i] || null;
-      return list;
+      const el = this;
+      return new Proxy({}, {
+        get(_t, prop) {
+          if (prop === "length") return el.attrs.size;
+          if (prop === "item") return (i) => nthAttrNode(el.attrs, i, el);
+          if (prop === "getNamedItem") return (name) => el.getAttributeNode(name);
+          if (typeof prop === "string" && /^\d+$/.test(prop)) return nthAttrNode(el.attrs, Number(prop), el);
+          return void 0;
+        }
+      });
     }
-    setAttributeNode() {
+    getAttributeNode(name) {
+      return this.attrs.has(name) ? attrNode(name, this.attrs.get(name), this) : null;
+    }
+    setAttributeNode(attr) {
+      if (attr && attr.name != null) this.attrs.set(String(attr.name), attr.value == null ? "" : String(attr.value));
+      return null;
+    }
+    removeAttributeNode(attr) {
+      if (attr && attr.name != null) this.attrs.delete(String(attr.name));
+      return attr;
     }
     getElementsByTagName(tag) {
       const out = [];
@@ -2008,6 +2062,11 @@
       // The <script> currently executing, set by the host around each classic script. Next's webpack
       // auto-public-path asserts it `instanceof HTMLScriptElement` and reads its src; outside execution it's null.
       this.currentScript = null;
+      // Real navigation transitions loading→interactive→complete over time; this render parses the whole
+      // document synchronously before any script runs, so by the time script code can observe it there is
+      // nothing left "loading" — frameworks that gate on readyState (Next's Flight stream close among them)
+      // see "complete" immediately instead of stalling behind a state that never advances.
+      this.readyState = "complete";
       this._cookies = /* @__PURE__ */ new Map();
       this.defaultView = defaultView || null;
       hideOwnFields(this);
@@ -2080,6 +2139,11 @@
     getElementsByClassName(className) {
       const out = [];
       if (this.documentElement) collectByClass(this.documentElement, String(className), out);
+      return out;
+    }
+    getElementsByName(name) {
+      const out = [];
+      if (this.documentElement) collectByPredicate(this.documentElement, (e) => e.getAttribute("name") === name, out);
       return out;
     }
     get scripts() {
@@ -2262,7 +2326,8 @@
       if (task.cancelled) continue;
       try {
         task.cb();
-      } catch {
+      } catch (e) {
+        reportSwallowed("scheduled task", e);
       }
     }
     return _tasks.length;
@@ -2729,6 +2794,15 @@
     ]) {
       if (!(on in global)) global[on] = null;
     }
+    global.reportError = global.reportError || ((error) => {
+      if (typeof global.onerror === "function") {
+        try {
+          global.onerror(error instanceof Error ? error.message : String(error), "", 0, 0, error);
+        } catch {
+        }
+      }
+      reportSwallowed("reportError", error);
+    });
     global.getComputedStyle = () => ({ getPropertyValue: () => "" });
     global.getSelection = () => ({
       rangeCount: 0,
@@ -3154,6 +3228,9 @@
     parseHTML(doc, _baselineHtml);
     return _baselineAnchors;
   }
+  function fireDomContentLoaded() {
+    doc.dispatchEvent(new Event("DOMContentLoaded"));
+  }
   function installCrawlerApi(global) {
     global.__crawlerSetLocation = (url) => {
       applyUrl(url);
@@ -3176,6 +3253,9 @@
     global.__crawlerPendingResources = () => pendingResourceCount();
     global.__crawlerFireResourceEvent = (id, type) => {
       fireResourceEvent(id, type);
+    };
+    global.__crawlerFireDomContentLoaded = () => {
+      fireDomContentLoaded();
     };
     global.__crawlerSerialize = () => doc.documentElement ? serializeNode(doc.documentElement) : "";
     global.__crawlerCaptureBaseline = () => {

@@ -143,6 +143,14 @@ export abstract class Node extends EventTarget {
         return other === this;
     }
 
+    // React's getHoistableRoot falls back to `container.getRootNode?.() ?? container.ownerDocument` when the
+    // container is the document itself (whose ownerDocument is null) — without this, that lookup throws.
+    getRootNode(): Node {
+        let n: Node = this;
+        while (n.parentNode) n = n.parentNode;
+        return n;
+    }
+
     protected abstract _shallowClone(): Node;
 }
 

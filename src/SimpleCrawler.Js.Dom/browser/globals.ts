@@ -35,6 +35,7 @@ import { documentRef } from "../dom/documentRef";
 import { installScrollApi } from "./scroll";
 import { markPrototypeNative } from "./native";
 import { EventListenerMap, EventTarget, addListener, removeListener, fireEvent } from "../dom/eventTarget";
+import { reportSwallowed } from "../diagnostics";
 
 export const doc = new Document(globalThis as any);
 documentRef.current = doc;
@@ -61,6 +62,15 @@ export function installDOM(global: any): void {
         "onfocus", "onblur", "onorientationchange"]) {
         if (!(on in global)) global[on] = null;
     }
+    // The global-scope counterpart to an uncaught throw: framework error boundaries call this explicitly to
+    // surface a caught error the way an uncaught one would present. Forwards to window.onerror (if a bundle
+    // set one) and to the diagnostics channel, so a call here is never silently lost.
+    global.reportError = global.reportError || ((error: unknown) => {
+        if (typeof global.onerror === "function") {
+            try { global.onerror(error instanceof Error ? error.message : String(error), "", 0, 0, error); } catch { /* an onerror handler must not itself throw */ }
+        }
+        reportSwallowed("reportError", error);
+    });
     global.getComputedStyle = () => ({ getPropertyValue: () => "" });
     global.getSelection = () => ({
         rangeCount: 0,

@@ -73,6 +73,7 @@ public sealed class JsRenderer
         engine.CallGlobal("__crawlerSetViewport", (int)_options.Viewport.Width, (int)_options.Viewport.Height);
 
         ConfigureScriptLogging(engine);
+        ConfigureDiagnostics(engine);
         if (_options.EnableIndexedDb)
             RunPrelude(engine, JsPreludes.IndexedDb);
 
@@ -133,6 +134,8 @@ public sealed class JsRenderer
             RunModule(engine, module, pageUrl);
         }
         RenderProfiler.Stop("phase.bundleExec", bundleExecutionTime);
+
+        engine.CallGlobal("__crawlerFireDomContentLoaded");
 
         var drainTime = RenderProfiler.Start();
         await DrainJsAsync(engine, documentBaseUri, pageUri, client, pageUrl, cancellationToken);
@@ -378,6 +381,24 @@ public sealed class JsRenderer
 
         engine.EmbedFunction("__crawlerLog", LogFromScript);
         engine.CallGlobal("__crawlerSetLogLevel", (int)level);
+    }
+
+    // Embedded unconditionally (unlike the opt-in console bridge): the task pump and resource-event loop
+    // deliberately swallow exceptions from scheduled callbacks so one bad chunk can't abort the drain, which
+    // is exactly why a fatal hydration/commit throw otherwise presents as "the render just settled" with no
+    // diagnostics. Routing those catches through this channel turns them into a named exception with a stack
+    // the moment the renderer's log level is Debug, without spamming a normal crawl by default.
+    private void ConfigureDiagnostics(IJsEngine engine)
+        => engine.EmbedFunction("__crawlerDiagnostic", ReportDiagnostic);
+
+    private object? ReportDiagnostic(params object?[] args)
+    {
+        if (!_logger.IsEnabled(LogLevel.Debug))
+            return null;
+
+        var message = args.Length > 0 ? args[0]?.ToString() ?? string.Empty : string.Empty;
+        _logger.LogDebug("{Message}", message);
+        return null;
     }
 
     private object? LogFromScript(params object?[] args)
