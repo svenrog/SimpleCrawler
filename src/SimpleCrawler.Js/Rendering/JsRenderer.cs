@@ -21,6 +21,7 @@ public sealed class JsRenderer
     private readonly JsRenderOptions _options;
     private readonly ILogger _logger;
     private readonly SourceCache _sources = new();
+    private readonly RenderFetchCache _fetchCache = new();
 
     public JsRenderer(IJsEngineFactory engineFactory, JsRenderOptions options, ILogger logger)
     {
@@ -119,7 +120,7 @@ public sealed class JsRenderer
 
         if (_options.EnableFetch)
         {
-            engine.EmbedHostObject("__http", new JsHttp(client, pageUri, _logger, cancellationToken));
+            engine.EmbedHostObject("__http", new JsHttp(client, pageUri, _logger, _fetchCache, cancellationToken));
             RunPrelude(engine, JsPreludes.Fetch);
         }
 

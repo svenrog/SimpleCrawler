@@ -42,6 +42,18 @@ Package versions are derived from git tags (`v*`) via MinVer.
   every silent settle into a named exception with a stack. The message is emitted before
   the stack: Jint's `error.stack` is frames-only, so reporting the stack alone dropped 
   what identifies the failure.
+- Cross-page render fetch cache for the JS backends (`EnableFetch`). Idempotent `GET`/`HEAD` requests
+  issued during rendering are memoized in a bounded LRU shared for the whole crawl, so a client-only SPA
+  that re-fetches the same bundle/data endpoint on every route hits the network once. Cache hits log at
+  `Debug` as `Render fetch (cache hit)`. The cache honours the standard opt-outs — request
+  `Cache-Control: no-store`/`no-cache` and `Pragma: no-cache`, response `Cache-Control`
+  `no-store`/`no-cache`/`private`/`max-age=0` and `Vary: *` — and stores only successful (2xx) responses,
+  so a transient `429`/`5xx` is never replayed. It is a per-crawl dedupe helper, not a freshness-tracking
+  HTTP cache (entries live until LRU-evicted).
+- Next.js App Router RSC prefetches (requests carrying `Next-Router-Prefetch`) are now short-circuited with
+  an empty `204` instead of hitting the network. They feed the client router cache for future navigations,
+  not the current page's DOM, so for link extraction they were pure overhead — and each carries a
+  per-navigation `_rsc` cache-buster, so they never deduped.
 
 ### Changed
 
