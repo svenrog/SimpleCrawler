@@ -14,7 +14,7 @@ Package versions are derived from git tags (`v*`) via MinVer.
   into the active browser profile, so they apply to every backend (static, JS, and headless). `--cookie`
   now flows through the same path and reaches headless backends too.
 - Adaptive per-host throttling (on by default): after repeated `429`/`503` responses a host's crawl
-  delay is raised — honouring the `Retry-After` header as a per-host grace — and eased back down on
+  delay is raised, honouring the `Retry-After` header as a per-host grace, and eased back down on
   sustained success. Configurable via `ThrottleOptions` on `CrawlerOptions.Throttling`
   (`Enabled`, `MaxDelaySeconds`) and the CLI flag `--adaptiveThrottle` (pass `false` to disable).
 - Checkpoint/resume via `--checkpoint <file>`: the crawl frontier (discovered/processed/visited) is
@@ -24,11 +24,9 @@ Package versions are derived from git tags (`v*`) via MinVer.
   `AbstractCrawler` gained an optional `ICheckpointStore` constructor parameter; autosave cadence is
   configured via `CrawlerOptions.Checkpoint.Interval`.
 - Per-URL reporting on `IScrapeResult` via a new `Reports` collection of `UrlReport` (in
-  `SimpleCrawler.Core.Models`, alongside the `CrawlOutcome` enum). Every fetched page — success or
-  failure — is reported with its status code, fetch/parse durations, content length/type, discovered
-  link count, index/follow flags, timestamp, outcome, and any error. `Urls` is unchanged (still the
-  indexable subset). Reports live in `CrawlState`, so they are checkpointed and restored on resume in
-  step with `Urls`.
+  `SimpleCrawler.Core.Models`, alongside the `CrawlOutcome` enum). Every fetched page is reported with
+  its status code, fetch/parse durations, content length/type, discovered link count, index/follow flags, 
+  timestamp, outcome, and any error. `Urls` is unchanged (still the indexable subset).
 - Optional `--report <file>` CLI flag that writes the per-URL report as JSON. The existing plain
   URL-per-line output is unchanged.
 - Opt-in WHATWG Streams surface for the JS backends via `JsRenderOptions.EnableStreams` (off by
@@ -39,6 +37,11 @@ Package versions are derived from git tags (`v*`) via MinVer.
   bundle (e.g. Next.js App Router RSC) can otherwise tear down the server markup without rebuilding it
   in this single-pass render, so the renderer captures a pre-script anchor baseline and restores it at
   finalize when the live tree regresses below the shell's links.
+- Surfaced exception diagnostics for the JS renderer. Catches now route through an unconditional
+  `__crawlerDiagnostic` channel at `Debug` level, so raising the log level to `Debug` turns
+  every silent settle into a named exception with a stack. The message is emitted before
+  the stack: Jint's `error.stack` is frames-only, so reporting the stack alone dropped 
+  what identifies the failure.
 
 ### Changed
 
@@ -59,6 +62,9 @@ Package versions are derived from git tags (`v*`) via MinVer.
   C#↔JS DOM bridge (cut in Phase 6), never invoked by any renderer path or test. The unreachable
   `__crawlerReset` realm-reset machinery was also deleted from the JS DOM prelude; it existed only for
   the since-removed Jint realm pool and is internal cleanup.
+- The Jint `Map.keys()`/`values()` iterator compat shim and its shims prelude. Jint 4.11 fixed the
+  "Collection was modified" bug it patched (a bundle mutating a `Map` during iteration), so the
+  per-engine shim is no longer needed.
 
 ### Fixed
 
@@ -66,6 +72,14 @@ Package versions are derived from git tags (`v*`) via MinVer.
   `follow`) parsed as `follow=false` and the crawler dropped every link on the page. The spec defaults
   are `index, follow` and directives only negate, so the flags now start `true`; lone and combined
   directives keep their permissive defaults. Pinned by `IndexingHelperTests`.
+- RSC-adjacent DOM gaps that crashed Next.js App Router (RSC) sites during hydration/commit. The shim
+  gaps the crashes traced to are closed: `Element.attributes` is now a live `NamedNodeMap`-backed
+  collection that shrinks as attributes are removed (React's singleton teardown loop relied on the
+  collection actually contracting), with real `removeAttributeNode`/`getAttributeNode`/`setAttributeNode`,
+  plus `Node.getRootNode`, `document.getElementsByName`, a global `reportError`, and `document.readyState`
+  with a `DOMContentLoaded` dispatch after bundle execution. App Router RSC sites now render fully on the
+  default V8 engine; on Jint they still fail with "Cannot convert undefined or null to object" from React's
+  Flight deserialization — an upstream engine bug tracked separately.
 
 ## [2.0.0] - 2026-07-07
 

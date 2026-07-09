@@ -45,9 +45,19 @@ Passed to `AddJintCrawler`/`AddV8Crawler`.
 | ------ | ------- | ------ |
 | `EnableFetch` | `false` | Enables real network `fetch`/`XHR` for runtime-loaded content/links to render. |
 | `EnableIndexedDb` | `false` | Installs an in-memory `indexedDB`. Turn it on for SPA sites that rely on offline features. |
+| `EnableStreams` | `false` | Installs a [WHATWG Streams](https://streams.spec.whatwg.org/) surface. Delivering spec-compliant reader/transform semantics, not incremental transport streaming. See [RSC and streaming bundles](#rsc-and-streaming-bundles). |
 | `Viewport` | 1920×1080 | Window/screen reported to scripts. Set a mobile screen size to crawl the mobile layout on responsive sites. |
 | `ScriptLogging` | `null` | `LogLevel` floor for forwarding page `console.*` to your logger. `Debug` to diagnose non-rendering pages. |
 | `MaxTaskDrainIterations` | `1000` | Cap on microtask/chunk-load drain iterations before giving up on a page. |
+
+## RSC and streaming bundles
+
+Next.js App Router (React Server Components) sites render on the **V8** engine.
+
+The same sites still fail on **Jint** with "Cannot convert undefined or null to object" from React's Flight deserialization, this is a bug in Jint [#2607](https://github.com/sebastienros/jint/pull/2607), use V8 (the default) for RSC sites while that is fixed.
+
+`EnableStreams` delivers a buffered-complete body (the fetch already materialises the whole response), so consumers get spec-compliant reader/transform semantics, not chunks-over-time, and the baseline guard keeps the server markup intact if the
+streaming path would otherwise tear it down. Sites that need real streaming should use the [Playwright](./configuration.md) or [Puppeteer](./configuration.md) headless backends.
 
 ## Engine reuse
 
