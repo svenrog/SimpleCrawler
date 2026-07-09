@@ -8,6 +8,8 @@ Package versions are derived from git tags (`v*`) via MinVer.
 
 ## [Unreleased]
 
+## [3.0.0] - 2026-07-09
+
 ### Added
 
 - Custom request headers via a repeatable `-H`/`--header "Name: Value"` CLI flag. Headers are merged
@@ -159,6 +161,7 @@ change to the library API under SemVer.
 
 - Initial release.
 
-[Unreleased]: https://github.com/svenrog/SimpleCrawler/compare/v2.0.0...HEAD
+[Unreleased]: https://github.com/svenrog/SimpleCrawler/compare/v3.0.0...HEAD
+[3.0.0]: https://github.com/svenrog/SimpleCrawler/releases/tag/v3.0.0
 [2.0.0]: https://github.com/svenrog/SimpleCrawler/releases/tag/v2.0.0
 [1.0.0]: https://github.com/svenrog/SimpleCrawler/releases/tag/v1.0.0
