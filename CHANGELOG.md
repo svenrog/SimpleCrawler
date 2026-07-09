@@ -80,6 +80,22 @@ Package versions are derived from git tags (`v*`) via MinVer.
   with a `DOMContentLoaded` dispatch after bundle execution. App Router RSC sites now render fully on the
   default V8 engine; on Jint they still fail with "Cannot convert undefined or null to object" from React's
   Flight deserialization — an upstream engine bug tracked separately.
+- Checkpoint/resume was only reachable from `AbstractCrawler`-based (static) crawlers: the concrete
+  AngleSharp, JS (Jint/V8), Playwright, and Puppeteer constructors didn't forward an `ICheckpointStore`
+  parameter, so DI could never supply one for those backends. All backend constructors now accept and
+  thread through an optional `ICheckpointStore`.
+- `Ctrl+C` cancelled the crawl token but let .NET terminate the process immediately afterward, racing
+  the in-flight checkpoint save. The CLI now cancels on the first `Ctrl+C`, waits for in-flight requests
+  to finish and the checkpoint to persist, and logs that it's doing so; a second `Ctrl+C` exits immediately.
+- JS DOM: `HTMLElement` had no Constraint Validation API and there was no global `FileList`, so frameworks
+  that call `setCustomValidity`/`checkValidity`/`reportValidity` on a form-control ref, or touch a file
+  input's `.files`, threw during hydration. Added a no-op-but-spec-shaped Constraint Validation API
+  (`willValidate`, `validity`, `checkValidity`, `reportValidity`, `setCustomValidity`) and a `FileList` global.
+- Jint's `Function.prototype.toString()` defaulted to a hardcoded `"[native code]"` stub for every
+  ordinary script function (unlike V8/real browsers, which print real source), making bundle-authored
+  functions indistinguishable from the host DOM methods `browser/native.ts` deliberately marks as native
+  for jQuery/Sizzle's native-code sniff. Prepared scripts/modules are now tagged with their source text
+  at parse time so `Options.Host.FunctionToStringHandler` can return the real text for everything else.
 
 ## [2.0.0] - 2026-07-07
 
