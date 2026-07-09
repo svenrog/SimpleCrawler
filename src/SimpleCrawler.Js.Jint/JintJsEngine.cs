@@ -1,4 +1,3 @@
-using Acornima.Ast;
 using Jint;
 using Jint.Runtime;
 using SimpleCrawler.Js.Abstractions;
@@ -30,12 +29,9 @@ internal sealed class JintJsEngine : IJsEngine, IDisposable
                 .EnableModules(loader)
                 .CatchClrExceptions();
 
-            // Jint's default Function.prototype.toString() is "function name() { [native code] }" for every
-            // ordinary script function, not real source — unlike V8/real browsers. That made every bundle
-            // function look native to jQuery/Sizzle's native-code sniff (see browser/native.ts), not just the
-            // host DOM methods it deliberately marks. Scripts/modules are tagged with their own source text at
-            // prepare time (JintFunctionSourceTagger) so this can slice the real text back out.
-            options.Host.FunctionToStringHandler = static (_, node) => JintFunctionSourceTagger.TryGetSlice(node);
+            // Preserves correctness after 4.11 change https://github.com/sebastienros/jint/issues/2560
+            // https://github.com/sebastienros/jint/pull/2562
+            options.RetainFunctionSourceText = true;
         });
     }
 
@@ -63,9 +59,7 @@ internal sealed class JintJsEngine : IJsEngine, IDisposable
     {
         try
         {
-            var prepared = Engine.PrepareScript(script);
-            JintFunctionSourceTagger.Tag(prepared.Program, script);
-            _engine.Execute(in prepared);
+            _engine.Execute(script);
         }
         catch (JavaScriptException ex)
         {
@@ -92,16 +86,7 @@ internal sealed class JintJsEngine : IJsEngine, IDisposable
         {
             // An inline module's specifier is the page URL — unique per page, so caching its parsed form
             // would retain one AST per crawled page; only stable-URL modules go through the shared cache.
-            Prepared<Module> prepared;
-            if (cache)
-            {
-                prepared = _moduleCache.GetOrPrepare(specifier, source);
-            }
-            else
-            {
-                prepared = Engine.PrepareModule(source, specifier);
-                JintFunctionSourceTagger.Tag(prepared.Program, source);
-            }
+            var prepared = cache ? _moduleCache.GetOrPrepare(specifier, source) : Engine.PrepareModule(source, specifier);
             _engine.Modules.Add(specifier, builder => builder.AddModule(in prepared));
             _engine.Modules.Import(specifier);
         }
