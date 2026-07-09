@@ -36,11 +36,15 @@ internal sealed class JintModuleCache
     {
         try
         {
-            return Engine.PrepareModule(source, location);
+            var prepared = Engine.PrepareModule(source, location);
+            JintFunctionSourceTagger.Tag(prepared.Program, source);
+            return prepared;
         }
         catch (ScriptPreparationException)
         {
-            return Engine.PrepareModule(_emptyModule, location);
+            var prepared = Engine.PrepareModule(_emptyModule, location);
+            JintFunctionSourceTagger.Tag(prepared.Program, _emptyModule);
+            return prepared;
         }
     }
 }
