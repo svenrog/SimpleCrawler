@@ -1,4 +1,4 @@
-﻿namespace SimpleCrawler.Core;
+﻿namespace SimpleCrawler.Core.Scheduling;
 
 /// <summary>
 /// An optional background operation (checkpoint autosave, progress reporting) that runs alongside the
