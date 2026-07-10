@@ -8,6 +8,10 @@ Package versions are derived from git tags (`v*`) via MinVer.
 
 ## [Unreleased]
 
+### Changed
+
+- Updated `Simple.Logging.Console` dependency to 1.1.0.
+
 ## [3.0.0] - 2026-07-09
 
 ### Added
