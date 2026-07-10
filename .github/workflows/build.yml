@@ -24,6 +24,11 @@ jobs:
       - name: Restore
         run: dotnet restore SimpleCrawler.slnx
 
+      # Catches formatting/style drift that has no compiler diagnostic of its own
+      # (whitespace, etc.) and so wouldn't otherwise fail the Build step below.
+      - name: Format check
+        run: dotnet format SimpleCrawler.slnx --verify-no-changes
+
       - name: Build
         run: dotnet build SimpleCrawler.slnx -c Release --no-restore
 

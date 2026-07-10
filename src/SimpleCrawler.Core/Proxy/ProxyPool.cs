@@ -17,9 +17,9 @@ public sealed class ProxyPool : IProxyPool
             throw new ArgumentException("Proxy list cannot be empty.", nameof(proxies));
 
         _options = options;
-        _health = proxies.Select(p => new ProxyHealth(p, options)).ToArray();
+        _health = [.. proxies.Select(p => new ProxyHealth(p, options))];
         _byProxy = _health.ToDictionary(h => h.Proxy);
-        _proxies = _health.Select(h => h.Proxy).ToArray();
+        _proxies = [.. _health.Select(h => h.Proxy)];
     }
 
     public IReadOnlyList<ProxyInfo> Proxies => _proxies;

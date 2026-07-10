@@ -257,11 +257,11 @@ public class SitemapParserTests
         var urlSet = await sitemap.UrlSet.ToListAsync(cancellationToken);
         var sitemapUris = await sitemapRoot.SitemapUris.ToListAsync(cancellationToken);
         urlSet.Should().BeEmpty();
-        sitemapUris.Should().BeEquivalentTo(new[]
-        {
+        sitemapUris.Should().BeEquivalentTo(
+        [
             new Uri("https://www.github.com/organisations.xml"),
             new Uri("https://www.github.com/people.xml"),
-        });
+        ]);
     }
 
     [Fact]
@@ -325,7 +325,7 @@ public class SitemapParserTests
         var urlSet = await sitemap.UrlSet.ToListAsync(cancellationToken);
         var sitemapUris = await sitemapRoot.SitemapUris.ToListAsync(cancellationToken);
         urlSet.Should().BeEmpty();
-        sitemapUris.Should().BeEquivalentTo(new[] { new Uri("https://www.github.com/people.xml") });
+        sitemapUris.Should().BeEquivalentTo([new Uri("https://www.github.com/people.xml")]);
     }
 
     [Fact]
@@ -351,11 +351,11 @@ public class SitemapParserTests
 
         // Assert
         var urlSet = await sitemap.UrlSet.ToListAsync(cancellationToken);
-        urlSet.Should().BeEquivalentTo(new[]
-        {
+        urlSet.Should().BeEquivalentTo(
+        [
             new UrlSetItem(new Uri("https://www.github.com/drmathias"),  null, null, null),
             new UrlSetItem(new Uri("https://www.github.com/drmathias/Robots.Txt.Parser"), null, null, null),
-        });
+        ]);
     }
 
     [Fact]

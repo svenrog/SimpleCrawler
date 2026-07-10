@@ -3,6 +3,27 @@
 # CA1873: Avoid potentially expensive logging
 dotnet_diagnostic.CA1873.severity = none
 
+# Collection-expression preference (`= []` / `[.. x]` etc.) - promote to real build
+# warnings now that EnforceCodeStyleInBuild is on. Scoped to this rule family only:
+# the rest of category-Style (var vs explicit type, namespace style, brace style, ...)
+# defaults to option values that fight this codebase's established, unconfigured
+# conventions rather than reflecting real debt.
+dotnet_diagnostic.IDE0028.severity = warning
+dotnet_diagnostic.IDE0300.severity = warning
+dotnet_diagnostic.IDE0301.severity = warning
+dotnet_diagnostic.IDE0302.severity = warning
+dotnet_diagnostic.IDE0303.severity = warning
+dotnet_diagnostic.IDE0304.severity = warning
+dotnet_diagnostic.IDE0305.severity = warning
+
+# CA2016: Forward the CancellationToken parameter - defaults to Info, which never
+# surfaces in `dotnet build` output; promote so it's actually enforced.
+dotnet_diagnostic.CA2016.severity = warning
+
+# xUnit1051: use TestContext.Current.CancellationToken - already warning by default,
+# pinned explicitly since it's now load-bearing for the build (see TreatWarningsAsErrors).
+dotnet_diagnostic.xUnit1051.severity = warning
+
 # IDE290>
 csharp_style_prefer_primary_constructors = false
 

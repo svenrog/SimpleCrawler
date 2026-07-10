@@ -106,7 +106,7 @@ public class CheckpointResumeTests
         using var cts = new CancellationTokenSource();
         var run = crawler.Start(_entry, cts.Token);
 
-        await crawler.FetchStarted.WaitAsync(TimeSpan.FromSeconds(5));
+        await crawler.FetchStarted.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
 
         cts.Cancel();
 
@@ -177,7 +177,7 @@ public class CheckpointResumeTests
             _firstFetch.TrySetResult();
 
             if (_block)
-                await Task.Delay(Timeout.Infinite).WaitAsync(cancellationToken);
+                await Task.Delay(Timeout.Infinite, cancellationToken);
 
             return url;
         }
