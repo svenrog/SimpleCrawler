@@ -95,9 +95,11 @@ public abstract class AbstractCrawler<TResponse, TDocument, TResult> : ICrawler<
         var autosave = autosaveCts is not null ? _checkpoints!.RunAutosaveAsync(() => _state, autosaveCts.Token) : null;
 
         using var progressCts = _options.Progress.Enabled ? CancellationTokenSource.CreateLinkedTokenSource(cancellationToken) : null;
+        // Sample the cumulative Processed count (not the run-local _processedCount, which resets to 0 on a
+        // checkpoint resume) so the pending frontier and yield stay correct across a resumed crawl.
         var progress = progressCts is not null
             ? new CrawlProgressReporter(_options.Progress, _logger).RunAsync(
-                () => (Volatile.Read(ref _processedCount), _state.Discovered.Count), _options.MaxPages, progressCts.Token)
+                () => (_state.Processed.Count, _state.Discovered.Count), _options.MaxPages, progressCts.Token)
             : null;
 
         try
