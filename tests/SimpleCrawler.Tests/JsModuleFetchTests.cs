@@ -13,11 +13,13 @@ using System.Text;
 
 namespace SimpleCrawler.Tests;
 
-// A module import that resolves to a non-HTTP URI must not abort the page. A protocol-relative specifier
-// (`//host/x.js`) parses as a file:// URI, and the fetcher's HttpClient.Send throws "the file scheme is not
-// supported" — a raw CLR exception that escaped module evaluation and killed the whole fetch (live-repro'd on
-// ewheels.com). The fetcher now skips non-HTTP schemes and treats any fetch failure as an empty module, so the
-// render degrades gracefully and the rest of the page still hydrates.
+/// <summary>
+/// A module import that resolves to a non-HTTP URI must not abort the page. A protocol-relative specifier
+/// (`//host/x.js`) parses as a file:// URI, and the fetcher's HttpClient.Send throws "the file scheme is not
+/// supported" — a raw CLR exception that escaped module evaluation and killed the whole fetch (live-repro'd on
+/// a real site). The fetcher now skips non-HTTP schemes and treats any fetch failure as an empty module, so the
+/// render degrades gracefully and the rest of the page still hydrates.
+/// </summary>
 public class JsModuleFetchTests
 {
     [Theory]
@@ -48,7 +50,7 @@ public class JsModuleFetchTests
 
     // An external module whose URL serves the site's HTML catch-all instead of JS can't be parsed as a module —
     // Jint's PrepareModule threw "Unexpected token <" from inside the loader, a raw CLR exception that killed the
-    // whole fetch (live-repro'd on ewheels.com). The module degrades to an empty module now, so the page's own
+    // whole fetch (live-repro'd on a real site). The module degrades to an empty module now, so the page's own
     // static content still renders instead of the crawl aborting on the page.
     [Theory]
     [InlineData(JsEngine.Jint)]

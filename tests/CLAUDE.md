@@ -24,3 +24,7 @@
 - `SimpleCrawler.TestHost` serves embedded resources as static files so integration test servers run entirely from memory.
 - The site is an Astro app building five client-only SPAs (react/preact/vue/svelte/solid), consumed by the JS-render and headless tests via per-framework `SpaHostFixture`s. After changing its sources, rebuild with `npm run build` (astro build) in `tests/SimpleCrawler.TestHost` so the embedded output updates.
 - Embedded resources rely on the csproj `LogicalName` mapping — new files must land under the paths that mapping covers, or the in-memory server won't see them.
+
+## Code style
+
+Test projects don't generate XML docs and aren't referenced by consumers, so the root XmlDoc-for-declarations rule is applied minimally here: only type-level (class/enum) summary comments become `/// <summary>`; method, field, and in-body comments stay plain `//`.

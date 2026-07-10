@@ -7,8 +7,10 @@ using Microsoft.Extensions.Options;
 
 namespace SimpleCrawler.Tests;
 
-// Guards per-URL reporting on IScrapeResult: every fetched page (success or failure) gets a UrlReport
-// carrying its status code, outcome and page data, while Urls stays the indexable-only subset.
+/// <summary>
+/// Guards per-URL reporting on IScrapeResult: every fetched page (success or failure) gets a UrlReport
+/// carrying its status code, outcome and page data, while Urls stays the indexable-only subset.
+/// </summary>
 public class ReportingTests
 {
     private const string _entry = "http://localhost/";

@@ -4,10 +4,12 @@ using HttpResults = Microsoft.AspNetCore.Http.Results;
 
 namespace SimpleCrawler.TestHost.Infrastructure.Factories;
 
-// Assembles a JS-engine capability probe from embedded resources: the shared Probes/shell.html template plus
-// a single Probes/<script> that only builds the anchors when its capability behaves correctly. The shell
-// exposes the link manifest as window.__links__ / window.__features__, so a crawl that matches the manifest
-// proves the probed capability. Each script (with its regression rationale) lives next to the template.
+/// <summary>
+/// Assembles a JS-engine capability probe from embedded resources: the shared Probes/shell.html template plus
+/// a single Probes/&lt;script&gt; that only builds the anchors when its capability behaves correctly. The shell
+/// exposes the link manifest as window.__links__ / window.__features__, so a crawl that matches the manifest
+/// proves the probed capability. Each script (with its regression rationale) lives next to the template.
+/// </summary>
 public class ProbeSpaWebApplicationFactory
 {
     public static WebApplication Create(string host, string title, string script, bool mapLinksJson = false)

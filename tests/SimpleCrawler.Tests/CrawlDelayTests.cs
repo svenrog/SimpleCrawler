@@ -8,9 +8,11 @@ using Microsoft.Extensions.Options;
 
 namespace SimpleCrawler.Tests;
 
-// Guards the crawl-delay throttle: robots.txt Crawl-delay must actually slow requests (it was parsed but
-// ignored because the delay was snapshotted in the constructor), and it may only raise the configured
-// floor, never lower it.
+/// <summary>
+/// Guards the crawl-delay throttle: robots.txt Crawl-delay must actually slow requests (it was parsed but
+/// ignored because the delay was snapshotted in the constructor), and it may only raise the configured
+/// floor, never lower it.
+/// </summary>
 public class CrawlDelayTests
 {
     private const string _entry = "http://localhost/";

@@ -4,11 +4,13 @@ using Microsoft.ClearScript.V8;
 
 namespace SimpleCrawler.Tests;
 
-// Measures the per-access cost of crossing the JS<->host boundary for a POCO host object, which is the
-// cost a JS-implemented DOM would remove. Gated behind DOM_BENCH=1 so it never runs in a normal pass.
-// Reports ns/op for scalar get, method call, mutating call, host-object get (no alloc), and host-object
-// returning call (alloc), on both engines. Run:
-//   DOM_BENCH=1 dotnet run --project tests/SimpleCrawler.Tests -c Release -- -method "*MeasuresPerAccessCost"
+/// <summary>
+/// Measures the per-access cost of crossing the JS&lt;-&gt;host boundary for a POCO host object, which is the
+/// cost a JS-implemented DOM would remove. Gated behind DOM_BENCH=1 so it never runs in a normal pass.
+/// Reports ns/op for scalar get, method call, mutating call, host-object get (no alloc), and host-object
+/// returning call (alloc), on both engines. Run:
+///   DOM_BENCH=1 dotnet run --project tests/SimpleCrawler.Tests -c Release -- -method "*MeasuresPerAccessCost"
+/// </summary>
 public class DomMarshallingBenchTests
 {
     public sealed class BenchNode

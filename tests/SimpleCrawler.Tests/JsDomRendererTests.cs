@@ -14,9 +14,11 @@ using System.Text;
 
 namespace SimpleCrawler.Tests;
 
-// Exercises the pure-JS DOM path (dom.js) without a host: dom.js parses the shell, the inline
-// script mutates the JS DOM, and the tree is serialized back to HTML — no managed DOM wrappers involved.
-// Theory'd over both engines since the JS DOM is the single code path for Jint + V8.
+/// <summary>
+/// Exercises the pure-JS DOM path (dom.js) without a host: dom.js parses the shell, the inline
+/// script mutates the JS DOM, and the tree is serialized back to HTML — no managed DOM wrappers involved.
+/// Theory'd over both engines since the JS DOM is the single code path for Jint + V8.
+/// </summary>
 public class JsDomRendererTests
 {
     private static JsRenderer CreateJsRenderer(JsEngine engine, JsRenderOptions? options = null, ILogger? logger = null)
@@ -1478,8 +1480,10 @@ public class JsDomRendererTests
             => Task.FromResult(Send(request, cancellationToken));
     }
 
-    // Serves JS only for the base-resolved script URL; any other path returns the SPA's HTML fallback, so a
-    // page-relative resolution fetches HTML and the injected anchor never appears.
+    /// <summary>
+    /// Serves JS only for the base-resolved script URL; any other path returns the SPA's HTML fallback, so a
+    /// page-relative resolution fetches HTML and the injected anchor never appears.
+    /// </summary>
     private sealed class BaseHrefHandler : HttpMessageHandler
     {
         public string? RequestedScriptUrl { get; private set; }

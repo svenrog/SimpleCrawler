@@ -7,10 +7,12 @@ using Microsoft.AspNetCore.Builder;
 
 namespace SimpleCrawler.Tests.Fixtures;
 
-// One host per JS-engine capability probe, each on its own port, served from a single fixture (mirroring
-// SpaHostFixture's multi-host layout). Each host assembles Probes/shell.html + a Probes/<script> resource,
-// and only renders its links when the capability behaves — so a crawl that matches the manifest proves it.
-// The fixture enables the superset of opt-in render features so every probe's requirement is satisfied.
+/// <summary>
+/// One host per JS-engine capability probe, each on its own port, served from a single fixture (mirroring
+/// SpaHostFixture's multi-host layout). Each host assembles Probes/shell.html + a Probes/&lt;script&gt; resource,
+/// and only renders its links when the capability behaves — so a crawl that matches the manifest proves it.
+/// The fixture enables the superset of opt-in render features so every probe's requirement is satisfied.
+/// </summary>
 public sealed class ProbeHostFixture : AbstractHostFixture
 {
     private const int _basePort = 5280;

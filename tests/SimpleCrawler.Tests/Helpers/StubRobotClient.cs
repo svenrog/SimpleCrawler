@@ -3,8 +3,10 @@ using System.Diagnostics.CodeAnalysis;
 
 namespace SimpleCrawler.Tests.Helpers;
 
-// Minimal in-memory robots client that reports no crawl-delay and no rules, so tests exercise crawler
-// behaviour (throttling, checkpointing) without a live robots.txt.
+/// <summary>
+/// Minimal in-memory robots client that reports no crawl-delay and no rules, so tests exercise crawler
+/// behaviour (throttling, checkpointing) without a live robots.txt.
+/// </summary>
 public sealed class StubRobotClient : IRobotClient
 {
     public Task<IRobotsTxt> LoadRobotsTxtAsync(Uri url, CancellationToken cancellationToken = default)
