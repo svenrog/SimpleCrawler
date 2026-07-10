@@ -17,6 +17,7 @@ This project stemmed from the need to crawl a single domain in preparation of lo
 | Proxy pooling | :heavy_check_mark: |
 | Retries & backoff | :heavy_check_mark: |
 | Checkpoint handling | :heavy_check_mark: |
+| Remaining time estimation | :heavy_check_mark: |
 | Modern .NET features | :heavy_check_mark: |
 | Console colors | :rainbow: |
 
