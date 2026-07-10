@@ -29,18 +29,46 @@ public sealed class AdaptiveThrottler
             _hosts[authority] = new HostThrottle();
     }
 
-    public async Task WaitAsync(string authority, double baseDelay, CancellationToken cancellationToken)
+    /// <summary>
+    /// Returns the Stopwatch timestamp at which this host's next fetch may fire, without reserving the slot,
+    /// so a scheduler can order hosts by readiness before committing a URL to a worker. The caller passes a
+    /// single shared <paramref name="now"/> so that every host ready at this instant reports the same value
+    /// and ties break on the scheduler's own fairness order rather than on peek order. Unknown or unthrottled
+    /// hosts read as ready now.
+    /// </summary>
+    public long PeekNextReady(string authority, double baseDelay, long now)
     {
         if (!_hosts.TryGetValue(authority, out var host))
-            return;
+            return now;
 
         var delay = Cap(baseDelay + host.Penalty);
-
-        // Fast path: nothing to space out and no pending grace/penalty from a rate limit.
         if (delay <= 0 && !host.IsActive)
-            return;
+            return now;
 
-        var slot = host.Reserve(delay);
+        return host.PeekNextSlot(now);
+    }
+
+    /// <summary>
+    /// Reserves this host's next fetch slot and returns the Stopwatch timestamp the caller must wait until
+    /// before fetching. A host with no spacing and no active penalty reserves nothing and fires immediately,
+    /// so unthrottled hosts keep full throughput.
+    /// </summary>
+    public long ReserveSlot(string authority, double baseDelay)
+    {
+        var now = Stopwatch.GetTimestamp();
+        if (!_hosts.TryGetValue(authority, out var host))
+            return now;
+
+        var delay = Cap(baseDelay + host.Penalty);
+        if (delay <= 0 && !host.IsActive)
+            return now;
+
+        return host.Reserve(delay);
+    }
+
+    public async Task WaitAsync(string authority, double baseDelay, CancellationToken cancellationToken)
+    {
+        var slot = ReserveSlot(authority, baseDelay);
         var waitTicks = slot - Stopwatch.GetTimestamp();
         if (waitTicks > 0)
             await Task.Delay(TimeSpan.FromSeconds((double)waitTicks / Stopwatch.Frequency), cancellationToken);

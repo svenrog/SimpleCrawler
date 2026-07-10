@@ -18,6 +18,7 @@
 
 	<ItemGroup>
 		<InternalsVisibleTo Include="SimpleCrawler.Robots.Tests" />
+		<InternalsVisibleTo Include="SimpleCrawler.Tests" />
 	</ItemGroup>
 
 </Project>

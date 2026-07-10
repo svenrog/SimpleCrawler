@@ -8,6 +8,7 @@ using SimpleCrawler.Core.Helpers;
 using SimpleCrawler.Core.Models;
 using SimpleCrawler.Core.Progress;
 using SimpleCrawler.Core.Proxy;
+using SimpleCrawler.Core.Scheduling;
 using SimpleCrawler.Core.Throttling;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
@@ -33,7 +34,8 @@ public abstract class AbstractCrawler<TResponse, TDocument, TResult> : ICrawler<
 
     private CrawlState _state;
 
-    private Channel<string> _urlChannel;
+    private HostFrontier _frontier;
+    private Channel<string> _fetchChannel;
     private Channel<(string Url, TResponse Response)> _parseChannel;
 
     private HashSet<string> _scopeAuthorities;
@@ -61,7 +63,8 @@ public abstract class AbstractCrawler<TResponse, TDocument, TResult> : ICrawler<
         _entryByAuthority = new Dictionary<string, Uri>(StringComparer.OrdinalIgnoreCase);
         _state = new CrawlState();
 
-        _urlChannel = CreateUrlChannel();
+        _frontier = new HostFrontier(_throttling, GetCrawlDelay);
+        _fetchChannel = CreateFetchChannel();
         _parseChannel = CreateParseChannel();
     }
 
@@ -100,24 +103,44 @@ public abstract class AbstractCrawler<TResponse, TDocument, TResult> : ICrawler<
     }
 
     /// <summary>
-    /// Builds the crawl's worker tasks: one background-discovery task that seeds the frontier, plus the
-    /// fetch and parse worker pools sized by the effective concurrency options.
+    /// Builds the crawl's worker tasks: one background-discovery task that seeds the frontier, the single
+    /// dispatcher that feeds host-ready URLs to the fetch workers, plus the fetch and parse worker pools
+    /// sized by the effective concurrency options.
     /// </summary>
     private Task[] BuildWorkerTasks(CancellationToken cancellationToken)
     {
         var fetchCount = _options.EffectiveConcurrency;
         var parseCount = _options.EffectiveParseConcurrency;
 
-        var tasks = new Task[1 + fetchCount + parseCount];
+        var tasks = new Task[2 + fetchCount + parseCount];
         tasks[0] = Task.Run(() => RunDiscovery(cancellationToken), cancellationToken);
+        tasks[1] = Task.Run(() => RunDispatcher(cancellationToken), cancellationToken);
 
-        var index = 1;
+        var index = 2;
         for (var i = 0; i < fetchCount; i++)
             tasks[index++] = RunFetchWorker(cancellationToken);
         for (var i = 0; i < parseCount; i++)
             tasks[index++] = RunParseWorker(cancellationToken);
 
         return tasks;
+    }
+
+    /// <summary>
+    /// Pulls host-ready URLs from the frontier one at a time and hands them to the fetch workers through the
+    /// bounded channel, enforcing per-host spacing here so no fetch worker ever parks on a not-ready host.
+    /// Completes the fetch channel when the frontier drains so the workers can exit.
+    /// </summary>
+    private async Task RunDispatcher(CancellationToken cancellationToken)
+    {
+        try
+        {
+            while (await _frontier.DequeueReadyAsync(cancellationToken) is { } url)
+                await _fetchChannel.Writer.WriteAsync(url, cancellationToken);
+        }
+        finally
+        {
+            _fetchChannel.Writer.TryComplete();
+        }
     }
 
     /// <summary>
@@ -173,7 +196,8 @@ public abstract class AbstractCrawler<TResponse, TDocument, TResult> : ICrawler<
     {
         SetSiteIdentities(entries);
 
-        _urlChannel = CreateUrlChannel();
+        _frontier = new HostFrontier(_throttling, GetCrawlDelay);
+        _fetchChannel = CreateFetchChannel();
         _parseChannel = CreateParseChannel();
         _outstanding = 0;
         _processedCount = 0;
@@ -227,14 +251,20 @@ public abstract class AbstractCrawler<TResponse, TDocument, TResult> : ICrawler<
         }
     }
 
-    private static Channel<string> CreateUrlChannel()
+    /// <summary>
+    /// Bounded hand-off from the single dispatcher to the fetch workers. Bounding it at the fetch width lets
+    /// the dispatcher stop scheduling once workers are saturated, so its host-readiness decisions stay fresh
+    /// rather than being made against a queue dumped all at once.
+    /// </summary>
+    private Channel<string> CreateFetchChannel()
     {
-        var options = new UnboundedChannelOptions
+        var options = new BoundedChannelOptions(_options.EffectiveConcurrency)
         {
             SingleReader = false,
-            SingleWriter = false,
+            SingleWriter = true,
+            FullMode = BoundedChannelFullMode.Wait,
         };
-        return Channel.CreateUnbounded<string>(options);
+        return Channel.CreateBounded<string>(options);
     }
 
     private Channel<(string Url, TResponse Response)> CreateParseChannel()
@@ -257,14 +287,15 @@ public abstract class AbstractCrawler<TResponse, TDocument, TResult> : ICrawler<
     {
         if (Interlocked.Decrement(ref _outstanding) == 0)
         {
-            _urlChannel.Writer.TryComplete();
+            _frontier.Complete();
             _parseChannel.Writer.TryComplete();
         }
     }
 
     /// <summary>
-    /// Soft-abort: stop scheduling new fetches (completing the URL channel makes Enqueue a no-op and
-    /// drains fetch workers) while letting in-flight parses finish, so Start returns partial results.
+    /// Soft-abort: stop scheduling new fetches (completing the frontier makes Enqueue a no-op and drains the
+    /// still-queued URLs through the fetch workers, which skip them) while letting in-flight parses finish,
+    /// so Start returns partial results.
     /// </summary>
     protected void Abort(string reason)
     {
@@ -272,7 +303,7 @@ public abstract class AbstractCrawler<TResponse, TDocument, TResult> : ICrawler<
             return;
 
         _logger.LogCritical("Aborting crawl: {reason}.", reason);
-        _urlChannel.Writer.TryComplete();
+        _frontier.Complete();
     }
 
     /// <summary>
@@ -288,7 +319,7 @@ public abstract class AbstractCrawler<TResponse, TDocument, TResult> : ICrawler<
 
     private async Task RunFetchWorker(CancellationToken cancellationToken)
     {
-        var reader = _urlChannel.Reader;
+        var reader = _fetchChannel.Reader;
 
         while (await reader.WaitToReadAsync(cancellationToken))
         {
@@ -298,9 +329,9 @@ public abstract class AbstractCrawler<TResponse, TDocument, TResult> : ICrawler<
     }
 
     /// <summary>
-    /// Fetches a single dequeued URL: throttles, loads the response, and either hands it to the parse
-    /// channel or finalizes a failure. Skipped URLs (MaxPages reached, or aborted) still balance their
-    /// outstanding-count via CompleteUrl so the crawl can drain.
+    /// Fetches a single dequeued URL (already spaced by the dispatcher): loads the response and either hands
+    /// it to the parse channel or finalizes a failure. Skipped URLs (MaxPages reached, or aborted) still
+    /// balance their outstanding-count via CompleteUrl so the crawl can drain.
     /// </summary>
     private async Task FetchOneAsync(string url, CancellationToken cancellationToken)
     {
@@ -322,9 +353,6 @@ public abstract class AbstractCrawler<TResponse, TDocument, TResult> : ICrawler<
         var handedOff = false;
         try
         {
-            var authority = new Uri(url).Authority;
-            await _throttling.WaitAsync(authority, GetCrawlDelay(authority), cancellationToken);
-
             var startTimestamp = Stopwatch.GetTimestamp();
             var response = await LoadResponse(url, cancellationToken);
             entry.FetchDuration = Stopwatch.GetElapsedTime(startTimestamp);
@@ -523,7 +551,7 @@ public abstract class AbstractCrawler<TResponse, TDocument, TResult> : ICrawler<
 
         Interlocked.Increment(ref _outstanding);
 
-        if (_urlChannel.Writer.TryWrite(url))
+        if (_frontier.Enqueue(url))
             return true;
 
         Interlocked.Decrement(ref _outstanding);
