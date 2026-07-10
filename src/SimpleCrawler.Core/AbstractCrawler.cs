@@ -15,6 +15,14 @@ using System.Threading.Channels;
 
 namespace SimpleCrawler.Core;
 
+/// <summary>
+/// Drives the two-stage crawl pipeline: an unbounded URL channel feeds fetch workers, which hand
+/// responses to a bounded parse channel feeding parse workers. Each enqueued URL is tracked by an
+/// outstanding-count that is decremented when the URL leaves the system (fetch failure or parse
+/// completion); when it reaches zero both channels are completed and the crawl drains. Subclasses
+/// supply the backend-specific load/parse/extract hooks and, via the intermediate abstract layers,
+/// robots.txt, sitemap discovery, and per-document analysis.
+/// </summary>
 public abstract class AbstractCrawler<TResponse, TDocument, TResult> : ICrawler<TResult>
     where TResult : IScrapeResult
 {
@@ -27,17 +35,18 @@ public abstract class AbstractCrawler<TResponse, TDocument, TResult> : ICrawler<
 
     private Channel<string> _urlChannel;
     private Channel<(string Url, TResponse Response)> _parseChannel;
-    private int _outstanding;
-    private int _processedCount;
-    private int _aborted;
 
     private HashSet<string> _scopeAuthorities;
     private Dictionary<string, Uri> _entryByAuthority;
 
+    private int _outstanding;
+    private int _processedCount;
+    private int _aborted;
+
     protected AdaptiveThrottler Throttling => _throttling;
     protected IReadOnlyDictionary<string, Uri> EntryUris => _entryByAuthority;
     protected ConcurrentHashSet<string> Visited => _state.Visited;
-    protected IReadOnlyCollection<UrlReport> Reports => _state.Reports.Values.ToArray();
+    protected IReadOnlyCollection<UrlReport> Reports => [.. _state.Reports.Values];
 
     protected CancellationToken CrawlCancellationToken { get; private set; }
 
@@ -69,38 +78,10 @@ public abstract class AbstractCrawler<TResponse, TDocument, TResult> : ICrawler<
 
         Interlocked.Increment(ref _outstanding);
 
-        var fetchCount = _options.EffectiveConcurrency;
-        var parseCount = _options.EffectiveParseConcurrency;
+        using var autosave = StartAutosave(cancellationToken);
+        using var progress = StartProgress(cancellationToken);
 
-        var tasks = new Task[1 + fetchCount + parseCount];
-        tasks[0] = Task.Run(async () =>
-        {
-            try
-            {
-                await BackgroundDiscovery(cancellationToken);
-            }
-            finally
-            {
-                CompleteUrl();
-            }
-        }, cancellationToken);
-
-        var index = 1;
-        for (var i = 0; i < fetchCount; i++)
-            tasks[index++] = RunFetchWorker(cancellationToken);
-        for (var i = 0; i < parseCount; i++)
-            tasks[index++] = RunParseWorker(cancellationToken);
-
-        using var autosaveCts = _checkpoints is not null ? CancellationTokenSource.CreateLinkedTokenSource(cancellationToken) : null;
-        var autosave = autosaveCts is not null ? _checkpoints!.RunAutosaveAsync(() => _state, autosaveCts.Token) : null;
-
-        using var progressCts = _options.Progress.Enabled ? CancellationTokenSource.CreateLinkedTokenSource(cancellationToken) : null;
-        // Sample the cumulative Processed count (not the run-local _processedCount, which resets to 0 on a
-        // checkpoint resume) so the pending frontier and yield stay correct across a resumed crawl.
-        var progress = progressCts is not null
-            ? new CrawlProgressReporter(_options.Progress, _logger).RunAsync(
-                () => (_state.Processed.Count, _state.Discovered.Count), _options.MaxPages, progressCts.Token)
-            : null;
+        var tasks = BuildWorkerTasks(cancellationToken);
 
         try
         {
@@ -108,23 +89,81 @@ public abstract class AbstractCrawler<TResponse, TDocument, TResult> : ICrawler<
         }
         finally
         {
-            if (progress is not null)
-            {
-                progressCts!.Cancel();
-                await progress;
-            }
-
-            if (autosave is not null)
-            {
-                autosaveCts!.Cancel();
-                await autosave;
-            }
+            await progress.StopAsync();
+            await autosave.StopAsync();
 
             if (_checkpoints is not null)
                 await _checkpoints.SaveAsync(_state, CancellationToken.None);
         }
 
         return await GetResult(cancellationToken);
+    }
+
+    /// <summary>
+    /// Builds the crawl's worker tasks: one background-discovery task that seeds the frontier, plus the
+    /// fetch and parse worker pools sized by the effective concurrency options.
+    /// </summary>
+    private Task[] BuildWorkerTasks(CancellationToken cancellationToken)
+    {
+        var fetchCount = _options.EffectiveConcurrency;
+        var parseCount = _options.EffectiveParseConcurrency;
+
+        var tasks = new Task[1 + fetchCount + parseCount];
+        tasks[0] = Task.Run(() => RunDiscovery(cancellationToken), cancellationToken);
+
+        var index = 1;
+        for (var i = 0; i < fetchCount; i++)
+            tasks[index++] = RunFetchWorker(cancellationToken);
+        for (var i = 0; i < parseCount; i++)
+            tasks[index++] = RunParseWorker(cancellationToken);
+
+        return tasks;
+    }
+
+    /// <summary>
+    /// Runs background sitemap discovery, then balances the outstanding-count seeded for it in Start so
+    /// the crawl can complete once discovery and all enqueued URLs have drained.
+    /// </summary>
+    private async Task RunDiscovery(CancellationToken cancellationToken)
+    {
+        try
+        {
+            await BackgroundDiscovery(cancellationToken);
+        }
+        finally
+        {
+            CompleteUrl();
+        }
+    }
+
+    /// <summary>
+    /// Starts the checkpoint autosave loop as a background sidecar, or returns an idle one when
+    /// checkpointing is disabled.
+    /// </summary>
+    private BackgroundOperation StartAutosave(CancellationToken cancellationToken)
+    {
+        if (_checkpoints is null)
+            return BackgroundOperation.None();
+
+        var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        return BackgroundOperation.Start(cts, _checkpoints.RunAutosaveAsync(() => _state, cts.Token));
+    }
+
+    /// <summary>
+    /// Starts the progress reporter as a background sidecar, or returns an idle one when progress
+    /// reporting is disabled.
+    /// </summary>
+    private BackgroundOperation StartProgress(CancellationToken cancellationToken)
+    {
+        if (!_options.Progress.Enabled)
+            return BackgroundOperation.None();
+
+        var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        // Sample the cumulative Processed count (not the run-local _processedCount, which resets to 0 on a
+        // checkpoint resume) so the pending frontier and yield stay correct across a resumed crawl.
+        var task = new CrawlProgressReporter(_options.Progress, _logger).RunAsync(
+            () => (_state.Processed.Count, _state.Discovered.Count), _options.MaxPages, cts.Token);
+        return BackgroundOperation.Start(cts, task);
     }
 
     /// <summary>
@@ -165,7 +204,7 @@ public abstract class AbstractCrawler<TResponse, TDocument, TResult> : ICrawler<
         var pending = 0;
         foreach (var url in _state.Discovered)
         {
-            if (!_state.Processed.Contains(url) && EnqueueAllowed(url))
+            if (!_state.Processed.Contains(url) && EnqueueKnownUrl(url))
                 pending++;
         }
 
@@ -236,6 +275,17 @@ public abstract class AbstractCrawler<TResponse, TDocument, TResult> : ICrawler<
         _urlChannel.Writer.TryComplete();
     }
 
+    /// <summary>
+    /// Records a URL as fully processed (parse done, or a terminal fetch failure) and bumps the MaxPages
+    /// counter. Distinct from CompleteUrl, which balances the outstanding-count tracking the URL through
+    /// the pipeline; both fire together as a URL exits.
+    /// </summary>
+    private void MarkProcessed(string url)
+    {
+        _state.Processed.Add(url);
+        Interlocked.Increment(ref _processedCount);
+    }
+
     private async Task RunFetchWorker(CancellationToken cancellationToken)
     {
         var reader = _urlChannel.Reader;
@@ -243,69 +293,76 @@ public abstract class AbstractCrawler<TResponse, TDocument, TResult> : ICrawler<
         while (await reader.WaitToReadAsync(cancellationToken))
         {
             while (reader.TryRead(out var url))
+                await FetchOneAsync(url, cancellationToken);
+        }
+    }
+
+    /// <summary>
+    /// Fetches a single dequeued URL: throttles, loads the response, and either hands it to the parse
+    /// channel or finalizes a failure. Skipped URLs (MaxPages reached, or aborted) still balance their
+    /// outstanding-count via CompleteUrl so the crawl can drain.
+    /// </summary>
+    private async Task FetchOneAsync(string url, CancellationToken cancellationToken)
+    {
+        if (Volatile.Read(ref _processedCount) >= _options.MaxPages)
+        {
+            CompleteUrl();
+            return;
+        }
+
+        if (Volatile.Read(ref _aborted) == 1)
+        {
+            CompleteUrl();
+            return;
+        }
+
+        var entry = new UrlReport { Url = url, Timestamp = DateTimeOffset.UtcNow };
+        _state.Reports[url] = entry;
+
+        var handedOff = false;
+        try
+        {
+            var authority = new Uri(url).Authority;
+            await _throttling.WaitAsync(authority, GetCrawlDelay(authority), cancellationToken);
+
+            var startTimestamp = Stopwatch.GetTimestamp();
+            var response = await LoadResponse(url, cancellationToken);
+            entry.FetchDuration = Stopwatch.GetElapsedTime(startTimestamp);
+
+            if (response != null)
             {
-                if (Volatile.Read(ref _processedCount) >= _options.MaxPages)
-                {
-                    CompleteUrl();
-                    continue;
-                }
-
-                if (Volatile.Read(ref _aborted) == 1)
-                {
-                    CompleteUrl();
-                    continue;
-                }
-
-                var entry = new UrlReport { Url = url, Timestamp = DateTimeOffset.UtcNow };
-                _state.Reports[url] = entry;
-
-                var handedOff = false;
-                try
-                {
-                    var authority = new Uri(url).Authority;
-                    await _throttling.WaitAsync(authority, GetCrawlDelay(authority), cancellationToken);
-
-                    var startTimestamp = Stopwatch.GetTimestamp();
-                    var response = await LoadResponse(url, cancellationToken);
-                    entry.FetchDuration = Stopwatch.GetElapsedTime(startTimestamp);
-
-                    if (response != null)
-                    {
-                        await _parseChannel.Writer.WriteAsync((url, response), cancellationToken);
-                        handedOff = true;
-                    }
-                }
-                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-                {
-                    throw;
-                }
-                catch (ProxyPoolExhaustedException)
-                {
-                    entry.Outcome = CrawlOutcome.Aborted;
-                    Abort("proxy pool exhausted");
-                }
-                catch (TimeoutException ex)
-                {
-                    entry.Outcome = CrawlOutcome.Timeout;
-                    entry.Error = ex.Message;
-                    _logger.LogWarning("Timeout fetching '{url}': {message}", url, ex.Message);
-                }
-                catch (Exception ex)
-                {
-                    entry.Outcome = CrawlOutcome.FetchError;
-                    entry.Error = ex.Message;
-                    _logger.LogError(ex, "Encountered error fetching '{url}': {message}", url, ex.Message);
-                }
-                finally
-                {
-                    if (!handedOff)
-                    {
-                        FinalizeFetchFailure(entry);
-                        _state.Processed.Add(url);
-                        Interlocked.Increment(ref _processedCount);
-                        CompleteUrl();
-                    }
-                }
+                await _parseChannel.Writer.WriteAsync((url, response), cancellationToken);
+                handedOff = true;
+            }
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (ProxyPoolExhaustedException)
+        {
+            entry.Outcome = CrawlOutcome.Aborted;
+            Abort("proxy pool exhausted");
+        }
+        catch (TimeoutException ex)
+        {
+            entry.Outcome = CrawlOutcome.Timeout;
+            entry.Error = ex.Message;
+            _logger.LogWarning("Timeout fetching '{url}': {message}", url, ex.Message);
+        }
+        catch (Exception ex)
+        {
+            entry.Outcome = CrawlOutcome.FetchError;
+            entry.Error = ex.Message;
+            _logger.LogError(ex, "Encountered error fetching '{url}': {message}", url, ex.Message);
+        }
+        finally
+        {
+            if (!handedOff)
+            {
+                FinalizeFetchFailure(entry);
+                MarkProcessed(url);
+                CompleteUrl();
             }
         }
     }
@@ -323,35 +380,99 @@ public abstract class AbstractCrawler<TResponse, TDocument, TResult> : ICrawler<
         }
     }
 
-    protected virtual double GetCrawlDelay(string authority)
+    private async Task ProcessPage(string url, TResponse response)
     {
-        return _options.CrawlDelay;
-    }
+        _logger.LogInformation("Processing url '{url}'", url);
 
-    private bool Enqueue(string url)
-    {
-        if (!_state.Discovered.Add(url))
-            return false;
+        _state.Reports.TryGetValue(url, out var entry);
 
-        return EnqueueAllowed(url);
+        var document = default(TDocument);
+        var parsed = false;
+        try
+        {
+            var startTimestamp = Stopwatch.GetTimestamp();
+            document = await ParseResponse(response);
+            parsed = true;
+
+            var pageBase = new Uri(url);
+            var pageData = await ExtractPageData(document);
+
+            entry?.ParseDuration = Stopwatch.GetElapsedTime(startTimestamp);
+
+            var resolvedUrl = UriHelper.GetAbsoluteUrl(pageBase, pageData.CanonicalHref) ?? url;
+
+            await AnalyzeDocument(resolvedUrl, document);
+
+            var robots = _options.RespectMetaRobots ? pageData.Robots : RobotsRules.All;
+            if (robots.Index)
+                Visited.Add(resolvedUrl);
+
+            var discovered = robots.Follow ? DiscoverOutgoing(pageBase, pageData.LinkHrefs, resolvedUrl) : 0;
+
+            if (entry is not null)
+            {
+                entry.CanonicalUrl = resolvedUrl;
+                entry.Indexed = robots.Index;
+                entry.Followed = robots.Follow;
+                entry.LinkCount = discovered;
+                entry.Outcome = CrawlOutcome.Success;
+            }
+        }
+        catch (OperationCanceledException) when (CrawlCancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (TimeoutException ex)
+        {
+            if (entry is not null)
+            {
+                entry.Outcome = CrawlOutcome.Timeout;
+                entry.Error = ex.Message;
+            }
+            _logger.LogWarning("Timeout on url '{url}': {message}", url, ex.Message);
+        }
+        catch (Exception ex)
+        {
+            if (entry is not null)
+            {
+                entry.Outcome = CrawlOutcome.ParseError;
+                entry.Error = ex.Message;
+            }
+            _logger.LogError(ex, "Encountered error {message}", ex.Message);
+        }
+        finally
+        {
+            MarkProcessed(url);
+
+            if (parsed)
+                await DisposeDocument(document!);
+
+            await DisposeResponse(response);
+
+            CompleteUrl();
+        }
     }
 
     /// <summary>
-    /// Schedules a URL already recorded in Discovered (e.g. restored from a checkpoint), bypassing the
-    /// discovered-set dedupe that Enqueue performs.
+    /// Resolves and enqueues the outgoing links of a parsed page, returning how many were newly queued.
     /// </summary>
-    private bool EnqueueAllowed(string url)
+    private int DiscoverOutgoing(Uri pageBase, IReadOnlyList<string?> hrefs, string resolvedUrl)
     {
-        if (!IsCrawlAllowed(url))
-            return false;
+        var discovered = 0;
+        foreach (var href in hrefs)
+        {
+            var link = ResolveCrawlableUrl(pageBase, href);
+            if (link == null)
+                continue;
 
-        Interlocked.Increment(ref _outstanding);
+            if (Enqueue(link))
+                discovered++;
+        }
 
-        if (_urlChannel.Writer.TryWrite(url))
-            return true;
+        if (discovered > 0)
+            _logger.LogDebug("Found {count} new outgoing links on '{url}'", discovered, resolvedUrl);
 
-        Interlocked.Decrement(ref _outstanding);
-        return false;
+        return discovered;
     }
 
     /// <summary>
@@ -381,6 +502,83 @@ public abstract class AbstractCrawler<TResponse, TDocument, TResult> : ICrawler<
             entry.Outcome = status.IsSuccessStatus() ? CrawlOutcome.FetchError : CrawlOutcome.HttpError;
         else
             entry.Outcome = CrawlOutcome.RetriesExhausted;
+    }
+
+    private bool Enqueue(string url)
+    {
+        if (!_state.Discovered.Add(url))
+            return false;
+
+        return EnqueueKnownUrl(url);
+    }
+
+    /// <summary>
+    /// Schedules a URL already recorded in Discovered (e.g. restored from a checkpoint), bypassing the
+    /// discovered-set dedupe that Enqueue performs.
+    /// </summary>
+    private bool EnqueueKnownUrl(string url)
+    {
+        if (!IsCrawlAllowed(url))
+            return false;
+
+        Interlocked.Increment(ref _outstanding);
+
+        if (_urlChannel.Writer.TryWrite(url))
+            return true;
+
+        Interlocked.Decrement(ref _outstanding);
+        return false;
+    }
+
+    protected virtual void DiscoverLink(Uri pageBase, string? href)
+    {
+        var url = ResolveCrawlableUrl(pageBase, href);
+        if (url == null)
+            return;
+
+        Enqueue(url);
+    }
+
+    protected virtual string? ResolveCrawlableUrl(Uri pageBase, string? href)
+    {
+        if (InvalidateHref(href))
+            return null;
+
+        var url = UriHelper.GetAbsoluteUrl(pageBase, href);
+        if (url == null)
+            return null;
+
+        if (!Uri.TryCreate(url, UriKind.Absolute, out var absolute))
+            return null;
+
+        if (!_scopeAuthorities.Contains(absolute.Authority))
+            return null;
+
+        return url;
+    }
+
+    protected virtual bool InvalidateHref([NotNullWhen(false)] string? href)
+    {
+        if (href == null)
+            return true;
+
+        foreach (var linkPrefix in Constants.FilterLinkPrefixes)
+        {
+            if (href.StartsWith(linkPrefix, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+
+        var hrefSpan = href.AsSpan();
+        var fileExtension = Path.GetExtension(hrefSpan);
+        if (!fileExtension.IsEmpty)
+        {
+            if (!Constants.AllowedFileTypes.Contains(fileExtension, CharComparer.InvariantCultureIgnoreCase))
+                return true;
+        }
+
+        return false;
     }
 
     protected abstract ValueTask<TResult> GetResult(CancellationToken cancellationToken);
@@ -421,144 +619,8 @@ public abstract class AbstractCrawler<TResponse, TDocument, TResult> : ICrawler<
         return true;
     }
 
-    protected virtual bool InvalidateHref([NotNullWhen(false)] string? href)
+    protected virtual double GetCrawlDelay(string authority)
     {
-        if (href == null)
-            return true;
-
-        foreach (var linkPrefix in Constants.FilterLinkPrefixes)
-        {
-            if (href.StartsWith(linkPrefix, StringComparison.OrdinalIgnoreCase))
-            {
-                return true;
-            }
-        }
-
-        var hrefSpan = href.AsSpan();
-        var fileExtension = Path.GetExtension(hrefSpan);
-        if (!fileExtension.IsEmpty)
-        {
-            if (!Constants.AllowedFileTypes.Contains(fileExtension, CharComparer.InvariantCultureIgnoreCase))
-                return true;
-        }
-
-        return false;
-    }
-
-    protected virtual void DiscoverLink(Uri pageBase, string? href)
-    {
-        var url = ResolveCrawlableUrl(pageBase, href);
-        if (url == null)
-            return;
-
-        Enqueue(url);
-    }
-
-    protected virtual string? ResolveCrawlableUrl(Uri pageBase, string? href)
-    {
-        if (InvalidateHref(href))
-            return null;
-
-        var url = UriHelper.GetAbsoluteUrl(pageBase, href);
-        if (url == null)
-            return null;
-
-        if (!Uri.TryCreate(url, UriKind.Absolute, out var absolute))
-            return null;
-
-        if (!_scopeAuthorities.Contains(absolute.Authority))
-            return null;
-
-        return url;
-    }
-
-    private async Task ProcessPage(string url, TResponse response)
-    {
-        _logger.LogInformation("Processing url '{url}'", url);
-
-        _state.Reports.TryGetValue(url, out var entry);
-
-        var document = default(TDocument);
-        var parsed = false;
-        try
-        {
-            var startTimestamp = Stopwatch.GetTimestamp();
-            document = await ParseResponse(response);
-            parsed = true;
-
-            var pageBase = new Uri(url);
-            var pageData = await ExtractPageData(document);
-
-            if (entry is not null)
-                entry.ParseDuration = Stopwatch.GetElapsedTime(startTimestamp);
-
-            var resolvedUrl = UriHelper.GetAbsoluteUrl(pageBase, pageData.CanonicalHref) ?? url;
-
-            await AnalyzeDocument(resolvedUrl, document);
-
-            var robots = _options.RespectMetaRobots ? pageData.Robots : RobotsRules.All;
-            if (robots.Index)
-                Visited.Add(resolvedUrl);
-
-            var discovered = 0;
-            if (robots.Follow)
-            {
-                foreach (var href in pageData.LinkHrefs)
-                {
-                    var link = ResolveCrawlableUrl(pageBase, href);
-                    if (link == null)
-                        continue;
-
-                    if (Enqueue(link))
-                        discovered++;
-                }
-
-                if (discovered > 0)
-                    _logger.LogDebug("Found {count} new outgoing links on '{url}'", discovered, resolvedUrl);
-            }
-
-            if (entry is not null)
-            {
-                entry.CanonicalUrl = resolvedUrl;
-                entry.Indexed = robots.Index;
-                entry.Followed = robots.Follow;
-                entry.LinkCount = discovered;
-                entry.Outcome = CrawlOutcome.Success;
-            }
-        }
-        catch (OperationCanceledException) when (CrawlCancellationToken.IsCancellationRequested)
-        {
-            throw;
-        }
-        catch (TimeoutException ex)
-        {
-            if (entry is not null)
-            {
-                entry.Outcome = CrawlOutcome.Timeout;
-                entry.Error = ex.Message;
-            }
-            _logger.LogWarning("Timeout on url '{url}': {message}", url, ex.Message);
-        }
-        catch (Exception ex)
-        {
-            if (entry is not null)
-            {
-                entry.Outcome = CrawlOutcome.ParseError;
-                entry.Error = ex.Message;
-            }
-            _logger.LogError(ex, "Encountered error {message}", ex.Message);
-        }
-        finally
-        {
-            _state.Processed.Add(url);
-            Interlocked.Increment(ref _processedCount);
-
-            if (parsed)
-                await DisposeDocument(document!);
-
-            await DisposeResponse(response);
-
-            CompleteUrl();
-        }
+        return _options.CrawlDelay;
     }
 }
