@@ -140,30 +140,30 @@ public abstract class AbstractCrawler<TResponse, TDocument, TResult> : ICrawler<
     /// Starts the checkpoint autosave loop as a background sidecar, or returns an idle one when
     /// checkpointing is disabled.
     /// </summary>
-    private BackgroundSidecar StartAutosave(CancellationToken cancellationToken)
+    private BackgroundOperation StartAutosave(CancellationToken cancellationToken)
     {
         if (_checkpoints is null)
-            return BackgroundSidecar.None();
+            return BackgroundOperation.None();
 
         var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        return BackgroundSidecar.Start(cts, _checkpoints.RunAutosaveAsync(() => _state, cts.Token));
+        return BackgroundOperation.Start(cts, _checkpoints.RunAutosaveAsync(() => _state, cts.Token));
     }
 
     /// <summary>
     /// Starts the progress reporter as a background sidecar, or returns an idle one when progress
     /// reporting is disabled.
     /// </summary>
-    private BackgroundSidecar StartProgress(CancellationToken cancellationToken)
+    private BackgroundOperation StartProgress(CancellationToken cancellationToken)
     {
         if (!_options.Progress.Enabled)
-            return BackgroundSidecar.None();
+            return BackgroundOperation.None();
 
         var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         // Sample the cumulative Processed count (not the run-local _processedCount, which resets to 0 on a
         // checkpoint resume) so the pending frontier and yield stay correct across a resumed crawl.
         var task = new CrawlProgressReporter(_options.Progress, _logger).RunAsync(
             () => (_state.Processed.Count, _state.Discovered.Count), _options.MaxPages, cts.Token);
-        return BackgroundSidecar.Start(cts, task);
+        return BackgroundOperation.Start(cts, task);
     }
 
     /// <summary>
@@ -397,8 +397,7 @@ public abstract class AbstractCrawler<TResponse, TDocument, TResult> : ICrawler<
             var pageBase = new Uri(url);
             var pageData = await ExtractPageData(document);
 
-            if (entry is not null)
-                entry.ParseDuration = Stopwatch.GetElapsedTime(startTimestamp);
+            entry?.ParseDuration = Stopwatch.GetElapsedTime(startTimestamp);
 
             var resolvedUrl = UriHelper.GetAbsoluteUrl(pageBase, pageData.CanonicalHref) ?? url;
 
@@ -623,40 +622,5 @@ public abstract class AbstractCrawler<TResponse, TDocument, TResult> : ICrawler<
     protected virtual double GetCrawlDelay(string authority)
     {
         return _options.CrawlDelay;
-    }
-
-    /// <summary>
-    /// An optional background operation (checkpoint autosave, progress reporting) that runs alongside the
-    /// crawl workers under its own cancellation, stopped in reverse-start order at the end of Start. An
-    /// idle sidecar (<see cref="None"/>) represents a disabled feature and is a no-op to stop and dispose.
-    /// </summary>
-    private sealed class BackgroundSidecar : IDisposable
-    {
-        private readonly CancellationTokenSource? _cts;
-        private readonly Task? _task;
-
-        private BackgroundSidecar(CancellationTokenSource? cts, Task? task)
-        {
-            _cts = cts;
-            _task = task;
-        }
-
-        public static BackgroundSidecar None() => new(null, null);
-
-        public static BackgroundSidecar Start(CancellationTokenSource cts, Task task) => new(cts, task);
-
-        /// <summary>
-        /// Signals cancellation and awaits the operation's exit; a no-op for an idle sidecar.
-        /// </summary>
-        public async ValueTask StopAsync()
-        {
-            if (_task is null)
-                return;
-
-            _cts?.Cancel();
-            await _task;
-        }
-
-        public void Dispose() => _cts?.Dispose();
     }
 }
