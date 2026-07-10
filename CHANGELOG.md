@@ -26,6 +26,17 @@ Package versions are derived from git tags (`v*`) via MinVer.
 
 ### Changed
 
+- Multi-host crawls are no longer subject to head-of-line blocking between sites. The crawl frontier was
+  a single FIFO channel that every fetch worker pulled from, and per-host spacing was enforced by parking
+  the worker *after* it had already dequeued a URL — so a burst of pages from one rate-limited or slow
+  host could draw the whole worker pool into its stacked throttle delays and starve URLs bound for other,
+  ready hosts. Replaced it with a host-partitioned frontier (`SimpleCrawler.Core.Scheduling.HostFrontier`):
+  URLs are bucketed into a FIFO queue per authority, and a single dispatcher hands the fetch workers only
+  the URL of whichever host is soonest allowed to fetch, so a worker never parks on a not-ready host and a
+  slow host can't hold up a ready one. Equally-ready hosts are dispatched round-robin. Per-host spacing now
+  happens once in the dispatcher rather than per worker (`AdaptiveThrottler` gained `PeekNextReady`/
+  `ReserveSlot`; `WaitAsync` is retained as a wrapper). The frontier keeps per-host state independent so a
+  partition of authorities can later run as an independent shard under its own dispatcher.
 - Updated `Simple.Logging.Console` dependency to 2.0.0 and switched the CLI to the new 24-bit
   truecolor formatter via `AddRgbConsoleLogging()` (was `AddConsoleLogging()`, which still exists for
   ANSI output). The 2.0.0 rewrite makes a warm `Write` allocation-free.

@@ -31,6 +31,16 @@ internal sealed class HostThrottle
     }
 
     /// <summary>
+    /// Returns the Stopwatch timestamp at which this host's next fetch may fire, without reserving the slot.
+    /// Used by the frontier to order hosts by readiness before committing a URL to a worker.
+    /// </summary>
+    public long PeekNextSlot(long now)
+    {
+        lock (_lock)
+            return Math.Max(now, _nextSlot);
+    }
+
+    /// <summary>
     /// Reserves the next fetch slot, spaced delaySeconds after the previous one, and returns the Stopwatch
     /// timestamp the caller should wait until.
     /// </summary>
