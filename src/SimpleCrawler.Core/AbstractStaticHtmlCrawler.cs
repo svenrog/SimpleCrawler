@@ -36,14 +36,14 @@ public abstract class AbstractStaticHtmlCrawler<TDocument, TResult> : AbstractRo
             if (status is 429 or 503)
                 Throttling.ReportRateLimited(authority, GetRetryAfter(response));
 
-            _logger.LogWarning("Error {code} on url '{url}'", response.StatusCode, url);
+            _logger.LogWarning("Error '{code}' from '{url}'", (int)response.StatusCode, url);
 
             return null;
         }
 
         Throttling.ReportSuccess(authority);
 
-        _logger.LogDebug("Response '{code}' from url '{url}'", response.StatusCode, url);
+        _logger.LogDebug("Response '{code}' from '{url}'", (int)response.StatusCode, url);
 
         if (_maxResponseBodySize <= 0)
             return await response.Content.ReadAsByteArrayAsync(cancellationToken);

@@ -33,11 +33,11 @@ public abstract class JsCrawler<TResult> : AbstractRobotsCrawler<JsExtract, JsEx
 
         if (!response.IsSuccessStatus())
         {
-            _logger.LogWarning("Error {code} on url '{url}'", response.StatusCode, url);
+            _logger.LogWarning("Error '{code}' from '{url}'", (int)response.StatusCode, url);
             return null;
         }
 
-        _logger.LogDebug("Response '{code}' from url '{url}'", response.StatusCode, url);
+        _logger.LogDebug("Response '{code}' from '{url}'", (int)response.StatusCode, url);
 
         var shell = await response.Content.ReadAsByteArrayAsync(cancellationToken);
         return await _renderer.ExtractAsync(shell, url, _client, cancellationToken);

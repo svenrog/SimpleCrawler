@@ -54,7 +54,7 @@ public sealed class RetryHandler : HttpMessageHandler
                 {
                     clone.Dispose();
                     lastError = ex;
-                    _logger.LogDebug("Request via {proxy} failed: {message}", proxy, ex.Message);
+                    _logger.LogDebug("Request to '{url}' via '{proxy}' failed: {message}", request.RequestUri, ProxyLabel.Describe(proxy), ex.Message);
                     return RetryAttempt<HttpResponseMessage?>.Failed(RetryClassifier.Classify(ex));
                 }
 
@@ -102,7 +102,7 @@ public sealed class RetryHandler : HttpMessageHandler
                 {
                     clone.Dispose();
                     lastError = ex;
-                    _logger.LogDebug("Request via {proxy} failed: {message}", proxy, ex.Message);
+                    _logger.LogDebug("Request to '{url}' via '{proxy}' failed: {message}", request.RequestUri, ProxyLabel.Describe(proxy), ex.Message);
                     return RetryAttempt<HttpResponseMessage?>.Failed(RetryClassifier.Classify(ex));
                 }
 

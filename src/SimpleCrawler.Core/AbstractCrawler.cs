@@ -125,6 +125,8 @@ public abstract class AbstractCrawler<TResponse, TDocument, TResult> : ICrawler<
 
         _throttling.Reset(_scopeAuthorities);
 
+        _checkpoints?.LogEnabled();
+
         var restored = _checkpoints is not null ? await _checkpoints.LoadAsync(entries, cancellationToken) : null;
         _state = restored ?? new CrawlState(entries);
 

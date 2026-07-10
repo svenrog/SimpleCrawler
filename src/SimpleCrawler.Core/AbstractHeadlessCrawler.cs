@@ -67,7 +67,7 @@ public abstract class AbstractHeadlessCrawler<TPage, TResult> : AbstractRobotsCr
         var reason = RetryClassifier.Classify(status.Value);
         if (reason is not null)
         {
-            _logger.LogDebug("Proxy {proxy} returned {code} on '{url}'", proxy, status.Value, url);
+            _logger.LogDebug("Retryable '{code}' from '{url}' via '{proxy}'", status.Value, url, ProxyLabel.Describe(proxy));
             await ClosePage(page);
             return RetryAttempt<TPage?>.Failed(reason.Value);
         }
@@ -77,11 +77,11 @@ public abstract class AbstractHeadlessCrawler<TPage, TResult> : AbstractRobotsCr
         if (status.Value.IsSuccessStatus())
         {
             await AfterSuccessfulLoad(page, cancellationToken);
-            _logger.LogDebug("Response '{code}' from url '{url}' via proxy {proxy}", status.Value, url, proxy);
+            _logger.LogDebug("Response '{code}' from '{url}'", status.Value, url);
             return RetryAttempt<TPage?>.Ok(page);
         }
 
-        _logger.LogWarning("Error {code} on url '{url}'", status.Value, url);
+        _logger.LogWarning("Error '{code}' from '{url}'", status.Value, url);
         await DisposeResponse(page);
         return RetryAttempt<TPage?>.Ok(null);
     }
