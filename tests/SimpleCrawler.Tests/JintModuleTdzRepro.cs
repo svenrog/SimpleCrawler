@@ -3,12 +3,14 @@ using Jint.Runtime;
 
 namespace SimpleCrawler.Tests;
 
-// Documents (as living tests) why Vue renders on V8 but is skipped on Jint: Jint mis-evaluates Vue's
-// runtime-core when run as an ES module — it throws "Cannot access 't' before initialization" — yet the
-// identical source runs fine as a plain script and on V8. So it is a Jint module-mode evaluation bug, not a
-// pure-JS DOM gap or a fault in our loader/cache/prelude (this harness uses none of them). If the module
-// case ever stops throwing (a Jint fix), revisit JsModeSpaCrawlerTests' vue/Jint skip. See
-// [[phase5-js-spa-hydration]].
+/// <summary>
+/// Documents (as living tests) why Vue renders on V8 but is skipped on Jint: Jint mis-evaluates Vue's
+/// runtime-core when run as an ES module — it throws "Cannot access 't' before initialization" — yet the
+/// identical source runs fine as a plain script and on V8. So it is a Jint module-mode evaluation bug, not a
+/// pure-JS DOM gap or a fault in our loader/cache/prelude (this harness uses none of them). If the module
+/// case ever stops throwing (a Jint fix), revisit JsModeSpaCrawlerTests' vue/Jint skip. See
+/// [[phase5-js-spa-hydration]].
+/// </summary>
 public class JintModuleTdzRepro
 {
     // The bundled Vue runtime-core (reactivity inlined) only exists after the Astro TestHost SPA is built

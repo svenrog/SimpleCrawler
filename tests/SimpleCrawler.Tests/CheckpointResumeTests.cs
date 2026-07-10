@@ -10,9 +10,11 @@ using System.Collections.Concurrent;
 
 namespace SimpleCrawler.Tests;
 
-// Guards checkpoint resume: a matching checkpoint seeds the crawl so already-processed URLs are not
-// re-fetched and only the pending frontier is drained; a fresh crawl writes its progress; a checkpoint
-// taken for different entry points is ignored.
+/// <summary>
+/// Guards checkpoint resume: a matching checkpoint seeds the crawl so already-processed URLs are not
+/// re-fetched and only the pending frontier is drained; a fresh crawl writes its progress; a checkpoint
+/// taken for different entry points is ignored.
+/// </summary>
 public class CheckpointResumeTests
 {
     private const string _entry = "http://localhost/";

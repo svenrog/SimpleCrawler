@@ -15,8 +15,10 @@ using System.Text.RegularExpressions;
 
 namespace SimpleCrawler.ProfileRunner;
 
-// Investigation harness (not a benchmark). Drives the real crawl/render path for a single
-// engine+parser combo against one framework's test-host SPA.
+/// <summary>
+/// Investigation harness (not a benchmark). Drives the real crawl/render path for a single
+/// engine+parser combo against one framework's test-host SPA.
+/// </summary>
 internal static partial class ProfileHarness
 {
     private const int _port = 5299;

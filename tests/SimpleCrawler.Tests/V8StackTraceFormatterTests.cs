@@ -2,9 +2,11 @@ using SimpleCrawler.Js.V8;
 
 namespace SimpleCrawler.Tests;
 
-// A minified bundle can carry literal newlines inside a single source line (e.g. core-js' whitespace
-// feature-detect strings), which split one stack frame's source across several physical lines. The frame's
-// source must still be windowed as a whole rather than dumping every continuation line verbatim.
+/// <summary>
+/// A minified bundle can carry literal newlines inside a single source line (e.g. core-js' whitespace
+/// feature-detect strings), which split one stack frame's source across several physical lines. The frame's
+/// source must still be windowed as a whole rather than dumping every continuation line verbatim.
+/// </summary>
 public class V8StackTraceFormatterTests
 {
     private const int _radius = 48;

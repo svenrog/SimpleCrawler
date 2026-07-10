@@ -30,8 +30,10 @@ public class CrawlerCancellationTests
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => run);
     }
 
-    // Mimics a headless backend: LoadResponse blocks on a call that is only cancelable because it is
-    // wrapped in WaitAsync(token) - exactly the pattern the Playwright/Puppeteer crawlers use.
+    /// <summary>
+    /// Mimics a headless backend: LoadResponse blocks on a call that is only cancelable because it is
+    /// wrapped in WaitAsync(token) - exactly the pattern the Playwright/Puppeteer crawlers use.
+    /// </summary>
     private sealed class HangingCrawler : AbstractCrawler<string, string, ScrapeResult>
     {
         public readonly SemaphoreSlim FetchStarted = new(0, 1);

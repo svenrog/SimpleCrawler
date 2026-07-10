@@ -4,9 +4,11 @@ using System.Diagnostics;
 
 namespace SimpleCrawler.Tests;
 
-// Guards the adaptive per-host throttle: a rate-limit response raises the host's effective crawl delay,
-// a Retry-After grace stalls the next fetch, sustained success decays the penalty, and the whole thing is
-// inert when disabled.
+/// <summary>
+/// Guards the adaptive per-host throttle: a rate-limit response raises the host's effective crawl delay,
+/// a Retry-After grace stalls the next fetch, sustained success decays the penalty, and the whole thing is
+/// inert when disabled.
+/// </summary>
 public class AdaptiveThrottleTests
 {
     private const string _host = "localhost";

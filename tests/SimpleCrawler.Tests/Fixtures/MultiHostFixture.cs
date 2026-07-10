@@ -7,8 +7,10 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace SimpleCrawler.Tests.Fixtures;
 
-// Two in-scope hosts that cross-link to each other and to a third, unserved, out-of-scope host, so the
-// crawl can be asserted to stay within exactly the hosts it was given as entries.
+/// <summary>
+/// Two in-scope hosts that cross-link to each other and to a third, unserved, out-of-scope host, so the
+/// crawl can be asserted to stay within exactly the hosts it was given as entries.
+/// </summary>
 public sealed class MultiHostFixture : IAsyncDisposable
 {
     private static readonly TimeSpan _shutdownTimeout = TimeSpan.FromSeconds(10);
