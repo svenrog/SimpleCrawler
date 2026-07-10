@@ -8,6 +8,22 @@ Package versions are derived from git tags (`v*`) via MinVer.
 
 ## [Unreleased]
 
+### Added
+
+- Live crawl-time estimation (on by default): a periodic log line projecting how long the crawl still
+  has to run, inferred from the crawl's own recent history. A background reporter samples the
+  processed/discovered counts into a bounded window; `CrawlProgressEstimator` fits throughput
+  (`mu = dP/dt`) and discovery yield (`g = dD/dP`) and projects the remaining work as the geometric
+  frontier drain `F / (1 - g)`, with an optimistic/pessimistic ETA band from the regression's standard
+  error. Because a discovery cliff (a page revealing a whole new section) can't be predicted from local
+  history, an ETA is withheld until the frontier has been contracting for a sustained period, and a
+  burst that pushes yield back over `1` reverts to "expanding" — surfacing as a
+  WarmingUp → Expanding → Draining → Estimating progression rather than a confident-but-wrong number
+  that whipsaws. New `SimpleCrawler.Core.Progress` namespace (`CrawlProgressEstimator`, `ProgressOptions`,
+  `ProgressEstimate`, `ProgressState`) configured via `CrawlerOptions.Progress`, and the CLI flags
+  `--progress` (default on), `--progressInterval <seconds>`, and `--progressConfirm <seconds>` (how long
+  the queue must keep shrinking before an ETA is shown).
+
 ### Changed
 
 - Updated `Simple.Logging.Console` dependency to 2.0.0 and switched the CLI to the new 24-bit
