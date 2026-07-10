@@ -2,6 +2,8 @@
 
 TypeScript source for the embedded JS preludes: a minimal pure-JS DOM plus browser-API shims that the `SimpleCrawler.Js*` backends execute page scripts against. This project is the only DOM implementation — there is no C# DOM bridge.
 
+The root CLAUDE.md's XmlDoc-for-declarations rule is a C# convention (`///` doesn't exist in TypeScript) and does not apply here — keep plain `//` comments in this project.
+
 ## Build (required after any .ts change)
 
 The compiled bundles are committed as embedded resources; editing TypeScript does nothing until you rebuild:

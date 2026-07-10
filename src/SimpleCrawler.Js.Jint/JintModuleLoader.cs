@@ -31,8 +31,10 @@ internal sealed class JintModuleLoader : IModuleLoader
         return new ResolvedSpecifier(moduleRequest, uri.AbsoluteUri, uri, SpecifierType.RelativeOrAbsolute);
     }
 
-    // Jint reports a registered entry module's location as the raw src path (e.g.
-    // "/assets/index.js"), so a relative referrer is resolved against the page origin.
+    /// <summary>
+    /// Jint reports a registered entry module's location as the raw src path (e.g.
+    /// "/assets/index.js"), so a relative referrer is resolved against the page origin.
+    /// </summary>
     private Uri ResolveReferrer(string? location)
     {
         if (location == null)

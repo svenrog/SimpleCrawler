@@ -35,9 +35,11 @@ internal sealed class JintJsEngine : IJsEngine, IDisposable
         });
     }
 
-    // Each engine renders exactly one page, so the DOM prelude is always installed fresh — returns true. On
-    // current Jint, engine construction and the ~90KB dom.js eval are cheap next to per-page DOM work, so
-    // reusing/resetting a realm across pages isn't worth its complexity (and reflection); measured away.
+    /// <summary>
+    /// Each engine renders exactly one page, so the DOM prelude is always installed fresh — returns true. On
+    /// current Jint, engine construction and the ~90KB dom.js eval are cheap next to per-page DOM work, so
+    /// reusing/resetting a realm across pages isn't worth its complexity (and reflection); measured away.
+    /// </summary>
     public bool BeginPage()
     {
         return true;

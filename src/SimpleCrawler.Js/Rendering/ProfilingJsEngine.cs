@@ -3,9 +3,11 @@ using SimpleCrawler.Js.Models;
 
 namespace SimpleCrawler.Js.Rendering;
 
-// Decorates an engine when JSRENDER_PROFILE is set, attributing time and call counts to each boundary
-// crossing so a render profile can split per-page cost between Execute/ExecuteCached, host embeds,
-// callbacks, and microtask pumps.
+/// <summary>
+/// Decorates an engine when JSRENDER_PROFILE is set, attributing time and call counts to each boundary
+/// crossing so a render profile can split per-page cost between Execute/ExecuteCached, host embeds,
+/// callbacks, and microtask pumps.
+/// </summary>
 internal sealed class ProfilingJsEngine : IJsEngine
 {
     private readonly IJsEngine _inner;

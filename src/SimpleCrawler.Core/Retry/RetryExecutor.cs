@@ -2,11 +2,13 @@ using SimpleCrawler.Core.Proxy;
 
 namespace SimpleCrawler.Core.Retry;
 
-// Single home for the acquire/report/retry loop shared by every fetch path (static handler,
-// headless crawlers, robots probes). A proxy pool is optional: with one, attempts rotate through
-// proxies and report health; without one, attempts still retry transient failures with backoff.
-// Callers supply one classified attempt; this decides rotation, backoff, timeout and exhaustion so
-// that logic lives in exactly one place.
+/// <summary>
+/// Single home for the acquire/report/retry loop shared by every fetch path (static handler,
+/// headless crawlers, robots probes). A proxy pool is optional: with one, attempts rotate through
+/// proxies and report health; without one, attempts still retry transient failures with backoff.
+/// Callers supply one classified attempt; this decides rotation, backoff, timeout and exhaustion so
+/// that logic lives in exactly one place.
+/// </summary>
 public sealed class RetryExecutor
 {
     private readonly RetryOptions _options;
@@ -20,24 +22,31 @@ public sealed class RetryExecutor
         _delay = delay ?? Task.Delay;
     }
 
-    // Retries until one attempt succeeds. With a pool, exhausting it (below cutoff) aborts the crawl;
-    // exhausting the retry budget yields onExhausted().
+    /// <summary>
+    /// Retries until one attempt succeeds. With a pool, exhausting it (below cutoff) aborts the crawl;
+    /// exhausting the retry budget yields onExhausted().
+    /// </summary>
     public Task<T> ExecuteAsync<T>(
         Func<ProxyInfo?, CancellationToken, Task<RetryAttempt<T>>> attempt,
         Func<T> onExhausted,
         CancellationToken cancellationToken)
         => RunAsync(attempt, onExhausted, directFallbackOnEmpty: false, cancellationToken);
 
-    // As ExecuteAsync, but an empty pool falls back to a direct (un-proxied) attempt instead of
-    // aborting - used for robots/sitemap probes, which must not fail the whole crawl.
+    /// <summary>
+    /// As <see cref="ExecuteAsync{T}"/>, but an empty pool falls back to a direct (un-proxied) attempt
+    /// instead of aborting - used for robots/sitemap probes, which must not fail the whole crawl.
+    /// </summary>
     public Task<T> ExecuteWithDirectFallbackAsync<T>(
         Func<ProxyInfo?, CancellationToken, Task<RetryAttempt<T>>> attempt,
         Func<T> onExhausted,
         CancellationToken cancellationToken)
         => RunAsync(attempt, onExhausted, directFallbackOnEmpty: true, cancellationToken);
 
-    // Synchronous sibling of ExecuteAsync, for callers that must issue a blocking send (the JS runtime
-    // resolves module imports and its fetch shim synchronously to fit its single-threaded drain loop).
+    /// <summary>
+    /// Synchronous sibling of <see cref="ExecuteAsync{T}"/>, for callers that must issue a blocking send
+    /// (the JS runtime resolves module imports and its fetch shim synchronously to fit its
+    /// single-threaded drain loop).
+    /// </summary>
     public T Execute<T>(
         Func<ProxyInfo?, CancellationToken, RetryAttempt<T>> attempt,
         Func<T> onExhausted,

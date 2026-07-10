@@ -4,8 +4,10 @@ namespace SimpleCrawler.Core.Extensions;
 
 public static class HttpContentExtensions
 {
-    // Reads the decompressed response body but aborts once maxBytes is exceeded, returning null.
-    // Content-Length can't be trusted after decompression, so the limit is enforced while streaming.
+    /// <summary>
+    /// Reads the decompressed response body but aborts once maxBytes is exceeded, returning null.
+    /// Content-Length can't be trusted after decompression, so the limit is enforced while streaming.
+    /// </summary>
     public static async Task<byte[]?> ReadCappedByteArrayAsync(this HttpContent content, long maxBytes, CancellationToken cancellationToken)
     {
         await using var stream = await content.ReadAsStreamAsync(cancellationToken);

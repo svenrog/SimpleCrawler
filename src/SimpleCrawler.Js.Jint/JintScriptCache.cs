@@ -4,9 +4,11 @@ using Jint;
 
 namespace SimpleCrawler.Js.Jint;
 
-// Parsed forms of external scripts (stable URLs), reused across the fresh per-page engines. Bounded by an
-// LRU cap: a heterogeneous site yields thousands of distinct chunk URLs whose ASTs would otherwise be held
-// for the whole crawl, so the hot shared bundle stays resident while one-off chunks are evicted.
+/// <summary>
+/// Parsed forms of external scripts (stable URLs), reused across the fresh per-page engines. Bounded by an
+/// LRU cap: a heterogeneous site yields thousands of distinct chunk URLs whose ASTs would otherwise be held
+/// for the whole crawl, so the hot shared bundle stays resident while one-off chunks are evicted.
+/// </summary>
 internal sealed class JintScriptCache
 {
     private const int _capacity = 512;

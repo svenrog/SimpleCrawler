@@ -3,11 +3,13 @@ using System.Text.Json;
 
 namespace SimpleCrawler.Js.Rendering;
 
-// Env-gated (JSRENDER_DOM_PROFILE=1) counter for the DOM operations a bundle drives during render. Unlike
-// RenderProfiler (which times engine-boundary calls), this reaches inside bundleExec: dom.js counts the
-// public DOM calls the bundle issues, the host reads the per-page tally and sums it here, and a table is
-// printed at process exit — so a heavy bundleExec can be attributed to "the bundle renders more" versus
-// "the interpreter is slow". Disabled by default, in which case nothing is embedded and no tally is read.
+/// <summary>
+/// Env-gated (JSRENDER_DOM_PROFILE=1) counter for the DOM operations a bundle drives during render. Unlike
+/// RenderProfiler (which times engine-boundary calls), this reaches inside bundleExec: dom.js counts the
+/// public DOM calls the bundle issues, the host reads the per-page tally and sums it here, and a table is
+/// printed at process exit — so a heavy bundleExec can be attributed to "the bundle renders more" versus
+/// "the interpreter is slow". Disabled by default, in which case nothing is embedded and no tally is read.
+/// </summary>
 internal static class DomProfiler
 {
     public static readonly bool Enabled =
@@ -24,8 +26,10 @@ internal static class DomProfiler
             AppDomain.CurrentDomain.ProcessExit += (_, _) => Dump();
     }
 
-    // Per-page tally shape from __crawlerDomProfileDump(): { counts: {op:n}, timesMs: {op:ms} | null }.
-    // timesMs is null unless the engine exposed a high-res clock (V8 under profiling); Jint reports counts only.
+    /// <summary>
+    /// Per-page tally shape from __crawlerDomProfileDump(): { counts: {op:n}, timesMs: {op:ms} | null }.
+    /// timesMs is null unless the engine exposed a high-res clock (V8 under profiling); Jint reports counts only.
+    /// </summary>
     public static void Add(string json)
     {
         if (!Enabled || string.IsNullOrEmpty(json))

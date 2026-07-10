@@ -3,9 +3,11 @@ using System.Diagnostics;
 
 namespace SimpleCrawler.Js.Rendering;
 
-// Env-gated profiler (JSRENDER_PROFILE=1) that sums Stopwatch ticks and call counts per bucket across all
-// pages/threads and prints a table at process exit. Every entry point early-returns when disabled, and Scope
-// hands back a cached no-op, so the profiler adds no timestamp read or allocation to the production hot path.
+/// <summary>
+/// Env-gated profiler (JSRENDER_PROFILE=1) that sums Stopwatch ticks and call counts per bucket across all
+/// pages/threads and prints a table at process exit. Every entry point early-returns when disabled, and Scope
+/// hands back a cached no-op, so the profiler adds no timestamp read or allocation to the production hot path.
+/// </summary>
 internal static class RenderProfiler
 {
     public static readonly bool Enabled =
@@ -19,8 +21,10 @@ internal static class RenderProfiler
             AppDomain.CurrentDomain.ProcessExit += (_, _) => Dump();
     }
 
-    // No-allocation point timer for per-call hot paths (ProfilingJsEngine): a long stamp, stopped explicitly,
-    // so measuring a boundary call costs nothing on the heap.
+    /// <summary>
+    /// No-allocation point timer for per-call hot paths (ProfilingJsEngine): a long stamp, stopped explicitly,
+    /// so measuring a boundary call costs nothing on the heap.
+    /// </summary>
     public static long Start() => Enabled ? Stopwatch.GetTimestamp() : 0;
 
     public static void Stop(string bucket, long start)

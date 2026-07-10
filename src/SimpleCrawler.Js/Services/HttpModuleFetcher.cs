@@ -24,13 +24,15 @@ internal sealed class HttpModuleFetcher : IModuleFetcher
         return _cache.Store(absolute, Download(absolute));
     }
 
-    // The engines resolve module imports synchronously, so we block on the synchronous
-    // HttpClient.Send rather than risk sync-over-async deadlocks on GetAsync.
-    //
-    // A module specifier that resolves to a non-HTTP URI (a protocol-relative `//host/x.js` parses as a
-    // file:// URI, and bundles also reference data:/blob: sources) or that fails to fetch must not abort the
-    // whole page: the loader falls back to an empty module, so an unresolvable chunk degrades the render
-    // instead of crashing it. Cancellation is the one failure that still propagates, so a stopped crawl stops.
+    /// <summary>
+    /// The engines resolve module imports synchronously, so we block on the synchronous
+    /// HttpClient.Send rather than risk sync-over-async deadlocks on GetAsync.
+    ///
+    /// A module specifier that resolves to a non-HTTP URI (a protocol-relative `//host/x.js` parses as a
+    /// file:// URI, and bundles also reference data:/blob: sources) or that fails to fetch must not abort the
+    /// whole page: the loader falls back to an empty module, so an unresolvable chunk degrades the render
+    /// instead of crashing it. Cancellation is the one failure that still propagates, so a stopped crawl stops.
+    /// </summary>
     private string? Download(Uri absolute)
     {
         if (absolute.Scheme != Uri.UriSchemeHttp && absolute.Scheme != Uri.UriSchemeHttps)

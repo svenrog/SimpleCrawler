@@ -2,9 +2,11 @@ using System.Diagnostics;
 
 namespace SimpleCrawler.Core.Throttling;
 
-// Per-host request spacing plus an adaptive rate-limit penalty. A single lock guards all mutable state,
-// held only for the brief slot reservation or penalty update — never across the actual wait — so the
-// fetch workers space themselves out without one host's delay ever blocking another's bookkeeping.
+/// <summary>
+/// Per-host request spacing plus an adaptive rate-limit penalty. A single lock guards all mutable state,
+/// held only for the brief slot reservation or penalty update - never across the actual wait - so the
+/// fetch workers space themselves out without one host's delay ever blocking another's bookkeeping.
+/// </summary>
 internal sealed class HostThrottle
 {
     private const double _initialPenalty = 1;
@@ -28,8 +30,10 @@ internal sealed class HostThrottle
         }
     }
 
-    // Reserves the next fetch slot, spaced delaySeconds after the previous one, and returns the Stopwatch
-    // timestamp the caller should wait until.
+    /// <summary>
+    /// Reserves the next fetch slot, spaced delaySeconds after the previous one, and returns the Stopwatch
+    /// timestamp the caller should wait until.
+    /// </summary>
     public long Reserve(double delaySeconds)
     {
         var deltaTicks = delaySeconds > 0 ? (long)(delaySeconds * Stopwatch.Frequency) : 0;
@@ -42,8 +46,10 @@ internal sealed class HostThrottle
         }
     }
 
-    // Raises the penalty (seeded at _initialPenalty, doubling thereafter, capped at maxSeconds) and, when
-    // the response carried a Retry-After, pushes the next slot out by that grace. Returns the new penalty.
+    /// <summary>
+    /// Raises the penalty (seeded at _initialPenalty, doubling thereafter, capped at maxSeconds) and, when
+    /// the response carried a Retry-After, pushes the next slot out by that grace. Returns the new penalty.
+    /// </summary>
     public double PenalizeRateLimit(double maxSeconds, TimeSpan? retryAfter)
     {
         lock (_lock)
@@ -66,7 +72,9 @@ internal sealed class HostThrottle
         }
     }
 
-    // Halves the penalty once a host serves _successesBeforeDecay responses in a row without rate limiting.
+    /// <summary>
+    /// Halves the penalty once a host serves _successesBeforeDecay responses in a row without rate limiting.
+    /// </summary>
     public void RegisterSuccess()
     {
         if (Volatile.Read(ref _active) == 0)

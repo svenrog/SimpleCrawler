@@ -1,10 +1,12 @@
 namespace SimpleCrawler.Js.Services;
 
-// The render caches assume a single-domain SPA serving the same bundle on every route, so keying parsed
-// scripts/modules/sources by URL for the whole crawl is bounded and a large win. A heterogeneous site
-// (thousands of distinct, content-hashed chunks) breaks that assumption and the caches grow without
-// bound, so every entry is held under a capacity cap with least-recently-used eviction: the hot shared
-// bundle stays resident while one-off per-page sources churn through and are reclaimed.
+/// <summary>
+/// The render caches assume a single-domain SPA serving the same bundle on every route, so keying parsed
+/// scripts/modules/sources by URL for the whole crawl is bounded and a large win. A heterogeneous site
+/// (thousands of distinct, content-hashed chunks) breaks that assumption and the caches grow without
+/// bound, so every entry is held under a capacity cap with least-recently-used eviction: the hot shared
+/// bundle stays resident while one-off per-page sources churn through and are reclaimed.
+/// </summary>
 public sealed class BoundedLruCache<TKey, TValue>
     where TKey : notnull
 {
@@ -43,8 +45,10 @@ public sealed class BoundedLruCache<TKey, TValue>
         }
     }
 
-    // The factory runs outside the lock (parsing/fetching is the cost the cache exists to avoid serializing);
-    // a rare concurrent miss may compute twice, and the first stored value wins, matching ConcurrentDictionary.
+    /// <summary>
+    /// The factory runs outside the lock (parsing/fetching is the cost the cache exists to avoid serializing);
+    /// a rare concurrent miss may compute twice, and the first stored value wins, matching ConcurrentDictionary.
+    /// </summary>
     public TValue GetOrAdd<TArg>(TKey key, TArg arg, Func<TKey, TArg, TValue> factory)
     {
         if (TryGet(key, out var existing))

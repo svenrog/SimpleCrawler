@@ -4,9 +4,11 @@ namespace SimpleCrawler.Js.Abstractions;
 
 public interface IJsEngine
 {
-    // Begins a page on this engine. Returns true when the caller must install the DOM prelude — always the case
-    // today, since each engine renders exactly one page on a fresh realm (V8 a fresh context, Jint a fresh
-    // Engine). The bool is kept so the renderer stays agnostic to how an engine provisions each page's realm.
+    /// <summary>
+    /// Begins a page on this engine. Returns true when the caller must install the DOM prelude — always the case
+    /// today, since each engine renders exactly one page on a fresh realm (V8 a fresh context, Jint a fresh
+    /// Engine). The bool is kept so the renderer stays agnostic to how an engine provisions each page's realm.
+    /// </summary>
     bool BeginPage();
 
     void EmbedHostObject(string name, object value);

@@ -10,9 +10,11 @@ internal sealed class V8ModuleLoader : DocumentLoader
     private readonly IModuleFetcher _fetcher;
     private readonly Uri _baseUri;
 
-    // ClearScript invokes the loader for every import; without our own cache the same URL is
-    // fetched and compiled as a fresh module each time, so shared singletons (a router context,
-    // a framework's options object) end up duplicated and consumers silently read the wrong copy.
+    /// <summary>
+    /// ClearScript invokes the loader for every import; without our own cache the same URL is
+    /// fetched and compiled as a fresh module each time, so shared singletons (a router context,
+    /// a framework's options object) end up duplicated and consumers silently read the wrong copy.
+    /// </summary>
     private readonly Dictionary<string, Document> _cache = new(StringComparer.Ordinal);
 
     public V8ModuleLoader(IModuleFetcher fetcher, Uri baseUri)
@@ -21,9 +23,11 @@ internal sealed class V8ModuleLoader : DocumentLoader
         _baseUri = baseUri;
     }
 
-    // Pre-seed an already-fetched module (the page's entry script) so it resolves to a single
-    // cached instance: importing it must not fetch and evaluate a second copy, or shared
-    // singletons (a framework's options object, a router context) get duplicated.
+    /// <summary>
+    /// Pre-seed an already-fetched module (the page's entry script) so it resolves to a single
+    /// cached instance: importing it must not fetch and evaluate a second copy, or shared
+    /// singletons (a framework's options object, a router context) get duplicated.
+    /// </summary>
     public void Seed(Uri uri, string source)
     {
         _cache[uri.AbsoluteUri] = Build(uri, source);
