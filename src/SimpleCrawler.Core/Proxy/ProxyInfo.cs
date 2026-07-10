@@ -10,18 +10,16 @@ public sealed record ProxyInfo
 
     public bool HasCredentials => !string.IsNullOrEmpty(Username);
 
-    public Uri ToUri()
+    private string Scheme => Protocol switch
     {
-        var scheme = Protocol switch
-        {
-            ProxyProtocol.Http => "http",
-            ProxyProtocol.Https => "https",
-            ProxyProtocol.Socks4 => "socks4",
-            ProxyProtocol.Socks5 => "socks5",
-            _ => "http",
-        };
-        return new Uri($"{scheme}://{Host}:{Port}");
-    }
+        ProxyProtocol.Http => "http",
+        ProxyProtocol.Https => "https",
+        ProxyProtocol.Socks4 => "socks4",
+        ProxyProtocol.Socks5 => "socks5",
+        _ => "http",
+    };
 
-    public override string ToString() => ToUri().ToString();
+    public Uri ToUri() => new($"{Scheme}://{Host}:{Port}");
+
+    public override string ToString() => $"{Scheme}://{Host}:{Port}";
 }

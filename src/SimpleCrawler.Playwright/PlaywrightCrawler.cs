@@ -38,13 +38,13 @@ public abstract class PlaywrightCrawler<TResult> : AbstractHeadlessCrawler<IPage
         }
         catch (PlaywrightException e)
         {
-            _logger.LogDebug("Navigation to '{url}' via proxy {proxy} failed: {message}", url, proxy, e.Message);
+            _logger.LogDebug("Navigation to '{url}' via '{proxy}' failed: {message}", url, ProxyLabel.Describe(proxy), e.Message);
             return null;
         }
 
         if (response is null)
         {
-            _logger.LogWarning("No response from '{url}' via proxy {proxy}", url, proxy);
+            _logger.LogWarning("No response from '{url}' via '{proxy}'", url, ProxyLabel.Describe(proxy));
             return null;
         }
 

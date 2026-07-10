@@ -11,6 +11,17 @@ Package versions are derived from git tags (`v*`) via MinVer.
 ### Changed
 
 - Updated `Simple.Logging.Console` dependency to 1.1.0.
+- Normalized crawl log messages across all backends: the per-page success/error lines now read
+  identically (`Response '{code}' from '{url}'` / `Error '{code}' from '{url}'`) with the numeric
+  status code everywhere (static/JS previously logged the `HttpStatusCode` name), and proxy references
+  use a single `via '{proxy}'` form that renders `'direct connection'` when no proxy is configured
+  instead of a dangling `via proxy `. The proxy is no longer appended to the headless success line,
+  since the HttpClient path can't surface it there. `ProxyInfo.ToString()` now emits a clean
+  `scheme://host:port` (no trailing slash).
+- Checkpointing now logs its activity: an informational line on start naming the target file and
+  interval, and a debug line on each write (autosave, final save, and `Ctrl+C`). Read/write failures
+  name the target. `ICheckpointStore` gained a `Target` property describing where checkpoints are
+  persisted.
 
 ## [3.0.0] - 2026-07-09
 

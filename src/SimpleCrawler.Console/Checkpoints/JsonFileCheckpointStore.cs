@@ -15,6 +15,8 @@ public sealed class JsonFileCheckpointStore : ICheckpointStore
         _writeLock = new SemaphoreSlim(1, 1);
     }
 
+    public string Target => _path;
+
     public async ValueTask<CrawlState?> LoadAsync(CancellationToken cancellationToken)
     {
         if (!File.Exists(_path))

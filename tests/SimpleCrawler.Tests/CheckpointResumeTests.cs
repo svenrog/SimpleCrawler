@@ -198,6 +198,8 @@ public class CheckpointResumeTests
         public CrawlState? ToLoad { get; set; }
         public CrawlState? Saved { get; private set; }
 
+        public string Target => "memory";
+
         public ValueTask<CrawlState?> LoadAsync(CancellationToken cancellationToken)
             => new(ToLoad);
 

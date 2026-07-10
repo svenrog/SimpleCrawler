@@ -26,9 +26,9 @@ public class ProxyInfoRedactionTests
     [Fact]
     public void ToString_Omits_Credentials()
     {
-        var text = _withCredentials.ToString();
+        var text = _withCredentials.ToString().TrimEnd('/');
 
-        Assert.Equal("http://10.0.0.1:8080/", text);
+        Assert.Equal("http://10.0.0.1:8080", text);
         Assert.DoesNotContain("secret-user", text);
         Assert.DoesNotContain("secret-pass", text);
     }

@@ -15,6 +15,11 @@ internal sealed class CheckpointCoordinator
         _logger = logger;
     }
 
+    public void LogEnabled()
+    {
+        _logger.LogInformation("Checkpointing to '{target}' every {interval:0.#}s.", _store.Target, _interval.TotalSeconds);
+    }
+
     public async ValueTask<CrawlState?> LoadAsync(IReadOnlyList<string> entries, CancellationToken cancellationToken)
     {
         CrawlState? state;
@@ -25,7 +30,7 @@ internal sealed class CheckpointCoordinator
         }
         catch (Exception e) when (e is not OperationCanceledException)
         {
-            _logger.LogWarning("Failed to read checkpoint; starting a fresh crawl: {message}", e.Message);
+            _logger.LogWarning("Failed to read checkpoint from '{target}'; starting a fresh crawl: {message}", _store.Target, e.Message);
             return null;
         }
 
@@ -52,10 +57,12 @@ internal sealed class CheckpointCoordinator
         try
         {
             await _store.SaveAsync(state, cancellationToken);
+            _logger.LogDebug("Wrote checkpoint to '{target}' ({processed} processed, {pending} pending).",
+                _store.Target, state.Processed.Count, state.Discovered.Count - state.Processed.Count);
         }
         catch (Exception e) when (e is not OperationCanceledException)
         {
-            _logger.LogWarning("Failed to write checkpoint: {message}", e.Message);
+            _logger.LogWarning("Failed to write checkpoint to '{target}': {message}", _store.Target, e.Message);
         }
     }
 
