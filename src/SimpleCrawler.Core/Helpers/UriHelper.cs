@@ -4,9 +4,11 @@ namespace SimpleCrawler.Core.Helpers;
 
 public static class UriHelper
 {
-    // On Unix, Uri.TryCreate("/path", Absolute) succeeds as a file:// URI, so a plain absolute-parse
-    // misreads root-relative paths as external file URLs. Only http/https are crawlable absolutes;
-    // anything else must be resolved against a base URI.
+    /// <summary>
+    /// On Unix, Uri.TryCreate("/path", Absolute) succeeds as a file:// URI, so a plain absolute-parse
+    /// misreads root-relative paths as external file URLs. Only http/https are crawlable absolutes;
+    /// anything else must be resolved against a base URI.
+    /// </summary>
     public static bool TryCreateHttpAbsolute(string? value, [NotNullWhen(true)] out Uri? absolute)
     {
         return Uri.TryCreate(value, UriKind.Absolute, out absolute)

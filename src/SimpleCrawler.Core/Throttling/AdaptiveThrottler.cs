@@ -3,9 +3,11 @@ using System.Diagnostics;
 
 namespace SimpleCrawler.Core.Throttling;
 
-// Per-host request spacing with an adaptive rate-limit penalty. Each authority gets its own HostThrottle
-// so one host's delay never stalls another; the base (configured/robots) delay is supplied per call so a
-// robots.txt Crawl-delay resolved after construction is still honoured.
+/// <summary>
+/// Per-host request spacing with an adaptive rate-limit penalty. Each authority gets its own HostThrottle
+/// so one host's delay never stalls another; the base (configured/robots) delay is supplied per call so a
+/// robots.txt Crawl-delay resolved after construction is still honoured.
+/// </summary>
 public sealed class AdaptiveThrottler
 {
     private readonly ThrottleOptions _options;

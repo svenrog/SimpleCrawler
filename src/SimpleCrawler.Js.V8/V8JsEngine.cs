@@ -14,10 +14,12 @@ internal sealed class V8JsEngine : IJsEngine, IDisposable
     private const int _moduleEvaluationTimeoutMs = 30000;
     private const int _stackTraceContextRadius = 48;
 
-    // AddPerformanceObject exposes a native high-resolution `Performance.now()` global (capital P; our
-    // lowercase `performance` shim stays ours) and SetTimerResolution sharpens it to ~100ns — enough to
-    // time individual DOM ops. Both are added only under JSRENDER_DOM_PROFILE so a normal crawl neither
-    // pays SetTimerResolution's process-wide timer bump nor exposes the extra global.
+    /// <summary>
+    /// AddPerformanceObject exposes a native high-resolution `Performance.now()` global (capital P; our
+    /// lowercase `performance` shim stays ours) and SetTimerResolution sharpens it to ~100ns — enough to
+    /// time individual DOM ops. Both are added only under JSRENDER_DOM_PROFILE so a normal crawl neither
+    /// pays SetTimerResolution's process-wide timer bump nor exposes the extra global.
+    /// </summary>
     private static readonly V8ScriptEngineFlags _engineFlags = BuildEngineFlags();
 
     private static V8ScriptEngineFlags BuildEngineFlags()
@@ -50,8 +52,10 @@ internal sealed class V8JsEngine : IJsEngine, IDisposable
         _engine.DocumentSettings.Loader = _loader;
     }
 
-    // Every V8 page runs on a fresh context (isolated globals) even though the isolate is pooled, so the DOM
-    // prelude is always installed anew; there is no realm to reset.
+    /// <summary>
+    /// Every V8 page runs on a fresh context (isolated globals) even though the isolate is pooled, so the DOM
+    /// prelude is always installed anew; there is no realm to reset.
+    /// </summary>
     public bool BeginPage() => true;
 
     public void EmbedHostObject(string name, object value)
@@ -80,17 +84,21 @@ internal sealed class V8JsEngine : IJsEngine, IDisposable
         }
     }
 
-    // V8 runs each page on a pooled isolate whose compilation cache already survives across the per-page
-    // contexts, so re-running the same source is cheap to reparse; the cache key (meaningful only to
-    // Jint's cross-engine Prepared<Script>) is ignored and the source executes directly. The cache key is
-    // the chunk URL, so it doubles as the stack-frame document name (a bare Execute shows only "Script [N]").
+    /// <summary>
+    /// V8 runs each page on a pooled isolate whose compilation cache already survives across the per-page
+    /// contexts, so re-running the same source is cheap to reparse; the cache key (meaningful only to
+    /// Jint's cross-engine Prepared&lt;Script&gt;) is ignored and the source executes directly. The cache key is
+    /// the chunk URL, so it doubles as the stack-frame document name (a bare Execute shows only "Script [N]").
+    /// </summary>
     public void ExecuteCached(string cacheKey, string script) => ExecuteNamed(cacheKey, script);
 
-    // Loading the entry via Execute creates a separate instance from the one the loader serves
-    // when chunks circularly import it, duplicating module singletons. Seeding the cached loader
-    // and importing keeps a single canonical instance; await drives V8's module evaluation.
-    // cache is ignored: V8 keeps a per-engine module loader cache that is released with the context, so
-    // there is no cross-page accumulation to gate (unlike Jint's shared, crawl-lived module cache).
+    /// <summary>
+    /// Loading the entry via Execute creates a separate instance from the one the loader serves
+    /// when chunks circularly import it, duplicating module singletons. Seeding the cached loader
+    /// and importing keeps a single canonical instance; await drives V8's module evaluation.
+    /// cache is ignored: V8 keeps a per-engine module loader cache that is released with the context, so
+    /// there is no cross-page accumulation to gate (unlike Jint's shared, crawl-lived module cache).
+    /// </summary>
     public void EvaluateModule(string specifier, string source, bool cache)
     {
         try

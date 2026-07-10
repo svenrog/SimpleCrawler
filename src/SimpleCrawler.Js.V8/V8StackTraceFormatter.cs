@@ -11,11 +11,13 @@ internal sealed class V8StackTraceFormatter
         _sourceContextRadius = sourceContextRadius;
     }
 
-    // ClearScript's ErrorDetails leads with the error message (logged separately, so dropped here) and then
-    // appends each stack frame's full source line after " -> "; for a minified bundle that source is an entire
-    // file per frame, which buries the actual call chain. Keep the frame locations but replace the full source
-    // dump with a short window centred on the frame's column, leaving a trace shaped like Jint's
-    // JavaScriptStackTrace plus a glimpse of the offending code.
+    /// <summary>
+    /// ClearScript's ErrorDetails leads with the error message (logged separately, so dropped here) and then
+    /// appends each stack frame's full source line after " -> "; for a minified bundle that source is an entire
+    /// file per frame, which buries the actual call chain. Keep the frame locations but replace the full source
+    /// dump with a short window centred on the frame's column, leaving a trace shaped like Jint's
+    /// JavaScriptStackTrace plus a glimpse of the offending code.
+    /// </summary>
     public string? Format(string message, string? details)
     {
         if (string.IsNullOrEmpty(details))
@@ -106,7 +108,9 @@ internal sealed class V8StackTraceFormatter
             builder.Append('…');
     }
 
-    // A frame location ends with ":line:column", optionally wrapped in parentheses (e.g. "at f (Script [3]:2:88)").
+    /// <summary>
+    /// A frame location ends with ":line:column", optionally wrapped in parentheses (e.g. "at f (Script [3]:2:88)").
+    /// </summary>
     private static int ParseColumn(ReadOnlySpan<char> location)
     {
         var loc = location.TrimEnd();

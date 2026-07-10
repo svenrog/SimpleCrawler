@@ -4,8 +4,10 @@ namespace SimpleCrawler.Core;
 
 public sealed class HeadlessCrawlerOptions : CrawlerOptions
 {
-    // A headless navigation is far costlier than an HTTP GET, so retrying a persistently-dead URL
-    // several times hurts more than it helps; headless defaults to a smaller budget than static.
+    /// <summary>
+    /// A headless navigation is far costlier than an HTTP GET, so retrying a persistently-dead URL
+    /// several times hurts more than it helps; headless defaults to a smaller budget than static.
+    /// </summary>
     private const int _defaultHeadlessMaxRetries = 1;
 
     public HeadlessCrawlerOptions()

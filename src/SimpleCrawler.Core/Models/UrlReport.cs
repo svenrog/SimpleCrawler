@@ -1,8 +1,10 @@
 namespace SimpleCrawler.Core.Models;
 
-// The live report for a single fetched URL. It is the value stored in CrawlState.Reports and is
-// mutated in place as the URL moves through the fetch and parse stages (one worker at a time), so
-// the report is part of the checkpointable state rather than a copy assembled on the side.
+/// <summary>
+/// The live report for a single fetched URL. It is the value stored in CrawlState.Reports and is
+/// mutated in place as the URL moves through the fetch and parse stages (one worker at a time), so
+/// the report is part of the checkpointable state rather than a copy assembled on the side.
+/// </summary>
 public sealed class UrlReport
 {
     public required string Url { get; set; }

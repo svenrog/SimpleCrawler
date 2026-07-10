@@ -30,8 +30,10 @@ public sealed class JsRenderer
         _logger = logger;
     }
 
-    // Render path (tests/diagnostics inspect the serialized HTML): a scriptless shell can't mutate
-    // anything, so it is returned verbatim; otherwise the bundle runs and the tree is serialized.
+    /// <summary>
+    /// Render path (tests/diagnostics inspect the serialized HTML): a scriptless shell can't mutate
+    /// anything, so it is returned verbatim; otherwise the bundle runs and the tree is serialized.
+    /// </summary>
     public Task<byte[]> RenderAsync(byte[] shell, string pageUrl, HttpClient client, CancellationToken cancellationToken)
     {
         if (!ContainsScriptTag(shell))
@@ -40,15 +42,19 @@ public sealed class JsRenderer
         return RunAsync(shell, pageUrl, client, SerializeJs, shell, cancellationToken);
     }
 
-    // Crawl path: anchors/canonical/robots are read straight off the live DOM — no serialize, no
-    // AngleSharp reparse. Scriptless shells still parse, because extraction needs the tree.
+    /// <summary>
+    /// Crawl path: anchors/canonical/robots are read straight off the live DOM — no serialize, no
+    /// AngleSharp reparse. Scriptless shells still parse, because extraction needs the tree.
+    /// </summary>
     internal Task<JsExtract> ExtractAsync(byte[] shell, string pageUrl, HttpClient client, CancellationToken cancellationToken)
         => RunAsync(shell, pageUrl, client, CollectLinks, _emptyExtract, cancellationToken);
 
-    // The DOM lives entirely in JS (Preludes/dom.js). HTML goes in via __crawlerLoadHtml, the bundle mutates
-    // the JS DOM with no managed crossings, and timers drain through __crawlerPump. `finalize` produces the
-    // caller's result from the settled tree (serialize for rendering, collect-links for crawling); `abortValue`
-    // is returned if the DOM parse itself fails before the tree exists.
+    /// <summary>
+    /// The DOM lives entirely in JS (Preludes/dom.js). HTML goes in via __crawlerLoadHtml, the bundle mutates
+    /// the JS DOM with no managed crossings, and timers drain through __crawlerPump. `finalize` produces the
+    /// caller's result from the settled tree (serialize for rendering, collect-links for crawling); `abortValue`
+    /// is returned if the DOM parse itself fails before the tree exists.
+    /// </summary>
     private async Task<T> RunAsync<T>(byte[] shell, string pageUrl, HttpClient client, Func<IJsEngine, T> finalize, T abortValue, CancellationToken cancellationToken)
     {
         var totalTime = RenderProfiler.Start();
@@ -165,9 +171,11 @@ public sealed class JsRenderer
         return result;
     }
 
-    // Relative script/resource URLs resolve against the document base URL (the first <base href>, if any),
-    // not the page URL — matching the browser. Without this, a <base href="/"> page served from a nested
-    // path fetches the site's HTML fallback for every relative <script src>, and the engine aborts on it.
+    /// <summary>
+    /// Relative script/resource URLs resolve against the document base URL (the first &lt;base href&gt;, if any),
+    /// not the page URL — matching the browser. Without this, a &lt;base href="/"&gt; page served from a nested
+    /// path fetches the site's HTML fallback for every relative &lt;script src&gt;, and the engine aborts on it.
+    /// </summary>
     private static Uri ResolveDocumentBase(IJsEngine engine, Uri pageUri)
     {
         var baseHref = engine.Evaluate<string>("__crawlerGetBaseHref()");
@@ -243,9 +251,11 @@ public sealed class JsRenderer
         }
     }
 
-    // A classic <script> exposes itself as document.currentScript only while it runs synchronously; webpack's
-    // auto-public-path (and Next's instanceof-HTMLScriptElement invariant over it) reads that during chunk
-    // evaluation, so it must be set around each execution and cleared after — exactly as a browser does.
+    /// <summary>
+    /// A classic &lt;script&gt; exposes itself as document.currentScript only while it runs synchronously; webpack's
+    /// auto-public-path (and Next's instanceof-HTMLScriptElement invariant over it) reads that during chunk
+    /// evaluation, so it must be set around each execution and cleared after — exactly as a browser does.
+    /// </summary>
     private static void SetCurrentScript(IJsEngine engine, string? src)
         => engine.CallGlobal("__crawlerSetCurrentScript", src);
 
@@ -292,10 +302,12 @@ public sealed class JsRenderer
         return loaded;
     }
 
-    // A same-origin <script> is fetched and executed so a webpack chunk's module registrations run; a <link>
-    // is treated as loaded without fetching (a crawl needs no CSS). Cross-origin scripts (AppInsights/GTM and
-    // similar analytics SDKs) are left pending — running them is slow and yields no links, and nothing awaits
-    // their load. Every other case fires the node's load (or error) event to settle the awaiting import().
+    /// <summary>
+    /// A same-origin &lt;script&gt; is fetched and executed so a webpack chunk's module registrations run; a &lt;link&gt;
+    /// is treated as loaded without fetching (a crawl needs no CSS). Cross-origin scripts (AppInsights/GTM and
+    /// similar analytics SDKs) are left pending — running them is slow and yields no links, and nothing awaits
+    /// their load. Every other case fires the node's load (or error) event to settle the awaiting import().
+    /// </summary>
     private async Task LoadResourceAsync(IJsEngine engine, int id, string? tag, string? src, Uri baseUri, Uri pageUri, HttpClient client, string pageUrl, CancellationToken cancellationToken)
     {
         if (!string.Equals(tag, "script", StringComparison.Ordinal))
@@ -372,9 +384,11 @@ public sealed class JsRenderer
 
     private static void RunPrelude(IJsEngine engine, in PreludeEntry prelude) => engine.ExecuteCached(prelude.Key, prelude.Source);
 
-    // The bundle's console.* calls reach the logger only when ScriptLogging opts in: the JS console stays a
-    // no-op until __crawlerSetLogLevel raises it off Infinity, so unset means no embedding and no formatting
-    // cost. The level numbers match LogLevel's, so the floor round-trips and __crawlerLog casts straight back.
+    /// <summary>
+    /// The bundle's console.* calls reach the logger only when ScriptLogging opts in: the JS console stays a
+    /// no-op until __crawlerSetLogLevel raises it off Infinity, so unset means no embedding and no formatting
+    /// cost. The level numbers match LogLevel's, so the floor round-trips and __crawlerLog casts straight back.
+    /// </summary>
     private void ConfigureScriptLogging(IJsEngine engine)
     {
         if (_options.ScriptLogging is not { } level)
@@ -384,11 +398,13 @@ public sealed class JsRenderer
         engine.CallGlobal("__crawlerSetLogLevel", (int)level);
     }
 
-    // Embedded unconditionally (unlike the opt-in console bridge): the task pump and resource-event loop
-    // deliberately swallow exceptions from scheduled callbacks so one bad chunk can't abort the drain, which
-    // is exactly why a fatal hydration/commit throw otherwise presents as "the render just settled" with no
-    // diagnostics. Routing those catches through this channel turns them into a named exception with a stack
-    // the moment the renderer's log level is Debug, without spamming a normal crawl by default.
+    /// <summary>
+    /// Embedded unconditionally (unlike the opt-in console bridge): the task pump and resource-event loop
+    /// deliberately swallow exceptions from scheduled callbacks so one bad chunk can't abort the drain, which
+    /// is exactly why a fatal hydration/commit throw otherwise presents as "the render just settled" with no
+    /// diagnostics. Routing those catches through this channel turns them into a named exception with a stack
+    /// the moment the renderer's log level is Debug, without spamming a normal crawl by default.
+    /// </summary>
     private void ConfigureDiagnostics(IJsEngine engine)
         => engine.EmbedFunction("__crawlerDiagnostic", ReportDiagnostic);
 

@@ -3,9 +3,11 @@ using SimpleCrawler.Core.Proxy;
 
 namespace SimpleCrawler.Core.Retry;
 
-// Primary HTTP handler that routes every request through the shared RetryExecutor. A DelegatingHandler
-// cannot swap its inner transport per attempt, so this owns routing directly: with a pool it sends via
-// the per-proxy client; without one it sends via an owned direct transport and simply retries.
+/// <summary>
+/// Primary HTTP handler that routes every request through the shared RetryExecutor. A DelegatingHandler
+/// cannot swap its inner transport per attempt, so this owns routing directly: with a pool it sends via
+/// the per-proxy client; without one it sends via an owned direct transport and simply retries.
+/// </summary>
 public sealed class RetryHandler : HttpMessageHandler
 {
     private readonly IProxyClientProvider? _clients;
@@ -71,8 +73,10 @@ public sealed class RetryHandler : HttpMessageHandler
         return result!;
     }
 
-    // The JS runtime issues blocking sends; without a synchronous override the base handler would throw
-    // NotSupportedException, so this mirrors SendAsync over the synchronous send path.
+    /// <summary>
+    /// The JS runtime issues blocking sends; without a synchronous override the base handler would throw
+    /// NotSupportedException, so this mirrors SendAsync over the synchronous send path.
+    /// </summary>
     protected override HttpResponseMessage Send(HttpRequestMessage request, CancellationToken cancellationToken)
     {
         Exception? lastError = null;

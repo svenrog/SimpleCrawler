@@ -21,7 +21,9 @@ namespace SimpleCrawler.Core.Progress;
 /// </remarks>
 public sealed class CrawlProgressEstimator
 {
-    // Kept just below 1 so the geometric remaining-work sum stays finite; a page budget clamps it further.
+    /// <summary>
+    /// Kept just below 1 so the geometric remaining-work sum stays finite; a page budget clamps it further.
+    /// </summary>
     private const double _maxYield = 0.999;
 
     private readonly ProgressOptions _options;

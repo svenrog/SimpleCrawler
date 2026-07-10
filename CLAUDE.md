@@ -28,7 +28,9 @@ A high-performance single-domain web crawler (CLI: `smpcrawl`) built to gather U
 - Primary constructors are disabled (`csharp_style_prefer_primary_constructors = false` / IDE0290) — use traditional constructors. `CA1873` (expensive logging) is silenced. `ImplicitUsings` and `Nullable` are enabled across all projects.
 - All private fields are `_camelCase`, including static and const ones.
 - Exactly one top-level class per `.cs` file; the filename matches the class name.
-- Avoid comments. Default to none — let names and structure carry the meaning. Add a comment only when behaviour is genuinely surprising without it (a non-obvious constraint, workaround, or rationale), never to restate what the code already says. Never name specific crawled sites/domains in comments — describe the failure pattern generically.
+- Comments on a type, member, or method go in `/// <summary>` XmlDoc, not `//` — it documents the declaration and is useful to consumers via IntelliSense, not just readers of this file. This applies to every visibility, including private members.
+- Plain `//` comments are reserved for rationale inside a method body (a non-obvious constraint, workaround, or decision tied to specific lines) — and only when genuinely surprising without it, never to restate what the code already says. Default to no comment at all.
+- Never name specific crawled sites/domains in comments — describe the failure pattern generically. Vendored third-party code (e.g. `SimpleCrawler.Core/Robots`) keeps its own license header as a plain comment.
 
 ## Git
 

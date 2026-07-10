@@ -27,8 +27,10 @@ public sealed class JsHttp
     {
     }
 
-    // (url, method, headersJson, body) — invoked from the JS fetch/XMLHttpRequest shims. The request is
-    // issued synchronously to fit the single-threaded drain loop; the JS side wraps it in a resolved Promise.
+    /// <summary>
+    /// (url, method, headersJson, body) — invoked from the JS fetch/XMLHttpRequest shims. The request is
+    /// issued synchronously to fit the single-threaded drain loop; the JS side wraps it in a resolved Promise.
+    /// </summary>
     public JsHttpResponse request(params object?[] args)
     {
         var url = args.Length > 0 ? args[0]?.ToString() : null;

@@ -2,8 +2,10 @@ using System.Text.Json;
 
 namespace SimpleCrawler.Core.Helpers;
 
-// One in-browser evaluation returns every anchor href, the canonical link and the meta-robots
-// directive, collapsing one protocol round-trip per element into one round-trip per page.
+/// <summary>
+/// One in-browser evaluation returns every anchor href, the canonical link and the meta-robots
+/// directive, collapsing one protocol round-trip per element into one round-trip per page.
+/// </summary>
 public static class RenderedPageExtractor
 {
     public const string Script = """
