@@ -61,9 +61,7 @@ public sealed class RetryExecutor
             ProxyInfo? proxy = null;
             if (_pool is not null)
             {
-                proxy = _pool.Acquire();
-                if (proxy is null)
-                    throw new ProxyPoolExhaustedException("No healthy proxies remain (below configured cutoff).");
+                proxy = _pool.Acquire() ?? throw new ProxyPoolExhaustedException("No healthy proxies remain (below configured cutoff).");
             }
 
             RetryAttempt<T> result;

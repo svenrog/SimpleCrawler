@@ -3,18 +3,67 @@
 # CA1873: Avoid potentially expensive logging
 dotnet_diagnostic.CA1873.severity = none
 
-# Collection-expression preference (`= []` / `[.. x]` etc.) - promote to real build
-# warnings now that EnforceCodeStyleInBuild is on. Scoped to this rule family only:
-# the rest of category-Style (var vs explicit type, namespace style, brace style, ...)
-# defaults to option values that fight this codebase's established, unconfigured
-# conventions rather than reflecting real debt.
+# Code style preference enforcement
 dotnet_diagnostic.IDE0028.severity = warning
+dotnet_diagnostic.IDE0029.severity = warning
+dotnet_diagnostic.IDE0030.severity = warning
+dotnet_diagnostic.IDE0031.severity = warning
+dotnet_diagnostic.IDE0034.severity = warning
+dotnet_diagnostic.IDE0035.severity = warning
+dotnet_diagnostic.IDE0037.severity = warning
+dotnet_diagnostic.IDE0038.severity = warning
+dotnet_diagnostic.IDE0042.severity = warning
+dotnet_diagnostic.IDE0043.severity = warning
+dotnet_diagnostic.IDE0044.severity = warning
+dotnet_diagnostic.IDE0050.severity = warning
+dotnet_diagnostic.IDE0051.severity = warning
+dotnet_diagnostic.IDE0052.severity = warning
+dotnet_diagnostic.IDE0056.severity = warning
+dotnet_diagnostic.IDE0057.severity = warning
+dotnet_diagnostic.IDE0059.severity = warning
+dotnet_diagnostic.IDE0060.severity = warning
+dotnet_diagnostic.IDE0063.severity = warning
+dotnet_diagnostic.IDE0065.severity = warning
+dotnet_diagnostic.IDE0070.severity = warning
+dotnet_diagnostic.IDE0071.severity = warning
+dotnet_diagnostic.IDE0075.severity = warning
+dotnet_diagnostic.IDE0078.severity = warning
+dotnet_diagnostic.IDE0079.severity = warning
+dotnet_diagnostic.IDE0080.severity = warning
+dotnet_diagnostic.IDE0090.severity = warning
+dotnet_diagnostic.IDE0100.severity = warning
+dotnet_diagnostic.IDE0110.severity = warning
+dotnet_diagnostic.IDE0130.severity = warning
+dotnet_diagnostic.IDE0150.severity = warning
+dotnet_diagnostic.IDE0161.severity = warning
+dotnet_diagnostic.IDE0170.severity = warning
+dotnet_diagnostic.IDE0180.severity = warning
+dotnet_diagnostic.IDE0200.severity = warning
+dotnet_diagnostic.IDE0230.severity = warning
+dotnet_diagnostic.IDE0240.severity = warning
+dotnet_diagnostic.IDE0241.severity = warning
+dotnet_diagnostic.IDE0250.severity = warning
+dotnet_diagnostic.IDE0251.severity = warning
+dotnet_diagnostic.IDE0260.severity = warning
+dotnet_diagnostic.IDE0270.severity = warning
+dotnet_diagnostic.IDE0280.severity = warning
 dotnet_diagnostic.IDE0300.severity = warning
 dotnet_diagnostic.IDE0301.severity = warning
 dotnet_diagnostic.IDE0302.severity = warning
 dotnet_diagnostic.IDE0303.severity = warning
 dotnet_diagnostic.IDE0304.severity = warning
 dotnet_diagnostic.IDE0305.severity = warning
+dotnet_diagnostic.IDE0306.severity = warning
+dotnet_diagnostic.IDE0330.severity = warning
+dotnet_diagnostic.IDE0360.severity = warning
+dotnet_diagnostic.IDE0380.severity = warning
+dotnet_diagnostic.IDE0390.severity = warning
+dotnet_diagnostic.IDE0391.severity = warning
+dotnet_diagnostic.IDE2000.severity = warning
+dotnet_diagnostic.IDE2001.severity = warning
+dotnet_diagnostic.IDE2002.severity = warning
+dotnet_diagnostic.IDE2005.severity = warning
+dotnet_diagnostic.IDE2006.severity = warning
 
 # CA2016: Forward the CancellationToken parameter - defaults to Info, which never
 # surfaces in `dotnet build` output; promote so it's actually enforced.

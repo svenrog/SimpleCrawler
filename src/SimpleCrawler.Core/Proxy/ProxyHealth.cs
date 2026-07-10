@@ -7,7 +7,6 @@ internal sealed class ProxyHealth
     private readonly ProxyPoolOptions _options;
     private readonly Lock _gate = new();
     private int _consecutiveFailures;
-    private int _totalFailures;
     private long _benchedUntilTicks;
 
     public ProxyHealth(ProxyInfo proxy, ProxyPoolOptions options)
@@ -53,7 +52,6 @@ internal sealed class ProxyHealth
         lock (_gate)
         {
             _consecutiveFailures++;
-            _totalFailures++;
 
             if (_consecutiveFailures >= _options.FailureThreshold)
             {

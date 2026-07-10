@@ -91,7 +91,7 @@ public class RobotsTxtParser
                         if (Uri.IsWellFormedUriString(hostValue, UriKind.Absolute)
                             && Uri.TryCreate(hostValue, UriKind.Absolute, out var uri)) hostValue = uri.Host;
                         var hostNameType = Uri.CheckHostName(hostValue);
-                        if (hostNameType != UriHostNameType.Unknown && hostNameType != UriHostNameType.Basic) host = hostValue;
+                        if (hostNameType is not UriHostNameType.Unknown and not UriHostNameType.Basic) host = hostValue;
                     }
                 }
                 else

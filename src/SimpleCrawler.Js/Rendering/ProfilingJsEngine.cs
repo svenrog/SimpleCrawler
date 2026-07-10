@@ -14,7 +14,7 @@ internal sealed class ProfilingJsEngine : IJsEngine
 
     public ProfilingJsEngine(IJsEngine inner) => _inner = inner;
 
-    public bool BeginPage() => Time("engine.BeginPage", () => _inner.BeginPage());
+    public bool BeginPage() => Time("engine.BeginPage", _inner.BeginPage);
 
     public void EmbedHostObject(string name, object value) => Time("engine.EmbedHostObject", () => _inner.EmbedHostObject(name, value));
     public void EmbedFunction(string name, VFunc function) => Time("engine.EmbedFunction", () => _inner.EmbedFunction(name, function));
@@ -23,7 +23,7 @@ internal sealed class ProfilingJsEngine : IJsEngine
     public void EvaluateModule(string specifier, string source, bool cache) => Time("engine.EvaluateModule", () => _inner.EvaluateModule(specifier, source, cache));
     public T Evaluate<T>(string expression) => Time("engine.Evaluate", () => _inner.Evaluate<T>(expression));
     public void CallGlobal(string name, params object?[] args) => Time("engine.CallGlobal", () => _inner.CallGlobal(name, args));
-    public void RunMicrotasks() => Time("engine.RunMicrotasks", () => _inner.RunMicrotasks());
+    public void RunMicrotasks() => Time("engine.RunMicrotasks", _inner.RunMicrotasks);
 
     private static void Time(string bucket, Action action)
     {

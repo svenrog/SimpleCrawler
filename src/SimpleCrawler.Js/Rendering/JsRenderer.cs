@@ -491,7 +491,7 @@ public sealed class JsRenderer
         for (var i = 0; i < lowercase.Length; i++)
         {
             var c = value[i];
-            if (c >= 'A' && c <= 'Z')
+            if (c is >= (byte)'A' and <= (byte)'Z')
                 c = (byte)(c + 32);
 
             if (c != lowercase[i])
