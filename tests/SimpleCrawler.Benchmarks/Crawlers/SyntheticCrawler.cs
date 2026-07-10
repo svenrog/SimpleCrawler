@@ -4,7 +4,7 @@ using SimpleCrawler.Core.Models;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 
-namespace SimpleCrawler.Benchmarks;
+namespace SimpleCrawler.Benchmarks.Crawlers;
 
 public sealed class SyntheticCrawler : AbstractCrawler<string, string, ScrapeResult>
 {

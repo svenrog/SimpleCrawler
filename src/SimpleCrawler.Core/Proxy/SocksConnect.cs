@@ -58,7 +58,7 @@ internal static class SocksConnect
 
     private static async Task Socks5HandshakeAsync(Stream stream, string host, int port, ProxyInfo proxy, CancellationToken cancellationToken)
     {
-        var offers = proxy.HasCredentials ? new byte[] { 0x00, 0x02 } : new byte[] { 0x00 };
+        var offers = proxy.HasCredentials ? new byte[] { 0x00, 0x02 } : [0x00];
         var greeting = new byte[2 + offers.Length];
         greeting[0] = 0x05;
         greeting[1] = (byte)offers.Length;

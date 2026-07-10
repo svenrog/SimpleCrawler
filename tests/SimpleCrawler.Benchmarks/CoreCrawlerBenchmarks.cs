@@ -1,4 +1,5 @@
 using BenchmarkDotNet.Attributes;
+using SimpleCrawler.Benchmarks.Crawlers;
 using SimpleCrawler.Core;
 using Microsoft.Extensions.Options;
 

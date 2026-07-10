@@ -13,9 +13,9 @@ internal class SitemapIndex : Sitemap
 
     public IAsyncEnumerable<Uri> SitemapUris { get; }
 
-#pragma warning disable CS1998
+#pragma warning disable CS1998, IDE0390
     private static async IAsyncEnumerable<T> Empty<T>()
-#pragma warning restore CS1998
+#pragma warning restore CS1998, IDE0390
     {
         yield break;
     }

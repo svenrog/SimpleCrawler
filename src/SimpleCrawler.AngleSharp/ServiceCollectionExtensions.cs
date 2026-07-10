@@ -1,9 +1,9 @@
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 using SimpleCrawler.Core;
 using SimpleCrawler.Core.Helpers;
 using SimpleCrawler.Core.Robots;
 using SimpleCrawler.Core.Robots.Http;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Options;
 
 namespace SimpleCrawler.AngleSharp;
 
@@ -24,14 +24,12 @@ public static class ServiceCollectionExtensions
         {
             config?.Invoke(provider, client);
             ConfigurationHelper.ConfigureClient(client, provider.GetRequiredService<IOptions<CrawlerOptions>>());
-        }).ConfigurePrimaryHttpMessageHandler(provider =>
-            ConfigurationHelper.CreatePrimaryHandler(provider));
+        }).ConfigurePrimaryHttpMessageHandler(ConfigurationHelper.CreatePrimaryHandler);
         services.AddHttpClient<IRobotClient, RobotWebClient>((provider, client) =>
         {
             config?.Invoke(provider, client);
             ConfigurationHelper.ConfigureClient(client, provider.GetRequiredService<IOptions<CrawlerOptions>>());
-        }).ConfigurePrimaryHttpMessageHandler(provider =>
-            ConfigurationHelper.CreatePrimaryHandler(provider));
+        }).ConfigurePrimaryHttpMessageHandler(ConfigurationHelper.CreatePrimaryHandler);
         services.AddTransient<ICrawler>(provider => provider.GetRequiredService<DefaultAngleSharpCrawler>());
 
         return services;

@@ -23,7 +23,7 @@ public class CrawlerCancellationTests
         using var cts = new CancellationTokenSource();
 
         var run = crawler.Start(["https://example.com/"], cts.Token);
-        Assert.True(await crawler.FetchStarted.WaitAsync(TimeSpan.FromSeconds(5)));
+        Assert.True(await crawler.FetchStarted.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken));
 
         cts.Cancel();
 
@@ -45,7 +45,7 @@ public class CrawlerCancellationTests
         protected override async Task<string?> LoadResponse(string url, CancellationToken cancellationToken)
         {
             FetchStarted.Release();
-            await Task.Delay(Timeout.Infinite).WaitAsync(cancellationToken);
+            await Task.Delay(Timeout.Infinite, cancellationToken);
             return null;
         }
 

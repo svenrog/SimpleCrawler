@@ -33,7 +33,7 @@ public class RobotWebClient : IRobotClient
         var response = await _httpClient.SendAsync(request, cancellationToken);
         var statusCodeNumber = (int)response.StatusCode;
 
-        if (statusCodeNumber >= 400 && statusCodeNumber <= 499)
+        if (statusCodeNumber is >= 400 and <= 499)
         {
             /*
                 "Unavailable" means the crawler tries to fetch the robots.txt file and the server responds with status codes indicating that

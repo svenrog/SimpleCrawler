@@ -21,7 +21,10 @@ public class DomMarshallingBenchTests
 
         public string name => "div";
         public string getAttr(string key) => key;
+
+#pragma warning disable IDE0060 // args exist only to be marshaled across the JS boundary being measured
         public void setAttr(string key, object? value) { }
+#pragma warning restore IDE0060
         public BenchNode child => _child;
         public BenchNode make() => new();
     }

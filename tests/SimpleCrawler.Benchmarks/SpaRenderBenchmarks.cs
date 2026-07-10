@@ -26,7 +26,7 @@ public class SpaRenderBenchmarks
 
     private WebApplication _host = null!;
     private CancellationTokenSource _tokenSource = null!;
-    private readonly List<ServiceProvider> _providers = new();
+    private readonly List<ServiceProvider> _providers = [];
 
     private DefaultJintCrawler _jint = null!;
     private DefaultV8Crawler _v8 = null!;

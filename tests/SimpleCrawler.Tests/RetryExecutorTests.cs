@@ -178,9 +178,7 @@ public class RetryExecutorTests
 
         public FakePool(int proxyCount, bool acquireNull = false)
         {
-            _proxies = Enumerable.Range(0, proxyCount)
-                .Select(i => new ProxyInfo { Host = $"p{i}", Port = 1080, Protocol = ProxyProtocol.Http })
-                .ToArray();
+            _proxies = [.. Enumerable.Range(0, proxyCount).Select(i => new ProxyInfo { Host = $"p{i}", Port = 1080, Protocol = ProxyProtocol.Http })];
             _acquireNull = acquireNull;
         }
 
