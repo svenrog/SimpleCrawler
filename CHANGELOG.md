@@ -10,7 +10,9 @@ Package versions are derived from git tags (`v*`) via MinVer.
 
 ### Changed
 
-- Updated `Simple.Logging.Console` dependency to 1.1.0.
+- Updated `Simple.Logging.Console` dependency to 2.0.0 and switched the CLI to the new 24-bit
+  truecolor formatter via `AddRgbConsoleLogging()` (was `AddConsoleLogging()`, which still exists for
+  ANSI output). The 2.0.0 rewrite makes a warm `Write` allocation-free.
 - Normalized crawl log messages across all backends: the per-page success/error lines now read
   identically (`Response '{code}' from '{url}'` / `Error '{code}' from '{url}'`) with the numeric
   status code everywhere (static/JS previously logged the `HttpStatusCode` name), and proxy references

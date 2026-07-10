@@ -22,7 +22,7 @@ internal static class Program
     {
         var builder = Host.CreateApplicationBuilder(arguments);
 
-        builder.Logging.AddConsoleLogging();
+        builder.Logging.AddRgbConsoleLogging();
 
         using var parser = new Parser(settings =>
         {
