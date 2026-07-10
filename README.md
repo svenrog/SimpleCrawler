@@ -1,8 +1,9 @@
+# Simple crawler
+
 [![Platform](https://img.shields.io/badge/Platform-.NET%2010-blue.svg?style=flat)](https://docs.microsoft.com/en-us/dotnet/)
 [![NuGet](https://img.shields.io/nuget/vpre/SimpleCrawler.Core.svg?style=flat&label=SimpleCrawler.Core)](https://www.nuget.org/packages/SimpleCrawler.Core/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg?style=flat)](./LICENSE.txt)
 
-# Simple crawler project
 
 This project stemmed from the need to crawl a single domain in preparation of load testing, extracting relevant urls along the way. It iteratively grew in size and currently has some useful features.
 
