@@ -1,5 +1,6 @@
 ﻿using SimpleCrawler.Core.Browser;
 using SimpleCrawler.Core.Checkpoints;
+using SimpleCrawler.Core.Progress;
 using SimpleCrawler.Core.Proxy;
 using SimpleCrawler.Core.Retry;
 using SimpleCrawler.Core.Throttling;
@@ -24,6 +25,7 @@ public class CrawlerOptions
     public RetryOptions Retry { get; set; } = new();
     public ThrottleOptions Throttling { get; set; } = new();
     public CheckpointOptions Checkpoint { get; set; } = new();
+    public ProgressOptions Progress { get; set; } = new();
 
     public int EffectiveConcurrency => Math.Max(1, Concurrency);
     public int EffectiveParseConcurrency => ParseConcurrency > 0 ? ParseConcurrency : EffectiveConcurrency;

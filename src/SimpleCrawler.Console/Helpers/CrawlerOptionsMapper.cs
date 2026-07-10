@@ -1,4 +1,5 @@
 ﻿using SimpleCrawler.Core;
+using SimpleCrawler.Core.Progress;
 using SimpleCrawler.Core.Proxy;
 using SimpleCrawler.Core.Retry;
 using SimpleCrawler.Core.Throttling;
@@ -29,6 +30,12 @@ public static class CrawlerOptionsMapper
             Throttling = new ThrottleOptions
             {
                 Enabled = options.AdaptiveThrottle,
+            },
+            Progress = new ProgressOptions
+            {
+                Enabled = options.Progress,
+                LogInterval = TimeSpan.FromSeconds(Math.Max(1, options.ProgressInterval)),
+                SustainedDrain = TimeSpan.FromSeconds(Math.Max(0, options.ProgressConfirm)),
             },
         };
     }

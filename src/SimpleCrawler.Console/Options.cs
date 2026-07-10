@@ -67,6 +67,15 @@ public sealed class Options
     [Option("checkpoint", Required = false, HelpText = "Path to a checkpoint file. Progress is saved here periodically and on Ctrl+C; if the file already exists for the same entry points, the crawl resumes from it.")]
     public string? Checkpoint { get; set; }
 
+    [Option("progress", Required = false, Default = true, HelpText = "Periodically log a crawl-time estimate (pages done, projected total, ETA) inferred from how fast new links are still being found. Pass 'false' to disable.")]
+    public bool Progress { get; set; } = true;
+
+    [Option("progressInterval", Required = false, Default = 15, HelpText = "Seconds between progress/ETA log lines.")]
+    public int ProgressInterval { get; set; } = 15;
+
+    [Option("progressConfirm", Required = false, Default = 60, HelpText = "Seconds the pending queue must keep shrinking before an ETA is shown. Higher values wait for more certainty (a late burst of new links won't have produced a confident-but-wrong estimate); lower values show an ETA sooner.")]
+    public int ProgressConfirm { get; set; } = 60;
+
 #if JS
     [Option("fetch", Required = false, HelpText = "Apply if rendering should enable Fetch API")]
     public bool Fetch { get; set; }

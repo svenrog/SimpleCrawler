@@ -6,6 +6,7 @@ using SimpleCrawler.Core.Comparers;
 using SimpleCrawler.Core.Extensions;
 using SimpleCrawler.Core.Helpers;
 using SimpleCrawler.Core.Models;
+using SimpleCrawler.Core.Progress;
 using SimpleCrawler.Core.Proxy;
 using SimpleCrawler.Core.Throttling;
 using System.Diagnostics;
@@ -93,12 +94,24 @@ public abstract class AbstractCrawler<TResponse, TDocument, TResult> : ICrawler<
         using var autosaveCts = _checkpoints is not null ? CancellationTokenSource.CreateLinkedTokenSource(cancellationToken) : null;
         var autosave = autosaveCts is not null ? _checkpoints!.RunAutosaveAsync(() => _state, autosaveCts.Token) : null;
 
+        using var progressCts = _options.Progress.Enabled ? CancellationTokenSource.CreateLinkedTokenSource(cancellationToken) : null;
+        var progress = progressCts is not null
+            ? new CrawlProgressReporter(_options.Progress, _logger).RunAsync(
+                () => (Volatile.Read(ref _processedCount), _state.Discovered.Count), _options.MaxPages, progressCts.Token)
+            : null;
+
         try
         {
             await Task.WhenAll(tasks);
         }
         finally
         {
+            if (progress is not null)
+            {
+                progressCts!.Cancel();
+                await progress;
+            }
+
             if (autosave is not null)
             {
                 autosaveCts!.Cancel();
@@ -112,7 +125,9 @@ public abstract class AbstractCrawler<TResponse, TDocument, TResult> : ICrawler<
         return await GetResult(cancellationToken);
     }
 
-    // Fully resets per-crawl state so a single crawler instance can be reused across Start calls.
+    /// <summary>
+    /// Fully resets per-crawl state so a single crawler instance can be reused across Start calls.
+    /// </summary>
     protected virtual async ValueTask InitializeCrawl(IReadOnlyList<string> entries, CancellationToken cancellationToken)
     {
         SetSiteIdentities(entries);
@@ -140,7 +155,9 @@ public abstract class AbstractCrawler<TResponse, TDocument, TResult> : ICrawler<
             Enqueue(entry);
     }
 
-    // Re-queues the frontier left by a restored checkpoint: every discovered URL that was not yet processed.
+    /// <summary>
+    /// Re-queues the frontier left by a restored checkpoint: every discovered URL that was not yet processed.
+    /// </summary>
     private void EnqueuePending()
     {
         var pending = 0;
@@ -190,9 +207,11 @@ public abstract class AbstractCrawler<TResponse, TDocument, TResult> : ICrawler<
         return Channel.CreateBounded<(string, TResponse)>(options);
     }
 
-    // A URL leaves the system when its fetch fails or its parse completes; when none remain in
-    // flight, both stages are drained and safe to complete (parse workers only block on read; only
-    // fetch workers block on the bounded parse-channel write, which a non-empty system always drains).
+    /// <summary>
+    /// A URL leaves the system when its fetch fails or its parse completes; when none remain in flight,
+    /// both stages are drained and safe to complete (parse workers only block on read; only fetch workers
+    /// block on the bounded parse-channel write, which a non-empty system always drains).
+    /// </summary>
     private void CompleteUrl()
     {
         if (Interlocked.Decrement(ref _outstanding) == 0)
@@ -202,8 +221,10 @@ public abstract class AbstractCrawler<TResponse, TDocument, TResult> : ICrawler<
         }
     }
 
-    // Soft-abort: stop scheduling new fetches (completing the URL channel makes Enqueue a no-op and
-    // drains fetch workers) while letting in-flight parses finish, so Start returns partial results.
+    /// <summary>
+    /// Soft-abort: stop scheduling new fetches (completing the URL channel makes Enqueue a no-op and
+    /// drains fetch workers) while letting in-flight parses finish, so Start returns partial results.
+    /// </summary>
     protected void Abort(string reason)
     {
         if (Interlocked.CompareExchange(ref _aborted, 1, 0) != 0)
@@ -313,8 +334,10 @@ public abstract class AbstractCrawler<TResponse, TDocument, TResult> : ICrawler<
         return EnqueueAllowed(url);
     }
 
-    // Schedules a URL already recorded in Discovered (e.g. restored from a checkpoint), bypassing the
-    // discovered-set dedupe that Enqueue performs.
+    /// <summary>
+    /// Schedules a URL already recorded in Discovered (e.g. restored from a checkpoint), bypassing the
+    /// discovered-set dedupe that Enqueue performs.
+    /// </summary>
     private bool EnqueueAllowed(string url)
     {
         if (!IsCrawlAllowed(url))
@@ -329,8 +352,10 @@ public abstract class AbstractCrawler<TResponse, TDocument, TResult> : ICrawler<
         return false;
     }
 
-    // Called by fetch backends once the HTTP status is known, to enrich the per-URL report with the
-    // facts only the backend can see. Safe to call for any URL currently being fetched.
+    /// <summary>
+    /// Called by fetch backends once the HTTP status is known, to enrich the per-URL report with the
+    /// facts only the backend can see. Safe to call for any URL currently being fetched.
+    /// </summary>
     protected void ReportResponse(string url, int statusCode, long? contentLength, string? contentType)
     {
         if (!_state.Reports.TryGetValue(url, out var entry))
@@ -341,8 +366,10 @@ public abstract class AbstractCrawler<TResponse, TDocument, TResult> : ICrawler<
         entry.ContentType = contentType;
     }
 
-    // Runs only on the fetch-failure path (no response handed to parsing), so a still-default Success
-    // outcome means no catch classified it: derive the failure from whatever status the backend reported.
+    /// <summary>
+    /// Runs only on the fetch-failure path (no response handed to parsing), so a still-default Success
+    /// outcome means no catch classified it: derive the failure from whatever status the backend reported.
+    /// </summary>
     private static void FinalizeFetchFailure(UrlReport entry)
     {
         if (entry.Outcome != CrawlOutcome.Success)
@@ -361,9 +388,11 @@ public abstract class AbstractCrawler<TResponse, TDocument, TResult> : ICrawler<
         return ValueTask.CompletedTask;
     }
 
-    // Override to collect data beyond links from the already-parsed document. Runs on the parse workers,
-    // so any shared state it touches must be thread-safe, and any exception it throws is logged by
-    // ProcessPage rather than propagated - it will not stop the crawl.
+    /// <summary>
+    /// Override to collect data beyond links from the already-parsed document. Runs on the parse workers,
+    /// so any shared state it touches must be thread-safe, and any exception it throws is logged by
+    /// ProcessPage rather than propagated - it will not stop the crawl.
+    /// </summary>
     protected virtual ValueTask AnalyzeDocument(string url, TDocument document)
     {
         return ValueTask.CompletedTask;
