@@ -94,6 +94,10 @@ This implementation is based on the work of Adam Shirt that is found [here](http
 The matching engine has been reworked by me for performance reasons.
 A full attributation and license can be found under [`SimpleCrawler.Core.Robots`](./src/SimpleCrawler.Core/Robots/).
 
+## Package maintainer
+
+https://github.com/svenrog
+
 ## Change log
 
 Changes are documented in [CHANGELOG.md](./CHANGELOG.md).
