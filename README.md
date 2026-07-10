@@ -82,7 +82,7 @@ There hasn't been any discussions in the Google Groups for years and the maintai
 
 ### Console colors
 
-The application uses a [custom log formatter](./src/Logging.Core/CrudeLogFormatter.cs) to set colors in the console.
+The application uses a [custom log formatter](https://github.com/svenrog/simple-logging-console) to set colors in the console.
 
 ### Static files from embedded resources
 
