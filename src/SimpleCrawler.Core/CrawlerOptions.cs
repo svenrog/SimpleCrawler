@@ -12,10 +12,36 @@ public class CrawlerOptions
     public int Concurrency { get; set; } = 8;
     public int ParseConcurrency { get; set; }
     public int MaxPages { get; set; } = 10000;
+
+    /// <summary>
+    /// Maximum link depth from the entry points, where the entries are depth 0 and each followed link is one
+    /// deeper. A value of 0 imposes no limit.
+    /// </summary>
+    public int MaxDepth { get; set; }
+
     public double CrawlDelay { get; set; } = 1;
     public bool RespectMetaRobots { get; set; } = true;
     public bool RespectRobotsTxt { get; set; } = true;
     public bool EnableSitemapDiscovery { get; set; } = true;
+
+    /// <summary>
+    /// Canonicalizes discovered URLs before they are deduplicated and queued: drops the fragment, lowercases
+    /// scheme and host, removes the default port, and collapses a trailing slash. The query string is left
+    /// untouched.
+    /// </summary>
+    public bool NormalizeUrls { get; set; } = true;
+
+    /// <summary>
+    /// robots.txt-style path patterns (<c>*</c> wildcard, <c>$</c> end-anchor) that a discovered link must
+    /// match to be crawled. When empty, every link is allowed unless excluded.
+    /// </summary>
+    public IReadOnlyList<string> IncludePatterns { get; set; } = [];
+
+    /// <summary>
+    /// robots.txt-style path patterns (<c>*</c> wildcard, <c>$</c> end-anchor) that exclude a discovered link
+    /// from the crawl. An exclude out-matches an include by the same longest-match rule robots.txt uses.
+    /// </summary>
+    public IReadOnlyList<string> ExcludePatterns { get; set; } = [];
 
     /// <summary>
     /// Cap on the decompressed response body size, in bytes. A value of 0 or less disables the cap.

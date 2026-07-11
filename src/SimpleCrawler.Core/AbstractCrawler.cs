@@ -4,6 +4,7 @@ using SimpleCrawler.Core.Checkpoints;
 using SimpleCrawler.Core.Collections;
 using SimpleCrawler.Core.Comparers;
 using SimpleCrawler.Core.Extensions;
+using SimpleCrawler.Core.Filtering;
 using SimpleCrawler.Core.Helpers;
 using SimpleCrawler.Core.Models;
 using SimpleCrawler.Core.Progress;
@@ -30,6 +31,7 @@ public abstract class AbstractCrawler<TResponse, TDocument, TResult> : ICrawler<
     private readonly CrawlerOptions _options;
     private readonly AdaptiveThrottler _throttling;
     private readonly CheckpointCoordinator? _checkpoints;
+    private readonly UrlFilter? _urlFilter;
     private readonly ILogger _logger;
 
     private CrawlState _state;
@@ -56,6 +58,7 @@ public abstract class AbstractCrawler<TResponse, TDocument, TResult> : ICrawler<
     {
         _options = options.Value;
         _logger = logger;
+        _urlFilter = UrlFilter.Create(_options.IncludePatterns, _options.ExcludePatterns);
         _throttling = new AdaptiveThrottler(_options.Throttling, logger);
         _checkpoints = checkpoint is not null ? new CheckpointCoordinator(checkpoint, _options.Checkpoint.Interval, logger) : null;
 
@@ -217,19 +220,22 @@ public abstract class AbstractCrawler<TResponse, TDocument, TResult> : ICrawler<
         }
 
         foreach (var entry in entries)
-            Enqueue(entry);
+            Enqueue(Normalize(entry), 0);
     }
 
     /// <summary>
-    /// Re-queues the frontier left by a restored checkpoint: every discovered URL that was not yet processed.
+    /// Re-queues the frontier left by a restored checkpoint: every still-pending URL at its stored depth.
+    /// A URL no longer allowed (e.g. by changed robots rules) is dropped from the frontier map.
     /// </summary>
     private void EnqueuePending()
     {
         var pending = 0;
-        foreach (var url in _state.Discovered)
+        foreach (var url in _state.Frontier.Keys)
         {
-            if (!_state.Processed.Contains(url) && EnqueueKnownUrl(url))
+            if (EnqueueKnownUrl(url))
                 pending++;
+            else
+                _state.Frontier.TryRemove(url, out _);
         }
 
         _logger.LogInformation("Resuming from checkpoint: {processed} processed, {pending} pending.",
@@ -314,6 +320,7 @@ public abstract class AbstractCrawler<TResponse, TDocument, TResult> : ICrawler<
     private void MarkProcessed(string url)
     {
         _state.Processed.Add(url);
+        _state.Frontier.TryRemove(url, out _);
         Interlocked.Increment(ref _processedCount);
     }
 
@@ -347,7 +354,12 @@ public abstract class AbstractCrawler<TResponse, TDocument, TResult> : ICrawler<
             return;
         }
 
-        var entry = new UrlReport { Url = url, Timestamp = DateTimeOffset.UtcNow };
+        var entry = new UrlReport
+        {
+            Url = url,
+            Depth = _state.Frontier.TryGetValue(url, out var depth) ? depth : 0,
+            Timestamp = DateTimeOffset.UtcNow,
+        };
         _state.Reports[url] = entry;
 
         var handedOff = false;
@@ -427,7 +439,8 @@ public abstract class AbstractCrawler<TResponse, TDocument, TResult> : ICrawler<
 
             entry?.ParseDuration = Stopwatch.GetElapsedTime(startTimestamp);
 
-            var resolvedUrl = UriHelper.GetAbsoluteUrl(pageBase, pageData.CanonicalHref) ?? url;
+            var resolvedUrl = Normalize(UriHelper.GetAbsoluteUrl(pageBase, pageData.CanonicalHref) ?? url);
+            var depth = _state.Frontier.TryGetValue(url, out var d) ? d : 0;
 
             await AnalyzeDocument(resolvedUrl, document);
 
@@ -435,7 +448,7 @@ public abstract class AbstractCrawler<TResponse, TDocument, TResult> : ICrawler<
             if (robots.Index)
                 Visited.Add(resolvedUrl);
 
-            var discovered = robots.Follow ? DiscoverOutgoing(pageBase, pageData.LinkHrefs, resolvedUrl) : 0;
+            var discovered = robots.Follow ? DiscoverOutgoing(pageBase, pageData.LinkHrefs, resolvedUrl, depth) : 0;
 
             if (entry is not null)
             {
@@ -482,9 +495,10 @@ public abstract class AbstractCrawler<TResponse, TDocument, TResult> : ICrawler<
     }
 
     /// <summary>
-    /// Resolves and enqueues the outgoing links of a parsed page, returning how many were newly queued.
+    /// Resolves and enqueues the outgoing links of a parsed page one level deeper than the page itself,
+    /// returning how many were newly queued.
     /// </summary>
-    private int DiscoverOutgoing(Uri pageBase, IReadOnlyList<string?> hrefs, string resolvedUrl)
+    private int DiscoverOutgoing(Uri pageBase, IReadOnlyList<string?> hrefs, string resolvedUrl, int depth)
     {
         var discovered = 0;
         foreach (var href in hrefs)
@@ -493,7 +507,7 @@ public abstract class AbstractCrawler<TResponse, TDocument, TResult> : ICrawler<
             if (link == null)
                 continue;
 
-            if (Enqueue(link))
+            if (Enqueue(link, depth + 1))
                 discovered++;
         }
 
@@ -532,12 +546,36 @@ public abstract class AbstractCrawler<TResponse, TDocument, TResult> : ICrawler<
             entry.Outcome = CrawlOutcome.RetriesExhausted;
     }
 
-    private bool Enqueue(string url)
+    /// <summary>
+    /// Records a newly discovered URL at the given link depth and schedules it, unless it is over the depth
+    /// limit or already known. A URL over the limit is not marked discovered, so a later shorter path can
+    /// still reach it.
+    /// </summary>
+    private bool Enqueue(string url, int depth)
     {
+        if (!WithinDepthLimit(depth))
+            return false;
+
         if (!_state.Discovered.Add(url))
             return false;
 
-        return EnqueueKnownUrl(url);
+        _state.Frontier[url] = depth;
+
+        if (EnqueueKnownUrl(url))
+            return true;
+
+        _state.Frontier.TryRemove(url, out _);
+        return false;
+    }
+
+    private bool WithinDepthLimit(int depth)
+    {
+        return _options.MaxDepth <= 0 || depth <= _options.MaxDepth;
+    }
+
+    private string Normalize(string url)
+    {
+        return _options.NormalizeUrls ? UriHelper.Normalize(url) : url;
     }
 
     /// <summary>
@@ -564,7 +602,7 @@ public abstract class AbstractCrawler<TResponse, TDocument, TResult> : ICrawler<
         if (url == null)
             return;
 
-        Enqueue(url);
+        Enqueue(url, 0);
     }
 
     protected virtual string? ResolveCrawlableUrl(Uri pageBase, string? href)
@@ -572,14 +610,19 @@ public abstract class AbstractCrawler<TResponse, TDocument, TResult> : ICrawler<
         if (InvalidateHref(href))
             return null;
 
-        var url = UriHelper.GetAbsoluteUrl(pageBase, href);
-        if (url == null)
+        var resolved = UriHelper.GetAbsoluteUrl(pageBase, href);
+        if (resolved == null)
             return null;
+
+        var url = Normalize(resolved);
 
         if (!Uri.TryCreate(url, UriKind.Absolute, out var absolute))
             return null;
 
         if (!_scopeAuthorities.Contains(absolute.Authority))
+            return null;
+
+        if (_urlFilter != null && !_urlFilter.IsAllowed(absolute.PathAndQuery))
             return null;
 
         return url;

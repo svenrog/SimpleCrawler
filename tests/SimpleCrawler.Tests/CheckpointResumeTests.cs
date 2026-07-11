@@ -29,7 +29,7 @@ public class CheckpointResumeTests
             ToLoad = new CrawlState
             {
                 Entries = [_entry],
-                Discovered = [_entry, _urlA, _urlB],
+                Frontier = Pending(_urlB),
                 Processed = [_entry, _urlA],
                 Visited = [_entry, _urlA],
             },
@@ -54,7 +54,7 @@ public class CheckpointResumeTests
             ToLoad = new CrawlState
             {
                 Entries = [_entry],
-                Discovered = [_entry, _urlA, _urlB],
+                Frontier = Pending(_urlB),
                 Processed = [_entry, _urlA],
                 Visited = [_entry, _urlA],
                 Reports = new ConcurrentDictionary<string, UrlReport>(
@@ -123,7 +123,7 @@ public class CheckpointResumeTests
             ToLoad = new CrawlState
             {
                 Entries = ["http://other/"],
-                Discovered = ["http://other/", "http://other/x"],
+                Frontier = Pending("http://other/x"),
                 Processed = ["http://other/"],
                 Visited = ["http://other/"],
             },
@@ -134,6 +134,9 @@ public class CheckpointResumeTests
 
         Assert.Contains(_entry, crawler.Fetched);
     }
+
+    private static ConcurrentDictionary<string, int> Pending(params string[] urls)
+        => new(urls.Select(u => new KeyValuePair<string, int>(u, 1)));
 
     private static RecordingCrawler CreateCrawler(ICheckpointStore store, Dictionary<string, IReadOnlyList<string?>> links, bool block = false)
     {

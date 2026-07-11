@@ -13,6 +13,10 @@ public static class CrawlerOptionsMapper
         return new CrawlerOptions
         {
             MaxPages = options.MaxPages,
+            MaxDepth = options.MaxDepth,
+            NormalizeUrls = options.NormalizeUrls,
+            IncludePatterns = [.. options.Include],
+            ExcludePatterns = [.. options.Exclude],
             Concurrency = options.Concurrency,
             ParseConcurrency = options.ParseConcurrency,
             CrawlDelay = options.CrawlDelay,

@@ -29,6 +29,23 @@ public static class UriHelper
         return new Uri(baseUri, relative).ToString();
     }
 
+    /// <summary>
+    /// Canonicalizes an absolute http(s) URL for deduplication: drops the fragment, lowercases scheme and
+    /// host, removes the default port, and collapses a trailing slash (except on the root path). The query
+    /// string is preserved verbatim. Returns the input unchanged if it is not a valid absolute URI.
+    /// </summary>
+    public static string Normalize(string url)
+    {
+        if (!Uri.TryCreate(url, UriKind.Absolute, out var uri))
+            return url;
+
+        var path = uri.AbsolutePath;
+        if (path.Length > 1 && path.EndsWith('/'))
+            path = path.TrimEnd('/');
+
+        return $"{uri.Scheme}://{uri.Authority}{path}{uri.Query}";
+    }
+
     public static List<string> GetAbsoluteUrls(Uri baseUri, IEnumerable<string> hrefs)
     {
         var links = new List<string>();

@@ -34,7 +34,11 @@ internal sealed class CheckpointCoordinator
             return null;
         }
 
-        return state is not null && EntriesMatch(state.Entries, entries) ? state : null;
+        if (state is null || !EntriesMatch(state.Entries, entries))
+            return null;
+
+        state.RebuildAfterLoad();
+        return state;
     }
 
     public async Task RunAutosaveAsync(Func<CrawlState> capture, CancellationToken cancellationToken)
@@ -58,7 +62,7 @@ internal sealed class CheckpointCoordinator
         {
             await _store.SaveAsync(state, cancellationToken);
             _logger.LogDebug("Wrote checkpoint to '{target}' ({processed} processed, {pending} pending).",
-                _store.Target, state.Processed.Count, state.Discovered.Count - state.Processed.Count);
+                _store.Target, state.Processed.Count, state.Frontier.Count);
         }
         catch (Exception e) when (e is not OperationCanceledException)
         {

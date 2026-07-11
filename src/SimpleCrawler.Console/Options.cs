@@ -22,6 +22,18 @@ public sealed class Options
     [Option('m', "maxPages", Required = false, Default = 10000, HelpText = "Max pages to visit.")]
     public int MaxPages { get; set; } = 10000;
 
+    [Option("maxDepth", Required = false, Default = 0, HelpText = "Max link depth from the entry points (entries are depth 0, each followed link one deeper). 0 = no limit.")]
+    public int MaxDepth { get; set; }
+
+    [Option("normalizeUrls", Required = false, Default = true, HelpText = "Canonicalize URLs before de-duplication: drop #fragment, lowercase scheme/host, remove default port, collapse a trailing slash. Query string is left as-is. Pass 'false' to disable.")]
+    public bool NormalizeUrls { get; set; } = true;
+
+    [Option("include", Required = false, HelpText = "Only crawl discovered links whose path matches this robots.txt-style pattern (* wildcard, $ end-anchor). Repeat --include for several; entry points are always crawled.")]
+    public IEnumerable<string> Include { get; set; } = [];
+
+    [Option("exclude", Required = false, HelpText = "Skip discovered links whose path matches this robots.txt-style pattern (* wildcard, $ end-anchor). Repeat --exclude for several; an exclude out-matches an include of equal length.")]
+    public IEnumerable<string> Exclude { get; set; } = [];
+
     [Option('d', "delay", Required = false, Default = 1, HelpText = "Minimum seconds between requests (floor; robots.txt can raise it). 0 removes throttling.")]
     public double CrawlDelay { get; set; } = 1;
 
