@@ -8,6 +8,30 @@ Package versions are derived from git tags (`v*`) via MinVer.
 
 ## [Unreleased]
 
+### Added
+
+- Max crawl depth (`CrawlerOptions.MaxDepth`, CLI `--maxDepth`; `0` = unlimited): entry points are depth 0 and
+  each followed link one deeper, so a link beyond the limit is not crawled. The depth a page was reached at is
+  surfaced per URL on `UrlReport.Depth`. A URL over the limit is left undiscovered, so a later shorter path can
+  still reach it.
+- URL normalization before de-duplication (`CrawlerOptions.NormalizeUrls`, CLI `--normalizeUrls`, on by
+  default): drops the `#fragment`, lowercases scheme/host, removes the default port, and collapses a trailing
+  slash; the query string is left as-is (no reordering). A page's `<link rel="canonical">` still determines the
+  emitted URL, so distinct request URLs that share a canonical collapse to one result line.
+- Include/exclude link filters (CLI `--include`/`--exclude`, repeatable;
+  `CrawlerOptions.IncludePatterns`/`ExcludePatterns`): robots.txt-style path globs (`*` wildcard, `$`
+  end-anchor) applied to discovered links only — entry points are always crawled, on every backend. New
+  `SimpleCrawler.Core.Filtering.UrlFilter` reuses the robots matcher's longest-match/allow-wins resolution;
+  excludes deny, includes default-deny everything unmatched, and an exclude out-matches an include of equal
+  length.
+
+### Changed
+
+- Checkpoint format: the full discovered-URL set is no longer serialized. `CrawlState` now persists only the
+  pending frontier with per-URL depth (`Frontier`) and rebuilds the in-memory `Discovered` on load from
+  `Processed` plus the frontier. A completed crawl checkpoints an empty frontier, so the file shrinks rather
+  than growing with depth. Checkpoints written by earlier versions are not resumed (the crawl restarts).
+
 ### Security
 
 - Narrowed the V8 rendering engine's document access from `EnableAllLoading` to `EnableWebLoading`. All
