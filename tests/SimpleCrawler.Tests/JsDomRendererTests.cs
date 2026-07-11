@@ -869,6 +869,94 @@ public class JsDomRendererTests : IClassFixture<JsRendererFixture>
         Assert.Contains("href=\"/true-false-true-hastrue\"", rendered);
     }
 
+    // Map/3D libraries (Mapbox GL's Painter, Three.js, deck.gl) initialize WebGL synchronously while
+    // constructing — canvas.getContext("webgl2"), then querying limits, compiling a shader, linking a program
+    // and checking framebuffer completeness — and throw "Failed to initialize WebGL." on a null context, an
+    // uncaught throw that trips the SPA error boundary and drops every anchor. EnableWebGl hands back a stub
+    // that reports success through that whole sequence so the surrounding page still renders. Off by default:
+    // getContext("webgl") stays null, so this is opt-in exactly like fetch/streams.
+    [Theory]
+    [InlineData(JsEngine.Jint)]
+    [InlineData(JsEngine.V8)]
+    public async Task JsMode_WebGl_OptIn_SurvivesContextInitialization(JsEngine engine)
+    {
+        if (engine == JsEngine.V8)
+            Assert.SkipUnless(V8Support.IsAvailable, V8Support.UnavailableReason);
+
+        const string html = """
+            <html><body><div id="t"></div>
+            <script>
+            function setupPainter() {
+              var canvas = document.createElement('canvas');
+              var gl = canvas.getContext('webgl2', { antialias: true }) || canvas.getContext('webgl');
+              if (!gl) throw new Error('Failed to initialize WebGL.');
+              var maxTex = gl.getParameter(gl.MAX_TEXTURE_SIZE);
+              var dbg = gl.getExtension('WEBGL_debug_renderer_info');
+              var renderer = dbg ? gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL) : '';
+              var vs = gl.createShader(gl.VERTEX_SHADER);
+              gl.shaderSource(vs, 'void main(){}');
+              gl.compileShader(vs);
+              if (!gl.getShaderParameter(vs, gl.COMPILE_STATUS)) throw new Error('shader');
+              var prog = gl.createProgram();
+              gl.attachShader(prog, vs);
+              gl.linkProgram(prog);
+              if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) throw new Error('link');
+              gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer());
+              if (gl.checkFramebufferStatus(gl.FRAMEBUFFER) !== gl.FRAMEBUFFER_COMPLETE) throw new Error('fbo');
+              return { maxTex: maxTex, renderer: renderer };
+            }
+            var d = document.getElementById('t');
+            try {
+              var p = setupPainter();
+              var a = document.createElement('a');
+              a.setAttribute('href', '/map-ok?tex=' + p.maxTex + '&r=' + p.renderer);
+              d.appendChild(a);
+            } catch (err) {
+              var b = document.createElement('a'); b.setAttribute('href', '/map-err'); d.appendChild(b);
+            }
+            </script>
+            </body></html>
+            """;
+
+        var renderer = CreateJsRenderer(engine, new JsRenderOptions { EnableWebGl = true });
+        var result = await renderer.RenderAsync(Encoding.UTF8.GetBytes(html), "http://localhost:5000/", new HttpClient(), CancellationToken.None);
+        var rendered = Encoding.UTF8.GetString(result);
+
+        Assert.DoesNotContain("href=\"/map-err\"", rendered);
+        Assert.Contains("href=\"/map-ok?tex=4096", rendered);
+        Assert.Contains("r=SimpleCrawler WebGL\"", rendered);
+    }
+
+    // The flip side: with EnableWebGl off (the default), getContext("webgl"/"webgl2") returns null so the crawl
+    // pays nothing for pages that never touch WebGL. A 2D context is always available regardless of the flag.
+    [Theory]
+    [InlineData(JsEngine.Jint)]
+    [InlineData(JsEngine.V8)]
+    public async Task JsMode_WebGl_DefaultOff_ReturnsNullContext(JsEngine engine)
+    {
+        if (engine == JsEngine.V8)
+            Assert.SkipUnless(V8Support.IsAvailable, V8Support.UnavailableReason);
+
+        const string html = """
+            <html><body><div id="t"></div>
+            <script>
+            var canvas = document.createElement('canvas');
+            var gl = canvas.getContext('webgl2') || canvas.getContext('webgl');
+            var has2d = !!canvas.getContext('2d');
+            var a = document.createElement('a');
+            a.setAttribute('href', '/webgl-' + (gl === null) + '-2d-' + has2d);
+            document.getElementById('t').appendChild(a);
+            </script>
+            </body></html>
+            """;
+
+        var renderer = CreateJsRenderer(engine);
+        var result = await renderer.RenderAsync(Encoding.UTF8.GetBytes(html), "http://localhost:5000/", new HttpClient(), CancellationToken.None);
+        var rendered = Encoding.UTF8.GetString(result);
+
+        Assert.Contains("href=\"/webgl-true-2d-true\"", rendered);
+    }
+
     private async Task<string> RenderViewport(JsEngine engine, string html, JsRenderOptions? options)
     {
         var renderer = CreateJsRenderer(engine, options);

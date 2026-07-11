@@ -39,6 +39,7 @@ Passed to `AddJintCrawler`/`AddV8Crawler`.
 | `EnableFetch` | `false` | Enables real network `fetch`/`XHR` for runtime-loaded content/links to render. |
 | `EnableIndexedDb` | `false` | Installs an in-memory `indexedDB`. Turn it on for SPA sites that rely on offline features. |
 | `EnableStreams` | `false` | Installs a [WHATWG Streams](https://streams.spec.whatwg.org/) surface. Delivering spec-compliant reader/transform semantics, not incremental transport streaming. See [RSC and streaming bundles](#rsc-and-streaming-bundles). |
+| `EnableWebGl` | `false` | Makes `canvas.getContext("webgl"/"webgl2")` return a non-faulting stub instead of `null`. Turn it on for map/3D sites (Mapbox GL, Three.js, deck.gl) that otherwise throw "Failed to initialize WebGL." and trip their error boundary, losing the page's links. The map itself doesn't render (it yields no anchors), but the surrounding page does. |
 | `Viewport` | 1920×1080 | Window/screen reported to scripts. Set a mobile screen size to crawl the mobile layout on responsive sites. |
 | `ScriptLogging` | `null` | `LogLevel` floor for forwarding page `console.*` to your logger. `Debug` to diagnose non-rendering pages. |
 | `MaxTaskDrainIterations` | `1000` | Cap on microtask/chunk-load drain iterations before giving up on a page. |

@@ -1,4 +1,5 @@
 import { HTMLElement } from "./HTMLElement";
+import { createWebGLContext, isWebGlContextType, isWebGlEnabled } from "./webgl";
 
 // A layout-less canvas can't paint, but animation libraries (lottie, confetti, chart widgets) mount by
 // grabbing a context synchronously — `canvas.getContext("2d")` then calling draw methods on the result — so
@@ -60,8 +61,12 @@ export class HTMLCanvasElement extends HTMLElement {
         this.setAttribute("height", String(value == null ? 0 : value));
     }
 
-    getContext(type: string): any {
-        return type === "2d" ? createContext2D(this) : null;
+    getContext(type: string, attributes?: any): any {
+        if (type === "2d") return createContext2D(this);
+        // WebGL is opt-in (EnableWebGl): off, getContext returns null exactly as before, so a map/3D library
+        // that probes for WebGL takes its unsupported path instead of a stub that would start fetching tiles.
+        if (isWebGlContextType(type) && isWebGlEnabled()) return createWebGLContext(this, type, attributes);
+        return null;
     }
 
     toDataURL(): string {

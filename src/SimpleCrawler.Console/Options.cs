@@ -85,5 +85,8 @@ public sealed class Options
 
     [Option("indexedDb", Required = false, HelpText = "Apply if rendering should stub IndexedDb")]
     public bool IndexedDb { get; set; }
+
+    [Option("webgl", Required = false, HelpText = "Apply if rendering should stub WebGL (lets map/3D sites render instead of tripping their error boundary)")]
+    public bool WebGl { get; set; }
 #endif
 }

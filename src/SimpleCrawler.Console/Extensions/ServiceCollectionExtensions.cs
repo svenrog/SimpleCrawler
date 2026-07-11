@@ -47,6 +47,7 @@ internal static class ServiceCollectionExtensions
             EnableFetch = options.Fetch,
             EnableStreams = options.Streaming,
             EnableIndexedDb = options.IndexedDb,
+            EnableWebGl = options.WebGl,
         };
 #endif
 
