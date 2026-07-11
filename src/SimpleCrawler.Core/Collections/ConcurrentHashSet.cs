@@ -79,7 +79,10 @@ public class ConcurrentHashSet<T> : ICollection<T>, ISet<T>, IReadOnlyCollection
 
     public IEnumerator<T> GetEnumerator()
     {
-        return _dictionary.Keys.GetEnumerator();
+        // ConcurrentDictionary.Keys snapshots every key into a fresh List under all locks on each access;
+        // enumerating the dictionary directly walks live buckets and only allocates the enumerator itself.
+        foreach (var pair in _dictionary)
+            yield return pair.Key;
     }
 
     public void IntersectWith(IEnumerable<T> other)
@@ -140,6 +143,6 @@ public class ConcurrentHashSet<T> : ICollection<T>, ISet<T>, IReadOnlyCollection
 
     IEnumerator IEnumerable.GetEnumerator()
     {
-        return _dictionary.Keys.GetEnumerator();
+        return GetEnumerator();
     }
 }
