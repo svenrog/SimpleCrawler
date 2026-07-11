@@ -2,7 +2,7 @@
   "profiles": {
     "SimpleCrawler": {
       "commandName": "Project",
-      "commandLineArgs": "-e \"https://www.github.com\" -o \"www.github.com.log\" --report \"www.github.com.json\" --progress -d 1"
+      "commandLineArgs": "-e \"https://github.com\" -o \"github.com.log\" --report \"github.com.json\" --progress -d 1"
     }
   }
 }
