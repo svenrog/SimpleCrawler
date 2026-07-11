@@ -1,7 +1,11 @@
 using SimpleCrawler.Core;
 using SimpleCrawler.Core.Models;
+using SimpleCrawler.Core.Proxy;
+using SimpleCrawler.Core.Robots;
+using SimpleCrawler.Tests.Helpers;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
+using System.Text.Json;
 
 namespace SimpleCrawler.Tests;
 
@@ -53,6 +57,62 @@ public class CrawlerCancellationTests
 
         protected override ValueTask<PageExtract> ExtractPageData(string document) =>
             new(new PageExtract(null, RobotsRules.All, []));
+
+        protected override ValueTask<ScrapeResult> GetResult(CancellationToken cancellationToken) =>
+            new(new ScrapeResult { Urls = Visited });
+    }
+
+    [Fact]
+    public async Task Start_Surfaces_Cancellation_While_A_Browser_Launch_Is_Wedged()
+    {
+        var options = Options.Create(new HeadlessCrawlerOptions(new CrawlerOptions
+        {
+            CrawlDelay = 0,
+            Concurrency = 2,
+            RespectRobotsTxt = false,
+            RespectMetaRobots = false,
+            EnableSitemapDiscovery = false,
+        }));
+
+        var crawler = new WedgedLaunchCrawler(new StubRobotClient(), options);
+        using var cts = new CancellationTokenSource();
+
+        var run = crawler.Start(["https://example.com/"], cts.Token);
+        Assert.True(await crawler.AcquireStarted.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken));
+
+        cts.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => run);
+    }
+
+    /// <summary>
+    /// Models a headless backend whose first-use browser launch (inside page acquisition) honors no token
+    /// and never completes - the deadlock that hangs a crawl worker before it ever reaches the cancelable
+    /// navigation. Guards that AttemptLoad now abandons a stuck acquisition on cancel.
+    /// </summary>
+    private sealed class WedgedLaunchCrawler : AbstractHeadlessCrawler<object, ScrapeResult>
+    {
+        public readonly SemaphoreSlim AcquireStarted = new(0, 2);
+
+        public WedgedLaunchCrawler(IRobotClient robotClient, IOptions<HeadlessCrawlerOptions> options)
+            : base(robotClient, options, NullLogger.Instance)
+        {
+        }
+
+        protected override async Task<object> NewPageAsync(ProxyInfo? proxy)
+        {
+            AcquireStarted.Release();
+            await Task.Delay(Timeout.Infinite, CancellationToken.None);
+            return new object();
+        }
+
+        protected override Task<int?> NavigateAsync(object page, string url, ProxyInfo? proxy, CancellationToken cancellationToken) =>
+            Task.FromResult<int?>(200);
+
+        protected override Task ClosePageCore(object page) => Task.CompletedTask;
+
+        protected override Task<JsonElement> EvaluateExtractorAsync(object page, string script, CancellationToken cancellationToken) =>
+            Task.FromResult(default(JsonElement));
 
         protected override ValueTask<ScrapeResult> GetResult(CancellationToken cancellationToken) =>
             new(new ScrapeResult { Urls = Visited });

@@ -20,6 +20,7 @@ namespace SimpleCrawler.Tests;
 /// a real site). The fetcher now skips non-HTTP schemes and treats any fetch failure as an empty module, so the
 /// render degrades gracefully and the rest of the page still hydrates.
 /// </summary>
+[Collection("Crawler")]
 public class JsModuleFetchTests
 {
     [Theory]

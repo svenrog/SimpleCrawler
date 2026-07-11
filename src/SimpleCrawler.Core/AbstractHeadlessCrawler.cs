@@ -43,7 +43,8 @@ public abstract class AbstractHeadlessCrawler<TPage, TResult> : AbstractRobotsCr
 
     private async Task<RetryAttempt<TPage?>> AttemptLoad(string url, ProxyInfo? proxy, CancellationToken cancellationToken)
     {
-        var page = await AcquirePage(proxy);
+        // A first-use browser launch was uncancellable here.
+        var page = await AcquirePage(proxy).AsTask().WaitAsync(cancellationToken);
 
         int? status;
         try

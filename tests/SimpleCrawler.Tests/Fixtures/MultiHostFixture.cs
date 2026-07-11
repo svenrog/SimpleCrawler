@@ -80,9 +80,22 @@ public sealed class MultiHostFixture : IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
-        // Bound graceful shutdown so a stalled host can't pin the testhost process once xUnit gives up.
+        // Bound the whole shutdown so neither a stalled host nor an unbounded ServiceProvider disposal can
+        // pin the test host once the runner (or the IDE "Stop" button) has given up on the run.
         CancellationSource.CancelAfter(_shutdownTimeout);
 
+        try
+        {
+            await TeardownGuard.RunBounded(StopAndDisposeHosts, _shutdownTimeout);
+        }
+        finally
+        {
+            CancellationSource.Dispose();
+        }
+    }
+
+    private async Task StopAndDisposeHosts()
+    {
         foreach (var host in _hosts)
         {
             try
@@ -104,13 +117,6 @@ public sealed class MultiHostFixture : IAsyncDisposable
             }
         }
 
-        try
-        {
-            await ServiceProvider.DisposeAsync();
-        }
-        finally
-        {
-            CancellationSource.Dispose();
-        }
+        await ServiceProvider.DisposeAsync();
     }
 }

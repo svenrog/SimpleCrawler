@@ -29,8 +29,16 @@ public class SpaCrawlerTests : IClassFixture<SpaHostFixture>
         return data;
     }
 
+    // Playwright and Puppeteer drive a real Chromium, which renders every framework identically, so the
+    // 5-framework matrix adds no signal there — one representative framework proves the headless backend
+    // crawls an SPA. The per-framework matrix stays on Jint/V8 below, where it actually exercises the
+    // pure-JS DOM's handling of each framework's runtime. Derived from the first entry of the real set so
+    // it always names a framework the fixture actually serves (a literal would break HostName's port math
+    // via Array.IndexOf → -1 if that framework were ever removed or renamed).
+    public static TheoryData<string> HeadlessFrameworks() => [SpaHostFixture.Frameworks[0]];
+
     [Theory]
-    [MemberData(nameof(Frameworks))]
+    [MemberData(nameof(HeadlessFrameworks))]
     public async Task PlaywrightCrawler_Can_Crawl(string framework)
     {
         var subject = _context.ServiceProvider.GetRequiredService<DefaultPlaywrightCrawler>();
@@ -40,7 +48,7 @@ public class SpaCrawlerTests : IClassFixture<SpaHostFixture>
     }
 
     [Theory]
-    [MemberData(nameof(Frameworks))]
+    [MemberData(nameof(HeadlessFrameworks))]
     public async Task PuppeteerCrawler_Can_Crawl(string framework)
     {
         var subject = _context.ServiceProvider.GetRequiredService<DefaultPuppeteerCrawler>();

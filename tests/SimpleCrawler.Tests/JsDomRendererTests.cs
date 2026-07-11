@@ -1,12 +1,8 @@
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
-using SimpleCrawler.Core;
-using SimpleCrawler.Js.Abstractions;
-using SimpleCrawler.Js.Jint;
 using SimpleCrawler.Js.Models;
 using SimpleCrawler.Js.Rendering;
-using SimpleCrawler.Js.V8;
+using SimpleCrawler.Tests.Fixtures;
 using SimpleCrawler.Tests.Helpers;
 using SimpleCrawler.Tests.Models;
 using System.Net;
@@ -19,18 +15,19 @@ namespace SimpleCrawler.Tests;
 /// script mutates the JS DOM, and the tree is serialized back to HTML — no managed DOM wrappers involved.
 /// Theory'd over both engines since the JS DOM is the single code path for Jint + V8.
 /// </summary>
-public class JsDomRendererTests
+[Collection("Crawler")]
+public class JsDomRendererTests : IClassFixture<JsRendererFixture>
 {
-    private static JsRenderer CreateJsRenderer(JsEngine engine, JsRenderOptions? options = null, ILogger? logger = null)
+    private readonly JsRendererFixture _fixture;
+
+    public JsDomRendererTests(JsRendererFixture fixture)
     {
-        var services = new ServiceCollection();
-        var key = engine == JsEngine.V8 ? "js-v8" : "js-jint";
-        if (engine == JsEngine.V8)
-            services.AddV8Crawler(new CrawlerOptions());
-        else
-            services.AddJintCrawler(new CrawlerOptions());
-        var provider = services.BuildServiceProvider();
-        var factory = provider.GetRequiredKeyedService<IJsEngineFactory>(key);
+        _fixture = fixture;
+    }
+
+    private JsRenderer CreateJsRenderer(JsEngine engine, JsRenderOptions? options = null, ILogger? logger = null)
+    {
+        var factory = _fixture.GetFactory(engine);
         return new JsRenderer(factory, options ?? new JsRenderOptions(), logger ?? NullLogger.Instance);
     }
 
@@ -872,7 +869,7 @@ public class JsDomRendererTests
         Assert.Contains("href=\"/true-false-true-hastrue\"", rendered);
     }
 
-    private static async Task<string> RenderViewport(JsEngine engine, string html, JsRenderOptions? options)
+    private async Task<string> RenderViewport(JsEngine engine, string html, JsRenderOptions? options)
     {
         var renderer = CreateJsRenderer(engine, options);
         var result = await renderer.RenderAsync(Encoding.UTF8.GetBytes(html), "http://localhost:5000/", new HttpClient(), CancellationToken.None);

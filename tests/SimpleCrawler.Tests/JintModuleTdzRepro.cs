@@ -11,6 +11,7 @@ namespace SimpleCrawler.Tests;
 /// case ever stops throwing (a Jint fix), revisit JsModeSpaCrawlerTests' vue/Jint skip. See
 /// [[phase5-js-spa-hydration]].
 /// </summary>
+[Collection("Crawler")]
 public class JintModuleTdzRepro
 {
     // The bundled Vue runtime-core (reactivity inlined) only exists after the Astro TestHost SPA is built

@@ -11,6 +11,7 @@ namespace SimpleCrawler.Tests;
 /// returning call (alloc), on both engines. Run:
 ///   DOM_BENCH=1 dotnet run --project tests/SimpleCrawler.Tests -c Release -- -method "*MeasuresPerAccessCost"
 /// </summary>
+[Collection("Crawler")]
 public class DomMarshallingBenchTests
 {
     public sealed class BenchNode
