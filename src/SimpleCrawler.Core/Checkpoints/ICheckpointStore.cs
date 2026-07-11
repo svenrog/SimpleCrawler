@@ -5,7 +5,7 @@ public interface ICheckpointStore
     /// <summary>
     /// Human-readable description of where the checkpoint is persisted, for log output.
     /// </summary>
-    string Target { get; }
+    string Target => "checkpoint";
 
     ValueTask<CrawlState?> LoadAsync(CancellationToken cancellationToken);
     ValueTask SaveAsync(CrawlState state, CancellationToken cancellationToken);

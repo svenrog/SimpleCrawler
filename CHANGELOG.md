@@ -6,7 +6,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Package versions are derived from git tags (`v*`) via MinVer.
 
-## [Unreleased]
+## [3.1.0] - 2026-07-11
 
 ### Added
 
@@ -27,6 +27,16 @@ Package versions are derived from git tags (`v*`) via MinVer.
   emits a clean `scheme://host:port`.
 - Checkpointing now logs its activity (start line with target+interval, debug line per write, failures name
   the target); `ICheckpointStore` gained a `Target` property.
+
+### Fixed
+
+- JS DOM: closed three shim gaps that tripped SPA error boundaries mid-render. `IntersectionObserverEntry` is
+  now a global carrying the standard entry fields on its prototype (the `'isIntersecting' in
+  IntersectionObserverEntry.prototype` support probe threw a `ReferenceError`); `<canvas>` is a real
+  `HTMLCanvasElement` with reflected `width`/`height` and a no-op 2D context from `getContext('2d')`
+  (animation libraries grabbing a context synchronously threw); and `getComputedStyle` returns a
+  `CSSStyleDeclaration` whose properties read back `""` by name or as direct properties (a direct `.content`
+  read was `undefined`, so Elementor's `getCurrentDeviceMode` did `undefined.replace(...)`).
 
 ## [3.0.0] - 2026-07-09
 
@@ -128,7 +138,7 @@ Public proxy types are removed and renamed (see _Removed_ and _Changed_), a brea
 
 - Initial release.
 
-[Unreleased]: https://github.com/svenrog/SimpleCrawler/compare/v3.0.0...HEAD
+[3.1.0]: https://github.com/svenrog/SimpleCrawler/compare/v3.0.0...v3.1.0
 [3.0.0]: https://github.com/svenrog/SimpleCrawler/releases/tag/v3.0.0
 [2.0.0]: https://github.com/svenrog/SimpleCrawler/releases/tag/v2.0.0
 [1.0.0]: https://github.com/svenrog/SimpleCrawler/releases/tag/v1.0.0
