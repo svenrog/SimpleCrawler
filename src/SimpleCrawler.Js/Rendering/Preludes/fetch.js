@@ -404,6 +404,9 @@
 
   // network/api.ts
   function installNetwork(global) {
+    global.__http = global.__http || {
+      request: (url, method, headersJson, body) => JSON.parse(__httpRequest(url, method, headersJson, body))
+    };
     global.Headers = global.Headers || Headers;
     global.Response = global.Response || Response;
     global.Request = global.Request || Request;

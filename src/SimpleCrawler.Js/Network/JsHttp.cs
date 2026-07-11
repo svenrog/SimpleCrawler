@@ -33,6 +33,47 @@ public sealed class JsHttp
     /// </summary>
     public JsHttpResponse request(params object?[] args)
     {
+        try
+        {
+            return RequestCore(args);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Render fetch threw before send: {message}", ex.Message);
+            return new JsHttpResponse { error = ex.Message };
+        }
+    }
+
+    /// <summary>
+    /// Delegate-friendly entry point embedded as the <c>__httpRequest</c> global. ClearScript's V8 backend
+    /// cannot reflectively invoke a host object's instance method under NativeAOT (it throws while binding the
+    /// call), so the fetch bridge is embedded as a plain variadic function instead and the whole response
+    /// crosses back as a JSON string — no host-object member access on either the call or the result.
+    /// </summary>
+    public object? requestJson(params object?[] args) => SerializeResponse(request(args));
+
+    private static string SerializeResponse(JsHttpResponse response)
+    {
+        using var buffer = new MemoryStream();
+        using (var writer = new Utf8JsonWriter(buffer))
+        {
+            writer.WriteStartObject();
+            writer.WriteNumber("status", response.status);
+            writer.WriteString("statusText", response.statusText);
+            writer.WriteString("url", response.url);
+            writer.WriteString("body", response.body);
+            writer.WriteString("headersJson", response.headersJson);
+            if (response.error is not null)
+                writer.WriteString("error", response.error);
+
+            writer.WriteEndObject();
+        }
+
+        return Encoding.UTF8.GetString(buffer.ToArray());
+    }
+
+    private JsHttpResponse RequestCore(params object?[] args)
+    {
         var url = args.Length > 0 ? args[0]?.ToString() : null;
         if (string.IsNullOrEmpty(url))
             return new JsHttpResponse { error = "fetch called without a URL" };

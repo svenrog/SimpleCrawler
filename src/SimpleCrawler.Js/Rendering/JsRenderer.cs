@@ -126,7 +126,11 @@ public sealed class JsRenderer
 
         if (_options.EnableFetch)
         {
-            engine.EmbedHostObject("__http", new JsHttp(client, pageUri, _logger, _fetchCache, cancellationToken));
+            // Embedded as a variadic function (not a host object): ClearScript's V8 backend can't reflectively
+            // invoke a host object's instance method under NativeAOT. The fetch prelude wraps this in a JS
+            // __http shim. See JsHttp.requestJson.
+            var http = new JsHttp(client, pageUri, _logger, _fetchCache, cancellationToken);
+            engine.EmbedFunction("__httpRequest", http.requestJson);
             RunPrelude(engine, JsPreludes.Fetch);
         }
 
