@@ -8,8 +8,10 @@
     <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
     <AnalysisLevel>latest</AnalysisLevel>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+	<!-- Unmitigatable AOT trim warnings -->
+	<WarningsNotAsErrors>IL2026,IL2104,IL2111,IL3000,IL3053</WarningsNotAsErrors>
   </PropertyGroup>
-
+	
   <ItemGroup>
     <PackageReference Include="MinVer" Version="6.0.0" PrivateAssets="all" />
   </ItemGroup>
