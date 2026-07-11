@@ -141,7 +141,7 @@ Public proxy types are removed and renamed (see _Removed_ and _Changed_), a brea
 - Initial release.
 
 [Unreleased]: https://github.com/svenrog/SimpleCrawler/compare/v3.1.0...HEAD
-[3.1.0]: https://github.com/svenrog/SimpleCrawler/compare/v3.0.0...v3.1.0
+[3.1.0]: https://github.com/svenrog/SimpleCrawler/releases/tag/v3.1.0
 [3.0.0]: https://github.com/svenrog/SimpleCrawler/releases/tag/v3.0.0
 [2.0.0]: https://github.com/svenrog/SimpleCrawler/releases/tag/v2.0.0
 [1.0.0]: https://github.com/svenrog/SimpleCrawler/releases/tag/v1.0.0
