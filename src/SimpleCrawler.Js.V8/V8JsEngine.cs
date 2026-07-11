@@ -48,7 +48,11 @@ internal sealed class V8JsEngine : IJsEngine, IDisposable
         _lease = pool.Rent();
         _engine = _lease.Runtime.CreateScriptEngine(_engineFlags);
         _loader = new V8ModuleLoader(fetcher, baseUri);
-        _engine.DocumentSettings.AccessFlags = DocumentAccessFlags.EnableAllLoading;
+        // EnableWebLoading only, never EnableAllLoading: every import is served by our own V8ModuleLoader,
+        // whose fetcher refuses any scheme but http/https, so file loading is never legitimately needed.
+        // Withholding EnableFileLoading removes a latent local-file-read primitive — untrusted page JS can
+        // resolve an import() to a file:// URI, and this keeps that path from ever reaching the disk.
+        _engine.DocumentSettings.AccessFlags = DocumentAccessFlags.EnableWebLoading;
         _engine.DocumentSettings.Loader = _loader;
     }
 
