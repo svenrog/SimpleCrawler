@@ -8,6 +8,13 @@ Package versions are derived from git tags (`v*`) via MinVer.
 
 ## [Unreleased]
 
+### Security
+
+- Narrowed the V8 rendering engine's document access from `EnableAllLoading` to `EnableWebLoading`. All
+  module imports are served by the custom `V8ModuleLoader`, whose fetcher only accepts http/https, so file
+  loading was never needed; withholding `EnableFileLoading` removes a latent local-file-read path that
+  untrusted page JS could otherwise resolve an `import()` toward.
+
 ## [3.2.0] - 2026-07-11
 
 ### Added
