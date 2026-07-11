@@ -29,11 +29,13 @@ import { createStorage } from "./Storage";
 import { performance } from "./Performance";
 import { installViewport } from "./viewport";
 import { IntersectionObserver } from "./IntersectionObserver";
+import { IntersectionObserverEntry } from "./IntersectionObserverEntry";
 import { Blob } from "./Blob";
 import { DOMException } from "./DOMException";
 import { FileList } from "./FileList";
 import { btoa, atob } from "./base64";
 import { documentRef } from "../dom/documentRef";
+import { createStyleDeclaration } from "../css/CSSStyleDeclaration";
 import { installScrollApi } from "./scroll";
 import { markPrototypeNative } from "./native";
 import { EventListenerMap, EventTarget, addListener, removeListener, fireEvent } from "../dom/eventTarget";
@@ -73,7 +75,12 @@ export function installDOM(global: any): void {
         }
         reportSwallowed("reportError", error);
     });
-    global.getComputedStyle = () => ({ getPropertyValue: () => null });
+    // A real getComputedStyle returns a resolved CSSStyleDeclaration; the layout-less render can't resolve
+    // values, so every property reads back "" (an empty string — never null/undefined). Bundles read computed
+    // values both by name and as direct properties (Elementor's getCurrentDeviceMode does
+    // `getComputedStyle(el, ':after').content.replace(...)`, which throws if `.content` is undefined), so a
+    // fresh empty declaration — which returns "" for any key and via getPropertyValue — covers both paths.
+    global.getComputedStyle = () => createStyleDeclaration();
     global.getSelection = () => ({
         rangeCount: 0,
         type: "None",
@@ -90,6 +97,7 @@ export function installDOM(global: any): void {
         this.takeRecords = () => [];
     };
     global.IntersectionObserver = IntersectionObserver;
+    global.IntersectionObserverEntry = IntersectionObserverEntry;
     global.ResizeObserver = function () {
         this.observe = () => { };
         this.unobserve = () => { };

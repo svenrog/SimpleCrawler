@@ -1,4 +1,5 @@
 import { enqueue } from "../scheduler/taskQueue";
+import { _zeroRect } from "./IntersectionObserverEntry";
 
 // A real IntersectionObserver fires its callback asynchronously; the headless render has no scroll, so every
 // observed element is reported as fully intersecting once. Lazy-mount-on-visible blocks (e.g. AntD skeletons
@@ -15,7 +16,7 @@ export class IntersectionObserver {
     observe(target: any): void {
         const rect = target && typeof target.getBoundingClientRect === "function"
             ? target.getBoundingClientRect()
-            : { top: 0, left: 0, right: 0, bottom: 0, width: 0, height: 0, x: 0, y: 0 };
+            : _zeroRect;
         this._pending.push({
             target,
             isIntersecting: true,

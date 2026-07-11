@@ -1729,6 +1729,89 @@
     }
   };
 
+  // dom/HTMLCanvasElement.ts
+  function createContext2D(canvas) {
+    const noop = () => {
+    };
+    return {
+      canvas,
+      fillStyle: "#000000",
+      strokeStyle: "#000000",
+      globalAlpha: 1,
+      globalCompositeOperation: "source-over",
+      lineWidth: 1,
+      lineCap: "butt",
+      lineJoin: "miter",
+      font: "10px sans-serif",
+      textAlign: "start",
+      textBaseline: "alphabetic",
+      save: noop,
+      restore: noop,
+      scale: noop,
+      rotate: noop,
+      translate: noop,
+      transform: noop,
+      setTransform: noop,
+      resetTransform: noop,
+      beginPath: noop,
+      closePath: noop,
+      moveTo: noop,
+      lineTo: noop,
+      bezierCurveTo: noop,
+      quadraticCurveTo: noop,
+      arc: noop,
+      arcTo: noop,
+      ellipse: noop,
+      rect: noop,
+      fill: noop,
+      stroke: noop,
+      clip: noop,
+      fillRect: noop,
+      strokeRect: noop,
+      clearRect: noop,
+      fillText: noop,
+      strokeText: noop,
+      drawImage: noop,
+      putImageData: noop,
+      setLineDash: noop,
+      getLineDash: () => [],
+      measureText: () => ({ width: 0, actualBoundingBoxAscent: 0, actualBoundingBoxDescent: 0 }),
+      createLinearGradient: () => ({ addColorStop: noop }),
+      createRadialGradient: () => ({ addColorStop: noop }),
+      createPattern: () => null,
+      createImageData: (w, h) => ({ width: w || 0, height: h || 0, data: new Uint8ClampedArray(Math.max(0, (w || 0) * (h || 0) * 4)) }),
+      getImageData: (_x, _y, w, h) => ({ width: w || 0, height: h || 0, data: new Uint8ClampedArray(Math.max(0, (w || 0) * (h || 0) * 4)) })
+    };
+  }
+  var HTMLCanvasElement = class extends HTMLElement {
+    constructor() {
+      super("canvas");
+    }
+    get width() {
+      const v = parseInt(this.getAttribute("width") || "", 10);
+      return isNaN(v) ? 300 : v;
+    }
+    set width(value) {
+      this.setAttribute("width", String(value == null ? 0 : value));
+    }
+    get height() {
+      const v = parseInt(this.getAttribute("height") || "", 10);
+      return isNaN(v) ? 150 : v;
+    }
+    set height(value) {
+      this.setAttribute("height", String(value == null ? 0 : value));
+    }
+    getContext(type) {
+      return type === "2d" ? createContext2D(this) : null;
+    }
+    toDataURL() {
+      return "data:,";
+    }
+    toBlob(callback) {
+      if (typeof callback === "function") callback(null);
+    }
+  };
+
   // dom/reflectedElements.ts
   var reflectedElementFactories = {
     a: () => new HTMLAnchorElement(),
@@ -1740,7 +1823,8 @@
     iframe: () => new HTMLIFrameElement(),
     video: () => new HTMLVideoElement(),
     audio: () => new HTMLAudioElement(),
-    dialog: () => new HTMLDialogElement()
+    dialog: () => new HTMLDialogElement(),
+    canvas: () => new HTMLCanvasElement()
   };
 
   // html/entities.ts
@@ -2280,8 +2364,6 @@
   };
   var HTMLStyleElement = class extends HTMLElement {
   };
-  var HTMLCanvasElement = class extends HTMLElement {
-  };
   var HTMLUnknownElement = class extends HTMLElement {
   };
   var SVGElement = class extends Element {
@@ -2585,6 +2667,32 @@
   };
   var performance = new Performance();
 
+  // browser/IntersectionObserverEntry.ts
+  var _zeroRect2 = Object.freeze({ top: 0, left: 0, right: 0, bottom: 0, width: 0, height: 0, x: 0, y: 0 });
+  var IntersectionObserverEntry = class {
+    get boundingClientRect() {
+      return _zeroRect2;
+    }
+    get intersectionRect() {
+      return _zeroRect2;
+    }
+    get rootBounds() {
+      return null;
+    }
+    get intersectionRatio() {
+      return 0;
+    }
+    get isIntersecting() {
+      return false;
+    }
+    get target() {
+      return null;
+    }
+    get time() {
+      return 0;
+    }
+  };
+
   // browser/IntersectionObserver.ts
   var IntersectionObserver = class {
     constructor(callback) {
@@ -2594,7 +2702,7 @@
       };
     }
     observe(target) {
-      const rect = target && typeof target.getBoundingClientRect === "function" ? target.getBoundingClientRect() : { top: 0, left: 0, right: 0, bottom: 0, width: 0, height: 0, x: 0, y: 0 };
+      const rect = target && typeof target.getBoundingClientRect === "function" ? target.getBoundingClientRect() : _zeroRect2;
       this._pending.push({
         target,
         isIntersecting: true,
@@ -2866,7 +2974,7 @@
       }
       reportSwallowed("reportError", error);
     });
-    global.getComputedStyle = () => ({ getPropertyValue: () => null });
+    global.getComputedStyle = () => createStyleDeclaration();
     global.getSelection = () => ({
       rangeCount: 0,
       type: "None",
@@ -2891,6 +2999,7 @@
       this.takeRecords = () => [];
     };
     global.IntersectionObserver = IntersectionObserver;
+    global.IntersectionObserverEntry = IntersectionObserverEntry;
     global.ResizeObserver = function() {
       this.observe = () => {
       };
