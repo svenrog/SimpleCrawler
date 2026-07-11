@@ -9,6 +9,12 @@ public sealed class UrlReport
 {
     public required string Url { get; set; }
     public string? CanonicalUrl { get; set; }
+
+    /// <summary>
+    /// Link depth from the nearest entry point: entries are 0 and each followed link is one deeper.
+    /// </summary>
+    public int Depth { get; set; }
+
     public int? StatusCode { get; set; }
     public CrawlOutcome Outcome { get; set; }
     public TimeSpan FetchDuration { get; set; }
