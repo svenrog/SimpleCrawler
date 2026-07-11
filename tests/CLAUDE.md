@@ -4,7 +4,11 @@
 
 - Tests use **xUnit v3** (pre-release `xunit.v3`, Microsoft.Testing.Platform), FluentAssertions, and Moq — not xUnit v2 idioms.
 - `dotnet test` does **not** work; run a test project directly: `dotnet run --project tests/SimpleCrawler.Tests -c Release`.
-- Run a single test with the MTP native runner filter: `dotnet run --project tests/SimpleCrawler.Tests -c Release -- --filter "/*/*/ClassName/MethodName"`.
+- Filter with the MTP native runner (note the **single** dash — `--filter` errors with `unknown option`):
+  - By class: `dotnet run --project tests/SimpleCrawler.Tests -c Release -- -class "*ClassName"`
+  - By method: `... -- -method "*.MethodName"` (wildcards allowed at either end)
+  - By namespace: `... -- -namespace "SimpleCrawler.Tests"`
+  - Query form: `... -- -filter "/assemblyName/namespace/class/method"` (see xUnit query-filter language)
 
 ## Benchmarks
 

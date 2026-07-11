@@ -3,8 +3,6 @@ using SimpleCrawler.Core.Models;
 using SimpleCrawler.HtmlAgilityPack;
 using SimpleCrawler.Js.Jint;
 using SimpleCrawler.Js.V8;
-using SimpleCrawler.Playwright;
-using SimpleCrawler.Puppeteer;
 using SimpleCrawler.Tests.Assertions;
 using SimpleCrawler.Tests.Fixtures;
 using Microsoft.Extensions.DependencyInjection;
@@ -68,23 +66,9 @@ public class StaticCrawlerTests : IClassFixture<StaticHostFixture>
         AssertResult(result);
     }
 
-    [Fact]
-    public async Task PlaywrightCrawler_Can_Crawl()
-    {
-        var subject = _context.ServiceProvider.GetRequiredService<DefaultPlaywrightCrawler>();
-        var result = await subject.Start(StaticHostFixture.HostName, TestContext.Current.CancellationToken);
-
-        AssertResult(result);
-    }
-
-    [Fact]
-    public async Task PuppeteerCrawler_Can_Crawl()
-    {
-        var subject = _context.ServiceProvider.GetRequiredService<DefaultPuppeteerCrawler>();
-        var result = await subject.Start(StaticHostFixture.HostName, TestContext.Current.CancellationToken);
-
-        AssertResult(result);
-    }
+    // The headless (Playwright/Puppeteer) backends are covered end-to-end against a real SPA in
+    // SpaCrawlerTests; crawling this static page with them as well adds no signal but cold-launches
+    // two browsers, so those facts are intentionally omitted here.
 
     protected void AssertResult(IScrapeResult result)
     {
