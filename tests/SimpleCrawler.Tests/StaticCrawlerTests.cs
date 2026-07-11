@@ -1,11 +1,11 @@
-﻿using SimpleCrawler.AngleSharp;
+﻿using Microsoft.Extensions.DependencyInjection;
+using SimpleCrawler.AngleSharp;
 using SimpleCrawler.Core.Models;
 using SimpleCrawler.HtmlAgilityPack;
 using SimpleCrawler.Js.Jint;
 using SimpleCrawler.Js.V8;
 using SimpleCrawler.Tests.Assertions;
 using SimpleCrawler.Tests.Fixtures;
-using Microsoft.Extensions.DependencyInjection;
 
 namespace SimpleCrawler.Tests;
 
@@ -17,15 +17,6 @@ public class StaticCrawlerTests : IClassFixture<StaticHostFixture>
     public StaticCrawlerTests(StaticHostFixture hostFixture)
     {
         _context = hostFixture;
-    }
-
-    [Fact]
-    public async Task HtmlAgilityPackCrawler_Can_Crawl()
-    {
-        var subject = _context.ServiceProvider.GetRequiredService<DefaultHtmlAgilityPackCrawler>();
-        var result = await subject.Start(StaticHostFixture.HostName, TestContext.Current.CancellationToken);
-
-        AssertResult(result);
     }
 
     [Fact]

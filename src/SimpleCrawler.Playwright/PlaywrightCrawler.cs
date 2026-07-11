@@ -1,11 +1,11 @@
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
+using Microsoft.Playwright;
 using SimpleCrawler.Core;
 using SimpleCrawler.Core.Checkpoints;
 using SimpleCrawler.Core.Models;
 using SimpleCrawler.Core.Proxy;
 using SimpleCrawler.Core.Robots;
-using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
-using Microsoft.Playwright;
 using System.Text.Json;
 
 namespace SimpleCrawler.Playwright;

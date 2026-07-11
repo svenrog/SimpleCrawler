@@ -90,10 +90,25 @@ public abstract class AbstractHostFixture : IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
-        // Bound graceful shutdown: a stalled host would otherwise wait out the 30s shutdown timeout
-        // while xUnit (and VS) have already given up on the run, pinning the testhost process.
+        // Bound the WHOLE shutdown, not just host StopAsync: host.DisposeAsync and - critically -
+        // ServiceProvider.DisposeAsync (which tears down the Playwright/Puppeteer browser subprocesses)
+        // are otherwise unbounded, so a wedged browser dispose would pin the test host long after the
+        // runner (or the IDE "Stop" button) has given up on the run.
         _stopping.CancelAfter(_shutdownTimeout);
 
+        try
+        {
+            await TeardownGuard.RunBounded(StopAndDisposeHosts, _shutdownTimeout);
+        }
+        finally
+        {
+            _stopping.Dispose();
+            GC.SuppressFinalize(this);
+        }
+    }
+
+    private async Task StopAndDisposeHosts()
+    {
         foreach (var host in _hosts)
         {
             try
@@ -116,14 +131,6 @@ public abstract class AbstractHostFixture : IAsyncDisposable
             }
         }
 
-        try
-        {
-            await ServiceProvider.DisposeAsync();
-        }
-        finally
-        {
-            _stopping.Dispose();
-            GC.SuppressFinalize(this);
-        }
+        await ServiceProvider.DisposeAsync();
     }
 }
