@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Package versions are derived from git tags (`v*`) via MinVer.
 
+## [Unreleased]
+
 ## [3.1.0] - 2026-07-11
 
 ### Added
@@ -138,6 +140,7 @@ Public proxy types are removed and renamed (see _Removed_ and _Changed_), a brea
 
 - Initial release.
 
+[Unreleased]: https://github.com/svenrog/SimpleCrawler/compare/v3.1.0...HEAD
 [3.1.0]: https://github.com/svenrog/SimpleCrawler/compare/v3.0.0...v3.1.0
 [3.0.0]: https://github.com/svenrog/SimpleCrawler/releases/tag/v3.0.0
 [2.0.0]: https://github.com/svenrog/SimpleCrawler/releases/tag/v2.0.0
