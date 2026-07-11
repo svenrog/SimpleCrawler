@@ -8,6 +8,17 @@ Package versions are derived from git tags (`v*`) via MinVer.
 
 ## [Unreleased]
 
+## [3.2.0] - 2026-07-11
+
+### Added
+
+- Opt-in WebGL stub for the JS rendering backends (`JsRenderOptions.EnableWebGl`, CLI `--webgl`): map/3D
+  libraries (Mapbox GL, Three.js, deck.gl) initialize WebGL synchronously while constructing and throw
+  "Failed to initialize WebGL." on a null context, an uncaught throw that trips the SPA error boundary and
+  drops every link on the page. When enabled, `canvas.getContext("webgl"/"webgl2")` returns a non-faulting
+  stub context that reports success through setup so the surrounding page renders. Off by default (the map
+  yields no anchors, and once initialized such a library may start fetching tiles).
+
 ## [3.1.0] - 2026-07-11
 
 ### Added
@@ -140,7 +151,8 @@ Public proxy types are removed and renamed (see _Removed_ and _Changed_), a brea
 
 - Initial release.
 
-[Unreleased]: https://github.com/svenrog/SimpleCrawler/compare/v3.1.0...HEAD
+[Unreleased]: https://github.com/svenrog/SimpleCrawler/compare/v3.2.0...HEAD
+[3.2.0]: https://github.com/svenrog/SimpleCrawler/releases/tag/v3.2.0
 [3.1.0]: https://github.com/svenrog/SimpleCrawler/releases/tag/v3.1.0
 [3.0.0]: https://github.com/svenrog/SimpleCrawler/releases/tag/v3.0.0
 [2.0.0]: https://github.com/svenrog/SimpleCrawler/releases/tag/v2.0.0

@@ -81,6 +81,9 @@ public sealed class JsRenderer
 
         ConfigureScriptLogging(engine);
         ConfigureDiagnostics(engine);
+        if (_options.EnableWebGl)
+            engine.CallGlobal("__crawlerEnableWebGl");
+
         if (_options.EnableIndexedDb)
             RunPrelude(engine, JsPreludes.IndexedDb);
 

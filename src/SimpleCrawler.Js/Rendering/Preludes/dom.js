@@ -1729,6 +1729,196 @@
     }
   };
 
+  // dom/webgl.ts
+  var _enabled = false;
+  function enableWebGl() {
+    _enabled = true;
+  }
+  function isWebGlEnabled() {
+    return _enabled;
+  }
+  function isWebGlContextType(type) {
+    return type === "webgl" || type === "webgl2" || type === "experimental-webgl" || type === "experimental-webgl2";
+  }
+  var CONSTANTS = {
+    VENDOR: 7936,
+    RENDERER: 7937,
+    VERSION: 7938,
+    SHADING_LANGUAGE_VERSION: 35724,
+    UNMASKED_VENDOR_WEBGL: 37445,
+    UNMASKED_RENDERER_WEBGL: 37446,
+    MAX_TEXTURE_SIZE: 3379,
+    MAX_CUBE_MAP_TEXTURE_SIZE: 34076,
+    MAX_RENDERBUFFER_SIZE: 34024,
+    MAX_3D_TEXTURE_SIZE: 32883,
+    MAX_ARRAY_TEXTURE_LAYERS: 35071,
+    MAX_VIEWPORT_DIMS: 3386,
+    MAX_VERTEX_ATTRIBS: 34921,
+    MAX_VERTEX_UNIFORM_VECTORS: 36347,
+    MAX_VARYING_VECTORS: 36348,
+    MAX_FRAGMENT_UNIFORM_VECTORS: 36349,
+    MAX_TEXTURE_IMAGE_UNITS: 34930,
+    MAX_VERTEX_TEXTURE_IMAGE_UNITS: 35660,
+    MAX_COMBINED_TEXTURE_IMAGE_UNITS: 35661,
+    MAX_TEXTURE_MAX_ANISOTROPY_EXT: 34047,
+    MAX_DRAW_BUFFERS: 34852,
+    MAX_COLOR_ATTACHMENTS: 36063,
+    MAX_SAMPLES: 36183,
+    ALIASED_LINE_WIDTH_RANGE: 33902,
+    ALIASED_POINT_SIZE_RANGE: 33901,
+    SAMPLES: 32937,
+    SAMPLE_BUFFERS: 32936,
+    RED_BITS: 3410,
+    GREEN_BITS: 3411,
+    BLUE_BITS: 3412,
+    ALPHA_BITS: 3413,
+    DEPTH_BITS: 3414,
+    STENCIL_BITS: 3415,
+    SUBPIXEL_BITS: 3408,
+    COMPILE_STATUS: 35713,
+    LINK_STATUS: 35714,
+    VALIDATE_STATUS: 35715,
+    DELETE_STATUS: 35712,
+    ACTIVE_UNIFORMS: 35718,
+    ACTIVE_ATTRIBUTES: 35721,
+    FRAMEBUFFER_COMPLETE: 36053,
+    NO_ERROR: 0
+  };
+  var _nextSynthetic = 2415919104;
+  function constantFor(name) {
+    let value = CONSTANTS[name];
+    if (value === void 0) {
+      value = _nextSynthetic++;
+      CONSTANTS[name] = value;
+    }
+    return value;
+  }
+  function getParameterValue(pname, isWebGl2) {
+    switch (pname) {
+      case CONSTANTS.VERSION:
+        return isWebGl2 ? "WebGL 2.0" : "WebGL 1.0";
+      case CONSTANTS.SHADING_LANGUAGE_VERSION:
+        return isWebGl2 ? "WebGL GLSL ES 3.00" : "WebGL GLSL ES 1.0";
+      case CONSTANTS.VENDOR:
+      case CONSTANTS.UNMASKED_VENDOR_WEBGL:
+        return "SimpleCrawler";
+      case CONSTANTS.RENDERER:
+      case CONSTANTS.UNMASKED_RENDERER_WEBGL:
+        return "SimpleCrawler WebGL";
+      case CONSTANTS.MAX_TEXTURE_SIZE:
+      case CONSTANTS.MAX_CUBE_MAP_TEXTURE_SIZE:
+      case CONSTANTS.MAX_RENDERBUFFER_SIZE:
+      case CONSTANTS.MAX_3D_TEXTURE_SIZE:
+        return 4096;
+      case CONSTANTS.MAX_VIEWPORT_DIMS:
+        return new Int32Array([4096, 4096]);
+      case CONSTANTS.MAX_VERTEX_ATTRIBS:
+      case CONSTANTS.MAX_TEXTURE_IMAGE_UNITS:
+      case CONSTANTS.MAX_VERTEX_TEXTURE_IMAGE_UNITS:
+      case CONSTANTS.MAX_TEXTURE_MAX_ANISOTROPY_EXT:
+        return 16;
+      case CONSTANTS.MAX_COMBINED_TEXTURE_IMAGE_UNITS:
+        return 32;
+      case CONSTANTS.MAX_VERTEX_UNIFORM_VECTORS:
+      case CONSTANTS.MAX_FRAGMENT_UNIFORM_VECTORS:
+        return 1024;
+      case CONSTANTS.MAX_VARYING_VECTORS:
+        return 30;
+      case CONSTANTS.MAX_DRAW_BUFFERS:
+      case CONSTANTS.MAX_COLOR_ATTACHMENTS:
+        return 8;
+      case CONSTANTS.MAX_ARRAY_TEXTURE_LAYERS:
+        return 256;
+      case CONSTANTS.MAX_SAMPLES:
+        return 4;
+      case CONSTANTS.ALIASED_LINE_WIDTH_RANGE:
+      case CONSTANTS.ALIASED_POINT_SIZE_RANGE:
+        return new Float32Array([1, 1024]);
+      case CONSTANTS.RED_BITS:
+      case CONSTANTS.GREEN_BITS:
+      case CONSTANTS.BLUE_BITS:
+      case CONSTANTS.ALPHA_BITS:
+        return 8;
+      case CONSTANTS.DEPTH_BITS:
+        return 24;
+      case CONSTANTS.STENCIL_BITS:
+        return 8;
+      case CONSTANTS.SUBPIXEL_BITS:
+        return 4;
+      default:
+        return 0;
+    }
+  }
+  var _noop = () => {
+  };
+  function handle() {
+    return {};
+  }
+  function stub(backing) {
+    return new Proxy(backing, {
+      get(target, prop, receiver) {
+        if (prop in target) return Reflect.get(target, prop, receiver);
+        if (typeof prop === "symbol") return void 0;
+        const name = String(prop);
+        if (/^[0-9A-Z_]+$/.test(name)) return constantFor(name);
+        return _noop;
+      }
+    });
+  }
+  var _extensions = {};
+  function getExtension(name) {
+    return _extensions[name] || (_extensions[name] = stub({ name }));
+  }
+  function createWebGLContext(canvas, contextType, attributes) {
+    const isWebGl2 = contextType === "webgl2" || contextType === "experimental-webgl2";
+    const contextAttributes = {
+      alpha: true,
+      antialias: true,
+      depth: true,
+      premultipliedAlpha: true,
+      preserveDrawingBuffer: false,
+      stencil: false,
+      ...attributes && typeof attributes === "object" ? attributes : {}
+    };
+    const impl = {
+      canvas,
+      drawingBufferWidth: canvas && canvas.width ? canvas.width : 300,
+      drawingBufferHeight: canvas && canvas.height ? canvas.height : 150,
+      getContextAttributes: () => contextAttributes,
+      isContextLost: () => false,
+      getError: () => 0,
+      getParameter: (pname) => getParameterValue(pname, isWebGl2),
+      getExtension: (name) => getExtension(name),
+      getSupportedExtensions: () => [],
+      getShaderPrecisionFormat: () => ({ rangeMin: 127, rangeMax: 127, precision: 23 }),
+      createShader: handle,
+      createProgram: handle,
+      createBuffer: handle,
+      createTexture: handle,
+      createFramebuffer: handle,
+      createRenderbuffer: handle,
+      createVertexArray: handle,
+      createSampler: handle,
+      createQuery: handle,
+      createTransformFeedback: handle,
+      fenceSync: handle,
+      // Compilation, linking and framebuffer completeness must report success or the library aborts setup.
+      getShaderParameter: (_shader, pname) => pname === CONSTANTS.COMPILE_STATUS ? true : 0,
+      getProgramParameter: (_program, pname) => pname === CONSTANTS.LINK_STATUS || pname === CONSTANTS.VALIDATE_STATUS ? true : 0,
+      checkFramebufferStatus: () => CONSTANTS.FRAMEBUFFER_COMPLETE,
+      getShaderInfoLog: () => "",
+      getProgramInfoLog: () => "",
+      // A non-null uniform location keeps the library on its "uniform exists, set it" path; attrib slots are
+      // plain indices. Both are only stored and re-passed, so any stable value works.
+      getUniformLocation: () => ({}),
+      getAttribLocation: () => 0,
+      getActiveUniform: () => null,
+      getActiveAttrib: () => null
+    };
+    for (const name in CONSTANTS) impl[name] = CONSTANTS[name];
+    return stub(impl);
+  }
+
   // dom/HTMLCanvasElement.ts
   function createContext2D(canvas) {
     const noop = () => {
@@ -1801,8 +1991,10 @@
     set height(value) {
       this.setAttribute("height", String(value == null ? 0 : value));
     }
-    getContext(type) {
-      return type === "2d" ? createContext2D(this) : null;
+    getContext(type, attributes) {
+      if (type === "2d") return createContext2D(this);
+      if (isWebGlContextType(type) && isWebGlEnabled()) return createWebGLContext(this, type, attributes);
+      return null;
     }
     toDataURL() {
       return "data:,";
@@ -3436,6 +3628,9 @@
       captureBaseline();
     };
     global.__crawlerGuardRegression = () => guardRegression();
+    global.__crawlerEnableWebGl = () => {
+      enableWebGl();
+    };
     global.__crawlerEnableDomProfile = () => {
       enableDomProfile();
     };
