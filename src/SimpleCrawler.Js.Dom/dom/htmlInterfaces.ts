@@ -14,6 +14,7 @@ export { HTMLMediaElement } from "./HTMLMediaElement";
 export { HTMLVideoElement } from "./HTMLVideoElement";
 export { HTMLAudioElement } from "./HTMLAudioElement";
 export { HTMLDialogElement } from "./HTMLDialogElement";
+export { HTMLCanvasElement } from "./HTMLCanvasElement";
 
 // Marker interfaces for `instanceof` checks. Frameworks probe element types (React's getActiveElementDeep
 // does `node instanceof window.HTMLIFrameElement`, Vue references SVGElement) and a `instanceof undefined`
@@ -25,7 +26,6 @@ export class HTMLTextAreaElement extends HTMLElement { }
 export class HTMLButtonElement extends HTMLElement { }
 export class HTMLFormElement extends HTMLElement { }
 export class HTMLStyleElement extends HTMLElement { }
-export class HTMLCanvasElement extends HTMLElement { }
 export class HTMLUnknownElement extends HTMLElement { }
 export class SVGElement extends Element { }
 export class SVGSVGElement extends SVGElement { }

@@ -9,6 +9,7 @@ import { HTMLIFrameElement } from "./HTMLIFrameElement";
 import { HTMLVideoElement } from "./HTMLVideoElement";
 import { HTMLAudioElement } from "./HTMLAudioElement";
 import { HTMLDialogElement } from "./HTMLDialogElement";
+import { HTMLCanvasElement } from "./HTMLCanvasElement";
 
 // tag → factory for the element subclasses that reflect properties (anchor href, script/img src, select
 // options, ...). Shared by the string parser, the tree builder and document.createElement so every
@@ -24,4 +25,5 @@ export const reflectedElementFactories: Record<string, () => Element> = {
     video: () => new HTMLVideoElement(),
     audio: () => new HTMLAudioElement(),
     dialog: () => new HTMLDialogElement(),
+    canvas: () => new HTMLCanvasElement(),
 };

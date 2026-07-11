@@ -1137,6 +1137,128 @@ public class JsDomRendererTests : IClassFixture<JsRendererFixture>
         Assert.Contains("href=\"/ok\"", rendered);
     }
 
+    // getComputedStyle must return a declaration whose every property reads back "" (never null/undefined),
+    // accessed both by name (getPropertyValue) and as a direct property. Elementor's getCurrentDeviceMode does
+    // `getComputedStyle(el, ':after').content.replace(...)`, so a `.content` that comes back undefined throws
+    // "Cannot read properties of undefined (reading 'replace')" and aborts frontend init inside the drain.
+    [Theory]
+    [InlineData(JsEngine.Jint)]
+    [InlineData(JsEngine.V8)]
+    public async Task JsMode_GetComputedStyle_ReturnsEmptyStringsForAnyProperty(JsEngine engine)
+    {
+        if (engine == JsEngine.V8)
+            Assert.SkipUnless(V8Support.IsAvailable, V8Support.UnavailableReason);
+
+        const string html = """
+            <html><body><div id="t"></div>
+            <script>
+            try {
+              var el = document.getElementById('t');
+              var cs = getComputedStyle(el, ':after');
+              var mode = cs.content.replace(/["']/g, '');
+              var byName = cs.getPropertyValue('display');
+              var ok = mode === '' && byName === '' && cs.width === '';
+              var a = document.createElement('a'); a.setAttribute('href', ok ? '/ok' : '/bad');
+              el.appendChild(a);
+            } catch (err) {
+              var b = document.createElement('a'); b.setAttribute('href', '/err'); document.getElementById('t').appendChild(b);
+            }
+            </script>
+            </body></html>
+            """;
+
+        var renderer = CreateJsRenderer(engine);
+        var result = await renderer.RenderAsync(Encoding.UTF8.GetBytes(html), "http://localhost:5000/", new HttpClient(), CancellationToken.None);
+        var rendered = Encoding.UTF8.GetString(result);
+
+        Assert.DoesNotContain("href=\"/err\"", rendered);
+        Assert.DoesNotContain("href=\"/bad\"", rendered);
+        Assert.Contains("href=\"/ok\"", rendered);
+    }
+
+    // Lazy prefetch/lazy-load libraries feature-detect IntersectionObserver support with the classic
+    // `'isIntersecting' in IntersectionObserverEntry.prototype` probe (instant-page does exactly this in an
+    // IIFE at parse time); the missing global threw ReferenceError before the page hydrated. The global must
+    // exist and its prototype must carry isIntersecting for the detection to evaluate instead of aborting.
+    [Theory]
+    [InlineData(JsEngine.Jint)]
+    [InlineData(JsEngine.V8)]
+    public async Task JsMode_IntersectionObserverEntry_GlobalAndPrototypeProbe(JsEngine engine)
+    {
+        if (engine == JsEngine.V8)
+            Assert.SkipUnless(V8Support.IsAvailable, V8Support.UnavailableReason);
+
+        const string html = """
+            <html><body><div id="t"></div>
+            <script>
+            try {
+              var supported = ('IntersectionObserver' in window)
+                && ('IntersectionObserverEntry' in window)
+                && ('isIntersecting' in window.IntersectionObserverEntry.prototype);
+              var a = document.createElement('a'); a.setAttribute('href', '/probe?supported=' + supported);
+              document.getElementById('t').appendChild(a);
+            } catch (err) {
+              var b = document.createElement('a'); b.setAttribute('href', '/err'); document.getElementById('t').appendChild(b);
+            }
+            </script>
+            </body></html>
+            """;
+
+        var renderer = CreateJsRenderer(engine);
+        var result = await renderer.RenderAsync(Encoding.UTF8.GetBytes(html), "http://localhost:5000/", new HttpClient(), CancellationToken.None);
+        var rendered = Encoding.UTF8.GetString(result);
+
+        Assert.DoesNotContain("href=\"/err\"", rendered);
+        Assert.Contains("href=\"/probe?supported=true\"", rendered);
+    }
+
+    // Canvas animation libraries (lottie, confetti) mount by grabbing a 2D context synchronously and calling
+    // draw methods on it — `canvas.getContext('2d')` then fillRect/measureText/... — so a <canvas> must be a
+    // real HTMLCanvasElement with getContext returning a no-op context, not the plain HTMLElement it used to
+    // parse/createElement as (which had no getContext and threw "getContext is not a function").
+    [Theory]
+    [InlineData(JsEngine.Jint)]
+    [InlineData(JsEngine.V8)]
+    public async Task JsMode_CanvasGetContext2D_ReturnsUsableNoOpContext(JsEngine engine)
+    {
+        if (engine == JsEngine.V8)
+            Assert.SkipUnless(V8Support.IsAvailable, V8Support.UnavailableReason);
+
+        const string html = """
+            <html><body><canvas id="parsed" width="640" height="480"></canvas><div id="t"></div>
+            <script>
+            try {
+              var canvas = document.createElement('canvas');
+              var ctx = canvas.getContext('2d');
+              ctx.save(); ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(10, 10); ctx.fillRect(0, 0, 5, 5); ctx.restore();
+              var w = ctx.measureText('x').width;
+              var g = ctx.createLinearGradient(0, 0, 1, 1); g.addColorStop(0, '#000');
+              var parsed = document.getElementById('parsed');
+              var ok = (canvas instanceof HTMLCanvasElement)
+                && (parsed instanceof HTMLCanvasElement)
+                && typeof ctx.fillRect === 'function'
+                && w === 0
+                && canvas.width === 300
+                && parsed.width === 640
+                && canvas.getContext('webgl') === null;
+              var a = document.createElement('a'); a.setAttribute('href', ok ? '/ok' : '/bad');
+              document.getElementById('t').appendChild(a);
+            } catch (err) {
+              var b = document.createElement('a'); b.setAttribute('href', '/err'); document.getElementById('t').appendChild(b);
+            }
+            </script>
+            </body></html>
+            """;
+
+        var renderer = CreateJsRenderer(engine);
+        var result = await renderer.RenderAsync(Encoding.UTF8.GetBytes(html), "http://localhost:5000/", new HttpClient(), CancellationToken.None);
+        var rendered = Encoding.UTF8.GetString(result);
+
+        Assert.DoesNotContain("href=\"/err\"", rendered);
+        Assert.DoesNotContain("href=\"/bad\"", rendered);
+        Assert.Contains("href=\"/ok\"", rendered);
+    }
+
     // Lazy-mount-on-visible blocks (e.g. AntD skeletons) stay placeholders until an IntersectionObserver
     // reports them intersecting; the headless render has no scroll, so observe() must fire isIntersecting once.
     // The injected content goes through createRange().createContextualFragment() — the script-injection path
