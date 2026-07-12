@@ -3,6 +3,7 @@ using SimpleCrawler.Core.Extensions;
 using SimpleCrawler.Js.Abstractions;
 using SimpleCrawler.Js.Errors;
 using SimpleCrawler.Core.Helpers;
+using SimpleCrawler.Core.Models;
 using SimpleCrawler.Js.Models;
 using SimpleCrawler.Js.Network;
 using SimpleCrawler.Js.Services;
@@ -17,6 +18,14 @@ public sealed class JsRenderer
 
     private static readonly UTF8Encoding _utf8NoBom = new(encoderShouldEmitUTF8Identifier: false);
     private static readonly JsExtract _emptyExtract = new(null, null, []);
+
+    /// <summary>
+    /// An extract with no links. When signal capture is on it still carries an (empty) <see cref="PageSignals"/>
+    /// so an empty or aborted render presents the same shape as a populated one — matching the static backends,
+    /// which always return a non-null signals object when capturing.
+    /// </summary>
+    private static JsExtract EmptyExtract(bool captureSignals) =>
+        captureSignals ? new JsExtract(null, null, [], new PageSignals()) : _emptyExtract;
 
     private readonly IJsEngineFactory _engineFactory;
     private readonly JsRenderOptions _options;
@@ -50,7 +59,7 @@ public sealed class JsRenderer
     /// AngleSharp reparse. Scriptless shells still parse, because extraction needs the tree.
     /// </summary>
     internal Task<JsExtract> ExtractAsync(byte[] shell, string pageUrl, HttpClient client, CancellationToken cancellationToken)
-        => RunAsync(shell, pageUrl, client, engine => CollectLinks(engine, _captureSignals), _emptyExtract, cancellationToken);
+        => RunAsync(shell, pageUrl, client, engine => CollectLinks(engine, _captureSignals), EmptyExtract(_captureSignals), cancellationToken);
 
     /// <summary>
     /// The DOM lives entirely in JS (Preludes/dom.js). HTML goes in via __crawlerLoadHtml, the bundle mutates
@@ -368,7 +377,7 @@ public sealed class JsRenderer
     {
         var json = engine.Evaluate<string>(captureSignals ? "__crawlerCollectLinks(true)" : "__crawlerCollectLinks()");
         if (string.IsNullOrEmpty(json))
-            return new JsExtract(null, null, []);
+            return EmptyExtract(captureSignals);
 
         using var doc = JsonDocument.Parse(json);
         var root = doc.RootElement;

@@ -127,7 +127,7 @@ public abstract class AbstractHeadlessCrawler<TPage, TResult> : AbstractRobotsCr
     {
         var json = await EvaluateExtractorAsync(response, RenderedPageExtractor.Script, CrawlCancellationToken);
         if (string.IsNullOrEmpty(json))
-            return new PageExtract(null, RobotsRules.All, []);
+            return new PageExtract(null, RobotsRules.All, [], CaptureSignals ? new PageSignals() : null);
 
         using var document = JsonDocument.Parse(json);
         var (canonicalHref, robotsContent, linkHrefs, signals) = RenderedPageExtractor.Parse(document.RootElement);
