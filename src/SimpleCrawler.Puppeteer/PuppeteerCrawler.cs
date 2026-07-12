@@ -52,6 +52,8 @@ public abstract class PuppeteerCrawler<TResult> : AbstractHeadlessCrawler<IPage,
             return (null, null);
         }
 
+        // response.Headers comes straight from CDP, which already joins repeated headers (e.g. multiple
+        // Set-Cookie) with a newline — the same ResponseSignal.HeaderValueSeparator the other backends use.
         return ((int)response.Status, CaptureSignals ? response.Headers : null);
     }
 

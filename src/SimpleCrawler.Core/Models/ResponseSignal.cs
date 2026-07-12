@@ -12,6 +12,14 @@ public sealed class ResponseSignal
     /// <summary>Shared empty header map, so the no-collector path allocates nothing.</summary>
     public static readonly IReadOnlyDictionary<string, string> EmptyHeaders = new Dictionary<string, string>();
 
+    /// <summary>
+    /// Delimiter joining the values of a header that appears more than once, so <see cref="Headers"/>
+    /// reads the same across every backend. A newline, not <c>", "</c>: <c>Set-Cookie</c> values embed
+    /// commas (in <c>Expires</c> dates) and must never be comma-joined, and it matches how the headless
+    /// browsers' CDP already concatenates repeated headers.
+    /// </summary>
+    public const string HeaderValueSeparator = "\n";
+
     public required int StatusCode { get; init; }
     public long? ContentLength { get; init; }
     public string? ContentType { get; init; }

@@ -64,7 +64,7 @@ public abstract class PlaywrightCrawler<TResult> : AbstractHeadlessCrawler<IPage
         foreach (var header in await response.HeadersArrayAsync())
         {
             var key = header.Name.ToLowerInvariant();
-            headers[key] = headers.TryGetValue(key, out var existing) ? existing + "\n" + header.Value : header.Value;
+            headers[key] = headers.TryGetValue(key, out var existing) ? existing + ResponseSignal.HeaderValueSeparator + header.Value : header.Value;
         }
 
         return headers;

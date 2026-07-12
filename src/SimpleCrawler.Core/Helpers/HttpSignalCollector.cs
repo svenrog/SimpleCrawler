@@ -31,7 +31,7 @@ public static class HttpSignalCollector
     {
         var headers = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         foreach (var header in response.Headers.Concat(response.Content.Headers))
-            headers[header.Key.ToLowerInvariant()] = string.Join(", ", header.Value);
+            headers[header.Key.ToLowerInvariant()] = string.Join(ResponseSignal.HeaderValueSeparator, header.Value);
 
         return headers;
     }
