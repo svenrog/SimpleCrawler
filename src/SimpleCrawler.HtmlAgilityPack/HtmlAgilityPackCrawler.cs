@@ -1,4 +1,5 @@
 using SimpleCrawler.Core;
+using SimpleCrawler.Core.Collectors;
 using SimpleCrawler.Core.Models;
 using SimpleCrawler.Core.Robots;
 using HtmlAgilityPack;
@@ -11,7 +12,7 @@ namespace SimpleCrawler.HtmlAgilityPack;
 public abstract class HtmlAgilityPackCrawler<TResult> : AbstractStaticHtmlCrawler<HtmlDocument, TResult>
     where TResult : IScrapeResult
 {
-    protected HtmlAgilityPackCrawler(HttpClient client, IRobotClient robotClient, IOptions<CrawlerOptions> options, ILogger logger, ICheckpointStore? checkpoint = null) : base(client, robotClient, options, logger, checkpoint)
+    protected HtmlAgilityPackCrawler(HttpClient client, IRobotClient robotClient, IOptions<CrawlerOptions> options, ILogger logger, ICheckpointStore? checkpoint = null, IEnumerable<ICrawlCollector>? collectors = null) : base(client, robotClient, options, logger, checkpoint, collectors)
     {
     }
 

@@ -1,6 +1,7 @@
 using System.Diagnostics.CodeAnalysis;
 using SimpleCrawler.Core;
 using SimpleCrawler.Core.Helpers;
+using SimpleCrawler.Core.Collectors;
 using SimpleCrawler.Core.Robots;
 using SimpleCrawler.Core.Robots.Http;
 using SimpleCrawler.Js.Models;
@@ -16,6 +17,7 @@ public static class ServiceCollectionExtensions
         services.AddLogging();
         services.AddSingleton(Options.Create(options));
         services.AddSingleton(Options.Create(renderOptions ?? new JsRenderOptions()));
+        services.AddCrawlerCollectors(options);
 
         services.AddCrawlerHttpClient<IRobotClient, RobotWebClient>(config);
 

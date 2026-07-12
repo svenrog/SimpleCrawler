@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using SimpleCrawler.Core.Checkpoints;
+using SimpleCrawler.Core.Collectors;
 using SimpleCrawler.Core.Extensions;
 using SimpleCrawler.Core.Helpers;
 using SimpleCrawler.Core.Models;
@@ -21,7 +22,7 @@ public abstract class AbstractHeadlessCrawler<TPage, TResult> : AbstractRobotsCr
     private readonly ConcurrentDictionary<TPage, string> _pageKeys;
     private readonly ILogger _logger;
 
-    protected AbstractHeadlessCrawler(IRobotClient robotClient, IOptions<HeadlessCrawlerOptions> options, ILogger logger, IProxyPool? pool = null, ICheckpointStore? checkpoint = null) : base(robotClient, options, logger, checkpoint)
+    protected AbstractHeadlessCrawler(IRobotClient robotClient, IOptions<HeadlessCrawlerOptions> options, ILogger logger, IProxyPool? pool = null, ICheckpointStore? checkpoint = null, IEnumerable<ICrawlCollector>? collectors = null) : base(robotClient, options, logger, checkpoint, collectors)
     {
         _retry = new RetryExecutor(options.Value.Retry, pool);
         _pagePools = new ConcurrentDictionary<string, ConcurrentQueue<TPage>>();
@@ -46,10 +47,10 @@ public abstract class AbstractHeadlessCrawler<TPage, TResult> : AbstractRobotsCr
         // A first-use browser launch was uncancellable here.
         var page = await AcquirePage(proxy).AsTask().WaitAsync(cancellationToken);
 
-        int? status;
+        (int? Status, IReadOnlyDictionary<string, string>? Headers) navigation;
         try
         {
-            status = await NavigateAsync(page, url, proxy, cancellationToken);
+            navigation = await NavigateAsync(page, url, proxy, cancellationToken);
         }
         catch (OperationCanceledException)
         {
@@ -57,34 +58,64 @@ public abstract class AbstractHeadlessCrawler<TPage, TResult> : AbstractRobotsCr
             throw;
         }
 
-        if (status is null)
+        if (navigation.Status is not { } status)
         {
             await ClosePage(page);
             return RetryAttempt<TPage?>.Failed(RetryReason.Connection);
         }
 
-        ReportResponse(url, status.Value, null, null);
+        ReportResponse(url, ToResponseSignal(status, navigation.Headers));
 
-        var reason = RetryClassifier.Classify(status.Value);
+        var reason = RetryClassifier.Classify(status);
         if (reason is not null)
         {
-            _logger.LogDebug("Retryable '{code}' from '{url}' via '{proxy}'", status.Value, url, ProxyLabel.Describe(proxy));
+            _logger.LogDebug("Retryable '{code}' from '{url}' via '{proxy}'", status, url, ProxyLabel.Describe(proxy));
             await ClosePage(page);
             return RetryAttempt<TPage?>.Failed(reason.Value);
         }
 
         _pageKeys[page] = BrowserProxyHelper.ContextKey(proxy);
 
-        if (status.Value.IsSuccessStatus())
+        if (status.IsSuccessStatus())
         {
             await AfterSuccessfulLoad(page, cancellationToken);
-            _logger.LogDebug("Response '{code}' from '{url}'", status.Value, url);
+            _logger.LogDebug("Response '{code}' from '{url}'", status, url);
             return RetryAttempt<TPage?>.Ok(page);
         }
 
-        _logger.LogWarning("Error '{code}' from '{url}'", status.Value, url);
+        _logger.LogWarning("Error '{code}' from '{url}'", status, url);
         await DisposeResponse(page);
         return RetryAttempt<TPage?>.Ok(null);
+    }
+
+    /// <summary>
+    /// Normalizes a headless navigation result into a <see cref="ResponseSignal"/>. The headless
+    /// backends surface no content length/type, so only status and (when captured) the header-derived
+    /// signals are populated. Headers arrive already lower-cased and newline-joined per repeated name;
+    /// cookie names are split back out of <c>Set-Cookie</c>.
+    /// </summary>
+    private ResponseSignal ToResponseSignal(int status, IReadOnlyDictionary<string, string>? headers)
+    {
+        if (!CaptureSignals || headers is null)
+            return new ResponseSignal { StatusCode = status };
+
+        var normalized = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var (key, value) in headers)
+            normalized[key.ToLowerInvariant()] = value;
+
+        var cookieNames = new List<string>();
+        if (normalized.TryGetValue("set-cookie", out var setCookie))
+        {
+            foreach (var line in setCookie.Split('\n'))
+            {
+                var pair = line.Split(';', 2)[0];
+                var equals = pair.IndexOf('=', StringComparison.Ordinal);
+                if (equals > 0)
+                    cookieNames.Add(pair[..equals].Trim());
+            }
+        }
+
+        return new ResponseSignal { StatusCode = status, Headers = normalized, CookieNames = cookieNames };
     }
 
     protected override ValueTask<TPage> ParseResponse(TPage response)
@@ -95,9 +126,9 @@ public abstract class AbstractHeadlessCrawler<TPage, TResult> : AbstractRobotsCr
     protected override async ValueTask<PageExtract> ExtractPageData(TPage response)
     {
         var json = await EvaluateExtractorAsync(response, RenderedPageExtractor.Script, CrawlCancellationToken);
-        var (canonicalHref, robotsContent, linkHrefs) = RenderedPageExtractor.Parse(json);
+        var (canonicalHref, robotsContent, linkHrefs, signals) = RenderedPageExtractor.Parse(json);
 
-        return new PageExtract(canonicalHref, IndexingHelper.ParseMetaRobots(robotsContent), linkHrefs);
+        return new PageExtract(canonicalHref, IndexingHelper.ParseMetaRobots(robotsContent), linkHrefs, signals);
     }
 
     private async ValueTask<TPage> AcquirePage(ProxyInfo? proxy)
@@ -129,7 +160,7 @@ public abstract class AbstractHeadlessCrawler<TPage, TResult> : AbstractRobotsCr
 
     protected abstract Task<TPage> NewPageAsync(ProxyInfo? proxy);
 
-    protected abstract Task<int?> NavigateAsync(TPage page, string url, ProxyInfo? proxy, CancellationToken cancellationToken);
+    protected abstract Task<(int? Status, IReadOnlyDictionary<string, string>? Headers)> NavigateAsync(TPage page, string url, ProxyInfo? proxy, CancellationToken cancellationToken);
 
     protected abstract Task ClosePageCore(TPage page);
 

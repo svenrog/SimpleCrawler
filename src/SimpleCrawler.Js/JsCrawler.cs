@@ -3,6 +3,7 @@ using SimpleCrawler.Js.Models;
 using SimpleCrawler.Js.Rendering;
 using SimpleCrawler.Core;
 using SimpleCrawler.Core.Checkpoints;
+using SimpleCrawler.Core.Collectors;
 using SimpleCrawler.Core.Extensions;
 using SimpleCrawler.Core.Helpers;
 using SimpleCrawler.Core.Models;
@@ -19,17 +20,19 @@ public abstract class JsCrawler<TResult> : AbstractRobotsCrawler<JsExtract, JsEx
     private readonly JsRenderer _renderer;
     private readonly ILogger _logger;
 
-    protected JsCrawler(HttpClient client, IJsEngineFactory engineFactory, IRobotClient robotClient, IOptions<CrawlerOptions> options, IOptions<JsRenderOptions> renderOptions, ILogger logger, ICheckpointStore? checkpoint = null)
-        : base(robotClient, options, logger, checkpoint)
+    protected JsCrawler(HttpClient client, IJsEngineFactory engineFactory, IRobotClient robotClient, IOptions<CrawlerOptions> options, IOptions<JsRenderOptions> renderOptions, ILogger logger, ICheckpointStore? checkpoint = null, IEnumerable<ICrawlCollector>? collectors = null)
+        : base(robotClient, options, logger, checkpoint, collectors)
     {
         _client = client;
-        _renderer = new JsRenderer(engineFactory, renderOptions.Value, logger);
+        _renderer = new JsRenderer(engineFactory, renderOptions.Value, logger, CaptureSignals);
         _logger = logger;
     }
 
     protected override async Task<JsExtract?> LoadResponse(string url, CancellationToken cancellationToken)
     {
         using var response = await _client.GetAsync(url, cancellationToken);
+
+        ReportResponse(url, HttpSignalCollector.ToResponseSignal(response, CaptureSignals));
 
         if (!response.IsSuccessStatus())
         {
@@ -50,7 +53,7 @@ public abstract class JsCrawler<TResult> : AbstractRobotsCrawler<JsExtract, JsEx
 
     protected override ValueTask<PageExtract> ExtractPageData(JsExtract document)
     {
-        var extract = new PageExtract(document.CanonicalHref, IndexingHelper.ParseMetaRobots(document.RobotsContent), document.LinkHrefs);
+        var extract = new PageExtract(document.CanonicalHref, IndexingHelper.ParseMetaRobots(document.RobotsContent), document.LinkHrefs, document.Signals);
         return new ValueTask<PageExtract>(extract);
     }
 }

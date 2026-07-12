@@ -50,10 +50,11 @@ public class CrawlerOptions
 
     /// <summary>
     /// Opt-in: capture per-page HTTP/DOM signals (response headers, cookie names, script sources, meta
-    /// tags, JSON-LD blocks) into <see cref="Models.UrlReport.Signals"/>. Off by default because
-    /// <c>UrlReport</c> is checkpointed and the whole checkpoint is rewritten on every autosave, so
-    /// capturing for every page would bloat every autosave with the full crawl history rather than
-    /// just the in-flight URLs.
+    /// tags, JSON-LD blocks) into <see cref="Models.UrlReport.Signals"/>. When set, <c>AddCrawlerCollectors</c>
+    /// registers the built-in <c>PageSignalsCollector</c>; the pipeline itself knows nothing about signals,
+    /// so this is just the switch that turns on one built-in <c>ICrawlCollector</c>. Off by default because
+    /// <c>UrlReport</c> is checkpointed and the whole checkpoint is rewritten on every autosave, so capturing
+    /// for every page would bloat every autosave with the full crawl history rather than just the in-flight URLs.
     /// </summary>
     public bool CapturePageSignals { get; set; }
 

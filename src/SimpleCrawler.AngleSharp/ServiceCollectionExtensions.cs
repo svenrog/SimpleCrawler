@@ -1,6 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using SimpleCrawler.Core;
+using SimpleCrawler.Core.Collectors;
 using SimpleCrawler.Core.Helpers;
 using SimpleCrawler.Core.Robots;
 using SimpleCrawler.Core.Robots.Http;
@@ -12,6 +13,7 @@ public static class ServiceCollectionExtensions
     public static IServiceCollection AddAngleSharpCrawler(this IServiceCollection services, CrawlerOptions options, Action<IServiceProvider, HttpClient>? config = null)
     {
         services.AddSingleton(Options.Create(options));
+        services.AddCrawlerCollectors(options);
         services.AddAngleSharpCrawler(config);
 
         return services;

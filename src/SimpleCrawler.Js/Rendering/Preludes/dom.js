@@ -3546,10 +3546,13 @@
     walk(doc.documentElement);
     return found;
   }
-  function collectLinks() {
+  function collectLinks(captureSignals) {
     const anchors = [];
     let canonical = null;
     let robots = null;
+    const scriptSources = [];
+    const metaTags = {};
+    const jsonLdBlocks = [];
     if (!doc.documentElement) return { anchors, canonical, robots };
     function walk(n) {
       for (const c of n.childNodes) {
@@ -3560,14 +3563,29 @@
         } else if (canonical == null && tag === "link") {
           const rel = (c.getAttribute("rel") || "").toLowerCase().split(/\s+/);
           if (rel.indexOf("canonical") >= 0) canonical = c.getAttribute("href");
-        } else if (robots == null && tag === "meta") {
-          if ((c.getAttribute("name") || "").toLowerCase() === "robots") robots = c.getAttribute("content");
+        } else if (tag === "meta") {
+          if (robots == null && (c.getAttribute("name") || "").toLowerCase() === "robots") robots = c.getAttribute("content");
+        }
+        if (captureSignals) {
+          if (tag === "script") {
+            const src = c.getAttribute("src");
+            if (src) {
+              scriptSources.push(src);
+            } else if ((c.getAttribute("type") || "").toLowerCase() === "application/ld+json") {
+              const text = (c.textContent || "").trim();
+              if (text) jsonLdBlocks.push(text);
+            }
+          } else if (tag === "meta") {
+            const name = c.getAttribute("name") || c.getAttribute("property");
+            const content = c.getAttribute("content");
+            if (name && content !== null) metaTags[name] = content;
+          }
         }
         walk(c);
       }
     }
     walk(doc.documentElement);
-    return { anchors, canonical, robots };
+    return captureSignals ? { anchors, canonical, robots, scriptSources, metaTags, jsonLdBlocks } : { anchors, canonical, robots };
   }
   function countAnchors() {
     if (!doc.documentElement) return 0;
@@ -3612,7 +3630,7 @@
     };
     global.__crawlerCollectScripts = () => JSON.stringify(collectScripts());
     global.__crawlerGetBaseHref = () => getBaseHref();
-    global.__crawlerCollectLinks = () => JSON.stringify(collectLinks());
+    global.__crawlerCollectLinks = (captureSignals) => JSON.stringify(collectLinks(!!captureSignals));
     global.__crawlerPending = () => pendingCount();
     global.__crawlerPump = () => pumpTasks();
     global.__crawlerTakeResources = () => takeResources();

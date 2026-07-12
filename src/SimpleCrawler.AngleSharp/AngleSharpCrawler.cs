@@ -2,6 +2,7 @@ using AngleSharp.Dom;
 using AngleSharp.Html.Parser;
 using SimpleCrawler.Core;
 using SimpleCrawler.Core.Checkpoints;
+using SimpleCrawler.Core.Collectors;
 using SimpleCrawler.Core.Models;
 using SimpleCrawler.Core.Robots;
 using Microsoft.Extensions.Logging;
@@ -14,7 +15,7 @@ public abstract class AngleSharpCrawler<TResult> : AbstractStaticHtmlCrawler<IDo
 {
     private static readonly HtmlParser _parser = new();
 
-    protected AngleSharpCrawler(HttpClient client, IRobotClient robotClient, IOptions<CrawlerOptions> options, ILogger logger, ICheckpointStore? checkpoint = null) : base(client, robotClient, options, logger, checkpoint)
+    protected AngleSharpCrawler(HttpClient client, IRobotClient robotClient, IOptions<CrawlerOptions> options, ILogger logger, ICheckpointStore? checkpoint = null, IEnumerable<ICrawlCollector>? collectors = null) : base(client, robotClient, options, logger, checkpoint, collectors)
     {
     }
 

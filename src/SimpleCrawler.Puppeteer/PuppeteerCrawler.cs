@@ -1,5 +1,6 @@
 using SimpleCrawler.Core;
 using SimpleCrawler.Core.Checkpoints;
+using SimpleCrawler.Core.Collectors;
 using SimpleCrawler.Core.Models;
 using SimpleCrawler.Core.Proxy;
 using SimpleCrawler.Core.Robots;
@@ -16,7 +17,7 @@ public abstract class PuppeteerCrawler<TResult> : AbstractHeadlessCrawler<IPage,
     private readonly PuppeteerBrowserSession _session;
     private readonly ILogger _logger;
 
-    protected PuppeteerCrawler(IRobotClient robotClient, PuppeteerBrowserSession session, IOptions<HeadlessCrawlerOptions> options, ILogger logger, IProxyPool? pool = null, ICheckpointStore? checkpoint = null) : base(robotClient, options, logger, pool, checkpoint)
+    protected PuppeteerCrawler(IRobotClient robotClient, PuppeteerBrowserSession session, IOptions<HeadlessCrawlerOptions> options, ILogger logger, IProxyPool? pool = null, ICheckpointStore? checkpoint = null, IEnumerable<ICrawlCollector>? collectors = null) : base(robotClient, options, logger, pool, checkpoint, collectors)
     {
         _session = session;
         _logger = logger;
@@ -32,7 +33,7 @@ public abstract class PuppeteerCrawler<TResult> : AbstractHeadlessCrawler<IPage,
         return Constants.DefaultNavigationOptions;
     }
 
-    protected override async Task<int?> NavigateAsync(IPage page, string url, ProxyInfo? proxy, CancellationToken cancellationToken)
+    protected override async Task<(int? Status, IReadOnlyDictionary<string, string>? Headers)> NavigateAsync(IPage page, string url, ProxyInfo? proxy, CancellationToken cancellationToken)
     {
         IResponse? response;
         try
@@ -42,16 +43,16 @@ public abstract class PuppeteerCrawler<TResult> : AbstractHeadlessCrawler<IPage,
         catch (PuppeteerException e)
         {
             _logger.LogDebug("Navigation to '{url}' via '{proxy}' failed: {message}", url, ProxyLabel.Describe(proxy), e.Message);
-            return null;
+            return (null, null);
         }
 
         if (response is null)
         {
             _logger.LogWarning("No response from '{url}' via '{proxy}'", url, ProxyLabel.Describe(proxy));
-            return null;
+            return (null, null);
         }
 
-        return (int)response.Status;
+        return ((int)response.Status, CaptureSignals ? response.Headers : null);
     }
 
     protected override async Task ClosePageCore(IPage page)
@@ -67,6 +68,6 @@ public abstract class PuppeteerCrawler<TResult> : AbstractHeadlessCrawler<IPage,
 
     protected override async Task<JsonElement> EvaluateExtractorAsync(IPage page, string script, CancellationToken cancellationToken)
     {
-        return await page.EvaluateFunctionAsync<JsonElement>(script).WaitAsync(cancellationToken);
+        return await page.EvaluateFunctionAsync<JsonElement>(script, CaptureSignals).WaitAsync(cancellationToken);
     }
 }

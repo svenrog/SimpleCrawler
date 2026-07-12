@@ -109,7 +109,7 @@ public class ReportingTests
         protected override Task<string?> LoadResponse(string url, CancellationToken cancellationToken)
         {
             var status = _pages.TryGetValue(url, out var page) ? page.Status : 404;
-            ReportResponse(url, status, 42, "text/html");
+            ReportResponse(url, new ResponseSignal { StatusCode = status, ContentLength = 42, ContentType = "text/html" });
 
             return Task.FromResult(status is >= 200 and <= 299 ? url : null);
         }

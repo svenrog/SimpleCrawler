@@ -1,4 +1,5 @@
 ﻿using SimpleCrawler.Core;
+using SimpleCrawler.Core.Collectors;
 using SimpleCrawler.Core.Models;
 using SimpleCrawler.Core.Robots;
 using Microsoft.Extensions.Logging;
@@ -9,7 +10,7 @@ namespace SimpleCrawler.HtmlAgilityPack;
 
 public sealed class DefaultHtmlAgilityPackCrawler : HtmlAgilityPackCrawler<ScrapeResult>, ICrawler
 {
-    public DefaultHtmlAgilityPackCrawler(HttpClient client, IRobotClient robotClient, IOptions<CrawlerOptions> options, ILogger<DefaultHtmlAgilityPackCrawler> logger, ICheckpointStore? checkpoint = null) : base(client, robotClient, options, logger, checkpoint)
+    public DefaultHtmlAgilityPackCrawler(HttpClient client, IRobotClient robotClient, IOptions<CrawlerOptions> options, ILogger<DefaultHtmlAgilityPackCrawler> logger, ICheckpointStore? checkpoint = null, IEnumerable<ICrawlCollector>? collectors = null) : base(client, robotClient, options, logger, checkpoint, collectors)
     {
     }
 

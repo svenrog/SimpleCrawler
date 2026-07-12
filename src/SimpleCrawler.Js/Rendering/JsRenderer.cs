@@ -2,6 +2,7 @@ using Microsoft.Extensions.Logging;
 using SimpleCrawler.Core.Extensions;
 using SimpleCrawler.Js.Abstractions;
 using SimpleCrawler.Js.Errors;
+using SimpleCrawler.Core.Models;
 using SimpleCrawler.Js.Models;
 using SimpleCrawler.Js.Network;
 using SimpleCrawler.Js.Services;
@@ -20,14 +21,16 @@ public sealed class JsRenderer
     private readonly IJsEngineFactory _engineFactory;
     private readonly JsRenderOptions _options;
     private readonly ILogger _logger;
+    private readonly bool _captureSignals;
     private readonly SourceCache _sources = new();
     private readonly RenderFetchCache _fetchCache = new();
 
-    public JsRenderer(IJsEngineFactory engineFactory, JsRenderOptions options, ILogger logger)
+    public JsRenderer(IJsEngineFactory engineFactory, JsRenderOptions options, ILogger logger, bool captureSignals = false)
     {
         _engineFactory = engineFactory;
         _options = options;
         _logger = logger;
+        _captureSignals = captureSignals;
     }
 
     /// <summary>
@@ -47,7 +50,7 @@ public sealed class JsRenderer
     /// AngleSharp reparse. Scriptless shells still parse, because extraction needs the tree.
     /// </summary>
     internal Task<JsExtract> ExtractAsync(byte[] shell, string pageUrl, HttpClient client, CancellationToken cancellationToken)
-        => RunAsync(shell, pageUrl, client, CollectLinks, _emptyExtract, cancellationToken);
+        => RunAsync(shell, pageUrl, client, engine => CollectLinks(engine, _captureSignals), _emptyExtract, cancellationToken);
 
     /// <summary>
     /// The DOM lives entirely in JS (Preludes/dom.js). HTML goes in via __crawlerLoadHtml, the bundle mutates
@@ -361,9 +364,9 @@ public sealed class JsRenderer
     private static void FireResourceEvent(IJsEngine engine, int id, string type)
         => engine.CallGlobal("__crawlerFireResourceEvent", id, type);
 
-    private static JsExtract CollectLinks(IJsEngine engine)
+    private static JsExtract CollectLinks(IJsEngine engine, bool captureSignals)
     {
-        var json = engine.Evaluate<string>("__crawlerCollectLinks()");
+        var json = engine.Evaluate<string>(captureSignals ? "__crawlerCollectLinks(true)" : "__crawlerCollectLinks()");
         if (string.IsNullOrEmpty(json))
             return new JsExtract(null, null, []);
 
@@ -380,7 +383,35 @@ public sealed class JsRenderer
         var canonical = root.TryGetProperty("canonical", out var canonicalProp) && canonicalProp.ValueKind == JsonValueKind.String ? canonicalProp.GetString() : null;
         var robots = root.TryGetProperty("robots", out var robotsProp) && robotsProp.ValueKind == JsonValueKind.String ? robotsProp.GetString() : null;
 
-        return new JsExtract(canonical, robots, hrefs);
+        return new JsExtract(canonical, robots, hrefs, captureSignals ? ParseSignals(root) : null);
+    }
+
+    private static PageSignals ParseSignals(JsonElement root)
+    {
+        var signals = new PageSignals();
+
+        if (root.TryGetProperty("scriptSources", out var scriptSourcesProp) && scriptSourcesProp.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var item in scriptSourcesProp.EnumerateArray())
+                if (item.ValueKind == JsonValueKind.String)
+                    signals.ScriptSources.Add(item.GetString()!);
+        }
+
+        if (root.TryGetProperty("jsonLdBlocks", out var jsonLdProp) && jsonLdProp.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var item in jsonLdProp.EnumerateArray())
+                if (item.ValueKind == JsonValueKind.String)
+                    signals.JsonLdBlocks.Add(item.GetString()!);
+        }
+
+        if (root.TryGetProperty("metaTags", out var metaTagsProp) && metaTagsProp.ValueKind == JsonValueKind.Object)
+        {
+            foreach (var property in metaTagsProp.EnumerateObject())
+                if (property.Value.ValueKind == JsonValueKind.String)
+                    signals.MetaTags[property.Name] = property.Value.GetString()!;
+        }
+
+        return signals;
     }
 
     private static byte[] SerializeJs(IJsEngine engine)
