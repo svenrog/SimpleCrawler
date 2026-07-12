@@ -126,7 +126,11 @@ public abstract class AbstractHeadlessCrawler<TPage, TResult> : AbstractRobotsCr
     protected override async ValueTask<PageExtract> ExtractPageData(TPage response)
     {
         var json = await EvaluateExtractorAsync(response, RenderedPageExtractor.Script, CrawlCancellationToken);
-        var (canonicalHref, robotsContent, linkHrefs, signals) = RenderedPageExtractor.Parse(json);
+        if (string.IsNullOrEmpty(json))
+            return new PageExtract(null, RobotsRules.All, []);
+
+        using var document = JsonDocument.Parse(json);
+        var (canonicalHref, robotsContent, linkHrefs, signals) = RenderedPageExtractor.Parse(document.RootElement);
 
         return new PageExtract(canonicalHref, IndexingHelper.ParseMetaRobots(robotsContent), linkHrefs, signals);
     }
@@ -164,7 +168,7 @@ public abstract class AbstractHeadlessCrawler<TPage, TResult> : AbstractRobotsCr
 
     protected abstract Task ClosePageCore(TPage page);
 
-    protected abstract Task<JsonElement> EvaluateExtractorAsync(TPage page, string script, CancellationToken cancellationToken);
+    protected abstract Task<string?> EvaluateExtractorAsync(TPage page, string script, CancellationToken cancellationToken);
 
     protected virtual Task AfterSuccessfulLoad(TPage page, CancellationToken cancellationToken)
     {

@@ -7,7 +7,6 @@ using SimpleCrawler.Core.Collectors;
 using SimpleCrawler.Core.Models;
 using SimpleCrawler.Core.Proxy;
 using SimpleCrawler.Core.Robots;
-using System.Text.Json;
 
 namespace SimpleCrawler.Playwright;
 
@@ -92,9 +91,8 @@ public abstract class PlaywrightCrawler<TResult> : AbstractHeadlessCrawler<IPage
         }
     }
 
-    protected override async Task<JsonElement> EvaluateExtractorAsync(IPage page, string script, CancellationToken cancellationToken)
+    protected override async Task<string?> EvaluateExtractorAsync(IPage page, string script, CancellationToken cancellationToken)
     {
-        var json = await page.EvaluateAsync(script, CaptureSignals).WaitAsync(cancellationToken);
-        return json.GetValueOrDefault();
+        return await page.EvaluateAsync<string?>(script, CaptureSignals).WaitAsync(cancellationToken);
     }
 }

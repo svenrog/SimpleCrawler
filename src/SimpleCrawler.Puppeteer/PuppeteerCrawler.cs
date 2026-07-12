@@ -7,7 +7,6 @@ using SimpleCrawler.Core.Robots;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using PuppeteerSharp;
-using System.Text.Json;
 
 namespace SimpleCrawler.Puppeteer;
 
@@ -68,8 +67,8 @@ public abstract class PuppeteerCrawler<TResult> : AbstractHeadlessCrawler<IPage,
         }
     }
 
-    protected override async Task<JsonElement> EvaluateExtractorAsync(IPage page, string script, CancellationToken cancellationToken)
+    protected override async Task<string?> EvaluateExtractorAsync(IPage page, string script, CancellationToken cancellationToken)
     {
-        return await page.EvaluateFunctionAsync<JsonElement>(script, CaptureSignals).WaitAsync(cancellationToken);
+        return await page.EvaluateFunctionAsync<string?>(script, CaptureSignals).WaitAsync(cancellationToken);
     }
 }

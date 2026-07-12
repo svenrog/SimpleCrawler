@@ -8,6 +8,11 @@ namespace SimpleCrawler.Core.Helpers;
 /// directive, collapsing one protocol round-trip per element into one round-trip per page. When
 /// invoked with <c>captureSignals</c> true, the same walk also collects script sources, meta tags,
 /// and JSON-LD blocks, so opting out costs nothing extra per page.
+///
+/// The result is returned as a <c>JSON.stringify</c> string, not a live object: Playwright's evaluate
+/// protocol injects reference-tracking <c>$id</c> keys into every object it serializes, which would
+/// otherwise leak into the generically-enumerated meta-tag map. Serializing in-page sidesteps that (and
+/// matches how the in-process JS backends already return their extract).
 /// </summary>
 public static class RenderedPageExtractor
 {
@@ -43,12 +48,12 @@ public static class RenderedPageExtractor
                 signals = { scriptSources, metaTags, jsonLdBlocks };
             }
 
-            return {
+            return JSON.stringify({
                 links: links,
                 canonical: canonical ? canonical.getAttribute('href') : null,
                 robots: robots ? robots.getAttribute('content') : null,
                 signals: signals
-            };
+            });
         }
         """;
 
@@ -87,11 +92,8 @@ public static class RenderedPageExtractor
 
         if (signalsElement.TryGetProperty("metaTags", out var metaTagsElement) && metaTagsElement.ValueKind == JsonValueKind.Object)
         {
-            // Playwright's evaluate result wire format injects its own reference-tracking "$id" into every
-            // serialized object; harmless elsewhere (only known properties are read by name) but this is the
-            // first path that enumerates an object's keys generically, so it must be filtered here.
             foreach (var property in metaTagsElement.EnumerateObject())
-                if (property.Value.ValueKind == JsonValueKind.String && !property.Name.StartsWith('$'))
+                if (property.Value.ValueKind == JsonValueKind.String)
                     signals.MetaTags[property.Name] = property.Value.GetString()!;
         }
 

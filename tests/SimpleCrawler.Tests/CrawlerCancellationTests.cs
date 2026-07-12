@@ -111,8 +111,8 @@ public class CrawlerCancellationTests
 
         protected override Task ClosePageCore(object page) => Task.CompletedTask;
 
-        protected override Task<JsonElement> EvaluateExtractorAsync(object page, string script, CancellationToken cancellationToken) =>
-            Task.FromResult(default(JsonElement));
+        protected override Task<string?> EvaluateExtractorAsync(object page, string script, CancellationToken cancellationToken) =>
+            Task.FromResult<string?>(null);
 
         protected override ValueTask<ScrapeResult> GetResult(CancellationToken cancellationToken) =>
             new(new ScrapeResult { Urls = Visited });
