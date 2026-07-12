@@ -26,4 +26,11 @@ public sealed class UrlReport
     public bool Followed { get; set; }
     public DateTimeOffset Timestamp { get; set; }
     public string? Error { get; set; }
+
+    /// <summary>
+    /// Opt-in HTTP/DOM signals (headers, cookies, scripts, meta, JSON-LD), populated only when the
+    /// crawl is run with signal capture enabled. <c>null</c> otherwise, so unsignaled crawls keep the
+    /// same report shape and checkpoint size as before this field existed.
+    /// </summary>
+    public PageSignals? Signals { get; set; }
 }

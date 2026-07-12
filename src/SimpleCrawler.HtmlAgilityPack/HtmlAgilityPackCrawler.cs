@@ -24,11 +24,13 @@ public abstract class HtmlAgilityPackCrawler<TResult> : AbstractStaticHtmlCrawle
         return document;
     }
 
-    protected override (string? CanonicalHref, string? RobotsContent, IReadOnlyList<string?> LinkHrefs) ExtractStatic(HtmlDocument document)
+    protected override (string? CanonicalHref, string? RobotsContent, IReadOnlyList<string?> LinkHrefs, PageSignals? Signals)
+        ExtractStatic(HtmlDocument document)
     {
         var hrefs = new List<string?>();
         string? canonicalHref = null;
         string? robotsContent = null;
+        var signals = CaptureSignals ? new PageSignals() : null;
 
         var stack = new Stack<HtmlNode>();
         stack.Push(document.DocumentNode);
@@ -55,13 +57,35 @@ public abstract class HtmlAgilityPackCrawler<TResult> : AbstractStaticHtmlCrawle
             {
                 canonicalHref = node.Attributes["href"]?.Value;
             }
-            else if (robotsContent is null && name.Equals("meta", StringComparison.OrdinalIgnoreCase)
-                && string.Equals(node.Attributes["name"]?.Value, "robots", StringComparison.OrdinalIgnoreCase))
+            else if (name.Equals("meta", StringComparison.OrdinalIgnoreCase))
             {
-                robotsContent = node.Attributes["content"]?.Value;
+                if (robotsContent is null && string.Equals(node.Attributes["name"]?.Value, "robots", StringComparison.OrdinalIgnoreCase))
+                    robotsContent = node.Attributes["content"]?.Value;
+
+                if (signals is not null)
+                {
+                    var metaName = node.Attributes["name"]?.Value ?? node.Attributes["property"]?.Value;
+                    var content = node.Attributes["content"]?.Value;
+                    if (metaName is not null && content is not null)
+                        signals.MetaTags[metaName] = content;
+                }
+            }
+            else if (signals is not null && name.Equals("script", StringComparison.OrdinalIgnoreCase))
+            {
+                var src = node.Attributes["src"]?.Value;
+                if (!string.IsNullOrEmpty(src))
+                {
+                    signals.ScriptSources.Add(src);
+                }
+                else if (string.Equals(node.Attributes["type"]?.Value, "application/ld+json", StringComparison.OrdinalIgnoreCase))
+                {
+                    var jsonLd = node.InnerText.Trim();
+                    if (jsonLd.Length > 0)
+                        signals.JsonLdBlocks.Add(jsonLd);
+                }
             }
         }
 
-        return (canonicalHref, robotsContent, hrefs);
+        return (canonicalHref, robotsContent, hrefs, signals);
     }
 }

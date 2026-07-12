@@ -22,6 +22,7 @@ public static class CrawlerOptionsMapper
             CrawlDelay = options.CrawlDelay,
             RespectMetaRobots = options.RespectRobots,
             RespectRobotsTxt = options.RespectRobots,
+            CapturePageSignals = options.CaptureSignals,
             BrowserProfile = ProfileMapper.Map(options),
             ProxyPool = proxy,
             Retry = new RetryOptions
