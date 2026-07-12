@@ -71,33 +71,9 @@ public static class RenderedPageExtractor
 
     private static PageSignals? ParseSignals(JsonElement element)
     {
-        if (!element.TryGetProperty("signals", out var signalsElement) || signalsElement.ValueKind != JsonValueKind.Object)
-            return null;
-
-        var signals = new PageSignals();
-
-        if (signalsElement.TryGetProperty("scriptSources", out var scriptSourcesElement) && scriptSourcesElement.ValueKind == JsonValueKind.Array)
-        {
-            foreach (var item in scriptSourcesElement.EnumerateArray())
-                if (item.ValueKind == JsonValueKind.String)
-                    signals.ScriptSources.Add(item.GetString()!);
-        }
-
-        if (signalsElement.TryGetProperty("jsonLdBlocks", out var jsonLdElement) && jsonLdElement.ValueKind == JsonValueKind.Array)
-        {
-            foreach (var item in jsonLdElement.EnumerateArray())
-                if (item.ValueKind == JsonValueKind.String)
-                    signals.JsonLdBlocks.Add(item.GetString()!);
-        }
-
-        if (signalsElement.TryGetProperty("metaTags", out var metaTagsElement) && metaTagsElement.ValueKind == JsonValueKind.Object)
-        {
-            foreach (var property in metaTagsElement.EnumerateObject())
-                if (property.Value.ValueKind == JsonValueKind.String)
-                    signals.MetaTags[property.Name] = property.Value.GetString()!;
-        }
-
-        return signals;
+        return element.TryGetProperty("signals", out var signalsElement) && signalsElement.ValueKind == JsonValueKind.Object
+            ? PageSignalsParser.Read(signalsElement)
+            : null;
     }
 
     private static string? GetString(JsonElement element, string propertyName)

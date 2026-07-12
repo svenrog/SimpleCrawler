@@ -2,7 +2,7 @@ using Microsoft.Extensions.Logging;
 using SimpleCrawler.Core.Extensions;
 using SimpleCrawler.Js.Abstractions;
 using SimpleCrawler.Js.Errors;
-using SimpleCrawler.Core.Models;
+using SimpleCrawler.Core.Helpers;
 using SimpleCrawler.Js.Models;
 using SimpleCrawler.Js.Network;
 using SimpleCrawler.Js.Services;
@@ -383,35 +383,7 @@ public sealed class JsRenderer
         var canonical = root.TryGetProperty("canonical", out var canonicalProp) && canonicalProp.ValueKind == JsonValueKind.String ? canonicalProp.GetString() : null;
         var robots = root.TryGetProperty("robots", out var robotsProp) && robotsProp.ValueKind == JsonValueKind.String ? robotsProp.GetString() : null;
 
-        return new JsExtract(canonical, robots, hrefs, captureSignals ? ParseSignals(root) : null);
-    }
-
-    private static PageSignals ParseSignals(JsonElement root)
-    {
-        var signals = new PageSignals();
-
-        if (root.TryGetProperty("scriptSources", out var scriptSourcesProp) && scriptSourcesProp.ValueKind == JsonValueKind.Array)
-        {
-            foreach (var item in scriptSourcesProp.EnumerateArray())
-                if (item.ValueKind == JsonValueKind.String)
-                    signals.ScriptSources.Add(item.GetString()!);
-        }
-
-        if (root.TryGetProperty("jsonLdBlocks", out var jsonLdProp) && jsonLdProp.ValueKind == JsonValueKind.Array)
-        {
-            foreach (var item in jsonLdProp.EnumerateArray())
-                if (item.ValueKind == JsonValueKind.String)
-                    signals.JsonLdBlocks.Add(item.GetString()!);
-        }
-
-        if (root.TryGetProperty("metaTags", out var metaTagsProp) && metaTagsProp.ValueKind == JsonValueKind.Object)
-        {
-            foreach (var property in metaTagsProp.EnumerateObject())
-                if (property.Value.ValueKind == JsonValueKind.String)
-                    signals.MetaTags[property.Name] = property.Value.GetString()!;
-        }
-
-        return signals;
+        return new JsExtract(canonical, robots, hrefs, captureSignals ? PageSignalsParser.Read(root) : null);
     }
 
     private static byte[] SerializeJs(IJsEngine engine)
