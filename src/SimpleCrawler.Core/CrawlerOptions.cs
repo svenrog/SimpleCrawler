@@ -48,6 +48,15 @@ public class CrawlerOptions
     /// </summary>
     public long MaxResponseBodySize { get; set; } = 10 * 1024 * 1024;
 
+    /// <summary>
+    /// Opt-in: capture per-page HTTP/DOM signals (response headers, cookie names, script sources, meta
+    /// tags, JSON-LD blocks) into <see cref="Models.UrlReport.Signals"/>. Off by default because
+    /// <c>UrlReport</c> is checkpointed and the whole checkpoint is rewritten on every autosave, so
+    /// capturing for every page would bloat every autosave with the full crawl history rather than
+    /// just the in-flight URLs.
+    /// </summary>
+    public bool CapturePageSignals { get; set; }
+
     public IBrowserProfile BrowserProfile { get; set; } = new DefaultBrowserProfile();
     public ProxyPoolOptions? ProxyPool { get; set; }
     public RetryOptions Retry { get; set; } = new();

@@ -12,6 +12,7 @@ namespace SimpleCrawler.Console.Serialization;
 [JsonSourceGenerationOptions(WriteIndented = false, UseStringEnumConverter = true)]
 [JsonSerializable(typeof(CrawlState))]
 [JsonSerializable(typeof(IReadOnlyCollection<UrlReport>))]
+[JsonSerializable(typeof(PageSignals))]
 internal sealed partial class CrawlerJsonContext : JsonSerializerContext
 {
 }

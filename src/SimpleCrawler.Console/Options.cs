@@ -19,6 +19,9 @@ public sealed class Options
     [Option("report", Required = false, HelpText = "Optional path to write a per-URL JSON report (status code, fetch/parse timing, size, link count, outcome) covering every fetched page, including failures.")]
     public string? Report { get; set; }
 
+    [Option("captureSignals", Required = false, Default = false, HelpText = "Capture per-page HTTP/DOM signals (response headers, cookie names, script sources, meta tags, JSON-LD blocks) into the --report output. Off by default: increases checkpoint size on large crawls.")]
+    public bool CaptureSignals { get; set; }
+
     [Option('m', "maxPages", Required = false, Default = 10000, HelpText = "Max pages to visit.")]
     public int MaxPages { get; set; } = 10000;
 

@@ -457,6 +457,14 @@ public abstract class AbstractCrawler<TResponse, TDocument, TResult> : ICrawler<
                 entry.Followed = robots.Follow;
                 entry.LinkCount = discovered;
                 entry.Outcome = CrawlOutcome.Success;
+
+                if (pageData.Signals is { } domSignals)
+                {
+                    var signals = entry.Signals ??= new PageSignals();
+                    signals.ScriptSources = domSignals.ScriptSources;
+                    signals.MetaTags = domSignals.MetaTags;
+                    signals.JsonLdBlocks = domSignals.JsonLdBlocks;
+                }
             }
         }
         catch (OperationCanceledException) when (CrawlCancellationToken.IsCancellationRequested)
@@ -529,6 +537,27 @@ public abstract class AbstractCrawler<TResponse, TDocument, TResult> : ICrawler<
         entry.StatusCode = statusCode;
         entry.ContentLength = contentLength;
         entry.ContentType = contentType;
+    }
+
+    /// <summary>
+    /// Opt-in companion to <see cref="ReportResponse"/>: called by a backend's fetch path (only when
+    /// <see cref="CrawlerOptions.CapturePageSignals"/> is on) to record response headers and cookie
+    /// names against the in-flight <see cref="UrlReport"/>. Lazily creates
+    /// <see cref="UrlReport.Signals"/> on first write; <see cref="ProcessPage"/> later merges DOM
+    /// signals (script sources, meta tags, JSON-LD) onto the same instance.
+    /// </summary>
+    protected void ReportSignals(string url, Dictionary<string, string>? headers, List<string>? cookieNames)
+    {
+        if (!_state.Reports.TryGetValue(url, out var entry))
+            return;
+
+        var signals = entry.Signals ??= new PageSignals();
+
+        if (headers is not null)
+            signals.Headers = headers;
+
+        if (cookieNames is not null)
+            signals.CookieNames = cookieNames;
     }
 
     /// <summary>
