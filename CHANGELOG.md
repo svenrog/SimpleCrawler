@@ -8,6 +8,8 @@ Package versions are derived from git tags (`v*`) via MinVer.
 
 ## [Unreleased]
 
+## [3.3.0] - 2026-07-13
+
 ### Added
 
 - Max crawl depth (`CrawlerOptions.MaxDepth`, CLI `--maxDepth`; `0` = unlimited): entry points are depth 0 and
@@ -201,7 +203,8 @@ Public proxy types are removed and renamed (see _Removed_ and _Changed_), a brea
 
 - Initial release.
 
-[Unreleased]: https://github.com/svenrog/SimpleCrawler/compare/v3.2.0...HEAD
+[Unreleased]: https://github.com/svenrog/SimpleCrawler/compare/v3.3.0...HEAD
+[3.3.0]: https://github.com/svenrog/SimpleCrawler/releases/tag/v3.3.0
 [3.2.0]: https://github.com/svenrog/SimpleCrawler/releases/tag/v3.2.0
 [3.1.0]: https://github.com/svenrog/SimpleCrawler/releases/tag/v3.1.0
 [3.0.0]: https://github.com/svenrog/SimpleCrawler/releases/tag/v3.0.0
