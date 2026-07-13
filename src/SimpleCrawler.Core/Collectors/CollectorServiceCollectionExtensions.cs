@@ -12,7 +12,7 @@ public static class CollectorServiceCollectionExtensions
     /// resolves the full set. Idempotent per implementation type, so wiring several backends into one
     /// container (as the tests do) never double-registers a built-in collector.
     /// </summary>
-    public static IServiceCollection AddCrawlerCollectors(this IServiceCollection services, CrawlerOptions options)
+    public static IServiceCollection AddCrawlCollectors(this IServiceCollection services, CrawlerOptions options)
     {
         if (options.CapturePageSignals)
             services.TryAddEnumerable(ServiceDescriptor.Singleton<ICrawlCollector, PageSignalsCollector>());

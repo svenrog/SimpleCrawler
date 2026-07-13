@@ -17,7 +17,7 @@ public static class ServiceCollectionExtensions
         services.AddLogging();
         services.AddSingleton(Options.Create(options));
         services.AddSingleton(Options.Create(renderOptions ?? new JsRenderOptions()));
-        services.AddCrawlerCollectors(options);
+        services.AddCrawlCollectors(options);
 
         services.AddCrawlerHttpClient<IRobotClient, RobotWebClient>(config);
 

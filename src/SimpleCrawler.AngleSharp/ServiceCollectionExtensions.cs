@@ -13,7 +13,7 @@ public static class ServiceCollectionExtensions
     public static IServiceCollection AddAngleSharpCrawler(this IServiceCollection services, CrawlerOptions options, Action<IServiceProvider, HttpClient>? config = null)
     {
         services.AddSingleton(Options.Create(options));
-        services.AddCrawlerCollectors(options);
+        services.AddCrawlCollectors(options);
         services.AddAngleSharpCrawler(config);
 
         return services;

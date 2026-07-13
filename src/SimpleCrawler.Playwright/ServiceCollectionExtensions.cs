@@ -11,7 +11,7 @@ public static class ServiceCollectionExtensions
     public static IServiceCollection AddPlaywrightCrawler(this IServiceCollection services, HeadlessCrawlerOptions options)
     {
         services.AddSingleton(Options.Create(options));
-        services.AddCrawlerCollectors(options);
+        services.AddCrawlCollectors(options);
         services.AddPlaywrightCrawler();
 
         return services;

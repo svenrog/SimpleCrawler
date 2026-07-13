@@ -13,7 +13,7 @@ public static class ServiceCollectionExtensions
     public static IServiceCollection AddHtmlAgilityPackCrawler(this IServiceCollection services, CrawlerOptions options, Action<IServiceProvider, HttpClient>? config = null)
     {
         services.AddSingleton(Options.Create(options));
-        services.AddCrawlerCollectors(options);
+        services.AddCrawlCollectors(options);
         services.AddHtmlAgilityPackCrawler(config);
 
         return services;

@@ -3,11 +3,9 @@ using SimpleCrawler.Core.Models;
 namespace SimpleCrawler.Core.Collectors;
 
 /// <summary>
-/// The built-in collector behind <c>--captureSignals</c>: merges the HTTP half (headers, cookie names)
+/// The built-in collector behind <see cref="CrawlerOptions.CapturePageSignals" />: merges the HTTP half (headers, cookie names)
 /// from <see cref="OnResponse"/> and the DOM half (script sources, meta tags, JSON-LD) from
-/// <see cref="OnDocument"/> onto a single <see cref="UrlReport.Signals"/> instance. It owns
-/// <see cref="PageSignals"/> in full — the core pipeline no longer knows signals exist, which is what
-/// lets an outside contributor add a comparable capture feature without touching core or any backend.
+/// <see cref="OnDocument"/> onto a single <see cref="UrlReport.Signals"/> instance.
 /// </summary>
 public sealed class PageSignalsCollector : ICrawlCollector
 {
