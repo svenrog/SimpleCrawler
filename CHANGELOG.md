@@ -24,6 +24,24 @@ Package versions are derived from git tags (`v*`) via MinVer.
   `SimpleCrawler.Core.Filtering.UrlFilter` reuses the robots matcher's longest-match/allow-wins resolution;
   excludes deny, includes default-deny everything unmatched, and an exclude out-matches an include of equal
   length.
+- Opt-in per-page signal capture (`CrawlerOptions.CapturePageSignals`, CLI `--captureSignals`, off by default):
+  records each fetched page's response headers, cookie names, `<script src>` sources, meta tags, and
+  `application/ld+json` blocks onto a new `UrlReport.Signals`, surfaced in the `--report` output. It runs on
+  every backend — static, JS, and headless. Header keys are lower-cased and a header that appears more than
+  once is joined with a newline (never comma-joined, since `Set-Cookie` values embed commas in their expiry
+  dates); cookie values are dropped. Off by default because `UrlReport` is checkpointed and the whole
+  checkpoint is rewritten on every autosave, so capturing every page would bloat each autosave with the full
+  crawl history rather than just the in-flight URLs.
+- Pluggable per-page collectors (new `SimpleCrawler.Core.Collectors` namespace): an `ICrawlCollector` observes
+  every page's HTTP response, and an `IDomCollector` additionally derives data from the DOM. Because there is
+  no shared C# DOM across backends, the DOM half is expressed once as an `IPageDom` walk for the static
+  backends (`IStaticDomCollector`) and once as an in-page JavaScript fragment for the rendered backends
+  (`IRenderedDomCollector.DomScript`) — no backend carries any collector-specific code. Register collectors
+  via `AddCrawlCollectors` (idempotent per implementation, so several backends in one container never
+  double-register); they run for every backend with no change to the core pipeline or the backends, and each
+  fragment is isolated so a throw or an unserializable result yields no data for that collector without
+  disturbing the crawl or the others. The built-in `PageSignalsCollector` behind `--captureSignals` is one
+  such collector.
 
 ### Changed
 

@@ -1,13 +1,15 @@
+using SimpleCrawler.Core.Collectors;
+
 namespace SimpleCrawler.Core.Models;
 
 /// <summary>
-/// <paramref name="Signals"/> is <c>null</c> unless the crawl runs with
-/// <see cref="CrawlerOptions.CapturePageSignals"/> on; when present it carries the DOM-derived half
-/// (script sources, meta tags, JSON-LD) of the page's <see cref="PageSignals"/> — the HTTP-derived half
-/// (headers, cookies) is captured earlier, at fetch time, via <c>AbstractCrawler.ReportSignals</c>.
+/// The crawl-essential data a backend extracts from one page in its single parse pass: the canonical URL,
+/// meta-robots directive, and outgoing link hrefs. <paramref name="Dom"/> is an opaque handle to that page's
+/// DOM material for any registered <see cref="IDomCollector"/> to consume — <c>null</c> unless a DOM collector
+/// is registered — so the pipeline can route DOM data to collectors without knowing what they collect.
 /// </summary>
 public readonly record struct PageExtract(
     string? CanonicalHref,
     RobotsRules Robots,
     IReadOnlyList<string?> LinkHrefs,
-    PageSignals? Signals = null);
+    IDomDispatch? Dom = null);

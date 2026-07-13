@@ -1,4 +1,5 @@
 ﻿using SimpleCrawler.Core;
+using SimpleCrawler.Core.Collectors;
 using SimpleCrawler.Core.Helpers;
 using SimpleCrawler.Core.Robots;
 using SimpleCrawler.Core.Robots.Http;
@@ -12,6 +13,7 @@ public static class ServiceCollectionExtensions
     public static IServiceCollection AddHtmlAgilityPackCrawler(this IServiceCollection services, CrawlerOptions options, Action<IServiceProvider, HttpClient>? config = null)
     {
         services.AddSingleton(Options.Create(options));
+        services.AddCrawlCollectors(options);
         services.AddHtmlAgilityPackCrawler(config);
 
         return services;

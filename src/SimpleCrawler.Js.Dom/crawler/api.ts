@@ -83,7 +83,14 @@ function getBaseHref(): string {
 // but reads the live DOM directly, avoiding the serialize→reparse round trip. A naive childNodes walk is
 // true parity with serializeNode: the serializer also iterates childNodes, so template .content and
 // shadowRoot (both off the childNodes axis) are skipped by both paths.
-function collectLinks(): { anchors: (string | null)[]; canonical: string | null; robots: string | null } {
+//
+// This collects only the crawl-essential fields. Any additional per-page data (e.g. PageSignals) is captured
+// by DOM collectors, whose JS fragments the host composes around this call — the renderer knows nothing of it.
+function collectLinks(): {
+    anchors: (string | null)[];
+    canonical: string | null;
+    robots: string | null;
+} {
     const anchors: (string | null)[] = [];
     let canonical: string | null = null;
     let robots: string | null = null;

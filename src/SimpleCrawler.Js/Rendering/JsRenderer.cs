@@ -2,6 +2,8 @@ using Microsoft.Extensions.Logging;
 using SimpleCrawler.Core.Extensions;
 using SimpleCrawler.Js.Abstractions;
 using SimpleCrawler.Js.Errors;
+using SimpleCrawler.Core.Collectors;
+using SimpleCrawler.Core.Helpers;
 using SimpleCrawler.Js.Models;
 using SimpleCrawler.Js.Network;
 using SimpleCrawler.Js.Services;
@@ -20,14 +22,25 @@ public sealed class JsRenderer
     private readonly IJsEngineFactory _engineFactory;
     private readonly JsRenderOptions _options;
     private readonly ILogger _logger;
+    private readonly string _extractScript;
+    private readonly bool _hasCollectors;
     private readonly SourceCache _sources = new();
     private readonly RenderFetchCache _fetchCache = new();
 
-    public JsRenderer(IJsEngineFactory engineFactory, JsRenderOptions options, ILogger logger)
+    /// <summary>
+    /// <paramref name="collectorBlock"/> is the JavaScript (from <see cref="DomScriptComposer.CollectorBlock"/>)
+    /// that runs registered DOM collectors in-page; <c>null</c> when none are registered, so the extract is the
+    /// plain <c>__crawlerCollectLinks()</c> path with no added work.
+    /// </summary>
+    public JsRenderer(IJsEngineFactory engineFactory, JsRenderOptions options, ILogger logger, string? collectorBlock = null)
     {
         _engineFactory = engineFactory;
         _options = options;
         _logger = logger;
+        _hasCollectors = collectorBlock is not null;
+        _extractScript = collectorBlock is null
+            ? "__crawlerCollectLinks()"
+            : $"(() => {{ const out = JSON.parse(__crawlerCollectLinks()); {collectorBlock} return JSON.stringify(out); }})()";
     }
 
     /// <summary>
@@ -361,11 +374,11 @@ public sealed class JsRenderer
     private static void FireResourceEvent(IJsEngine engine, int id, string type)
         => engine.CallGlobal("__crawlerFireResourceEvent", id, type);
 
-    private static JsExtract CollectLinks(IJsEngine engine)
+    private JsExtract CollectLinks(IJsEngine engine)
     {
-        var json = engine.Evaluate<string>("__crawlerCollectLinks()");
+        var json = engine.Evaluate<string>(_extractScript);
         if (string.IsNullOrEmpty(json))
-            return new JsExtract(null, null, []);
+            return _emptyExtract;
 
         using var doc = JsonDocument.Parse(json);
         var root = doc.RootElement;
@@ -380,7 +393,9 @@ public sealed class JsRenderer
         var canonical = root.TryGetProperty("canonical", out var canonicalProp) && canonicalProp.ValueKind == JsonValueKind.String ? canonicalProp.GetString() : null;
         var robots = root.TryGetProperty("robots", out var robotsProp) && robotsProp.ValueKind == JsonValueKind.String ? robotsProp.GetString() : null;
 
-        return new JsExtract(canonical, robots, hrefs);
+        var collectors = _hasCollectors ? DomScriptComposer.ReadCollectors(root) : null;
+
+        return new JsExtract(canonical, robots, hrefs, collectors);
     }
 
     private static byte[] SerializeJs(IJsEngine engine)

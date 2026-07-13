@@ -106,13 +106,13 @@ public class CrawlerCancellationTests
             return new object();
         }
 
-        protected override Task<int?> NavigateAsync(object page, string url, ProxyInfo? proxy, CancellationToken cancellationToken) =>
-            Task.FromResult<int?>(200);
+        protected override Task<(int? Status, IReadOnlyDictionary<string, string>? Headers)> NavigateAsync(object page, string url, ProxyInfo? proxy, CancellationToken cancellationToken) =>
+            Task.FromResult<(int? Status, IReadOnlyDictionary<string, string>? Headers)>((200, null));
 
         protected override Task ClosePageCore(object page) => Task.CompletedTask;
 
-        protected override Task<JsonElement> EvaluateExtractorAsync(object page, string script, CancellationToken cancellationToken) =>
-            Task.FromResult(default(JsonElement));
+        protected override Task<string?> EvaluateExtractorAsync(object page, string script, CancellationToken cancellationToken) =>
+            Task.FromResult<string?>(null);
 
         protected override ValueTask<ScrapeResult> GetResult(CancellationToken cancellationToken) =>
             new(new ScrapeResult { Urls = Visited });

@@ -1,4 +1,5 @@
 ﻿using SimpleCrawler.Core;
+using SimpleCrawler.Core.Collectors;
 using SimpleCrawler.Core.Robots;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
@@ -10,6 +11,7 @@ public static class ServiceCollectionExtensions
     public static IServiceCollection AddPuppeteerCrawler(this IServiceCollection services, HeadlessCrawlerOptions options)
     {
         services.AddSingleton(Options.Create(options));
+        services.AddCrawlCollectors(options);
         services.AddPuppeteerCrawler();
 
         return services;

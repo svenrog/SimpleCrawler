@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using SimpleCrawler.Core.Checkpoints;
+using SimpleCrawler.Core.Collectors;
 using SimpleCrawler.Core.Collections;
 using SimpleCrawler.Core.Comparers;
 using SimpleCrawler.Core.Extensions;
@@ -33,6 +34,8 @@ public abstract class AbstractCrawler<TResponse, TDocument, TResult> : ICrawler<
     private readonly CheckpointCoordinator? _checkpoints;
     private readonly UrlFilter? _urlFilter;
     private readonly ILogger _logger;
+    private readonly ICrawlCollector[] _collectors;
+    private readonly IDomCollector[] _domCollectors;
 
     private CrawlState _state;
 
@@ -54,10 +57,27 @@ public abstract class AbstractCrawler<TResponse, TDocument, TResult> : ICrawler<
 
     protected CancellationToken CrawlCancellationToken { get; private set; }
 
-    protected AbstractCrawler(IOptions<CrawlerOptions> options, ILogger logger, ICheckpointStore? checkpoint = null)
+    /// <summary>
+    /// True when at least one <see cref="ICrawlCollector"/> is registered. Backends read this to gate the
+    /// neutral response material (headers, cookie names) that collectors may consume, so a plain crawl with
+    /// no collectors builds none of it.
+    /// </summary>
+    protected bool HasCollectors => _collectors.Length > 0;
+
+    /// <summary>
+    /// The registered <see cref="IDomCollector"/>s, in registration order. Backends gate their DOM extraction
+    /// on this being non-empty and feed each collector its per-page DOM material; the set is fixed for the
+    /// crawl, so backends can compose their in-page extraction script from it once.
+    /// </summary>
+    protected IReadOnlyList<IDomCollector> DomCollectors => _domCollectors;
+
+    protected AbstractCrawler(IOptions<CrawlerOptions> options, ILogger logger, ICheckpointStore? checkpoint = null, IEnumerable<ICrawlCollector>? collectors = null)
     {
         _options = options.Value;
         _logger = logger;
+        _collectors = collectors is null ? [] : [.. collectors];
+        _domCollectors = [.. _collectors.OfType<IDomCollector>()];
+        VerifyUniqueCollectorKeys(_domCollectors);
         _urlFilter = UrlFilter.Create(_options.IncludePatterns, _options.ExcludePatterns);
         _throttling = new AdaptiveThrottler(_options.Throttling, logger);
         _checkpoints = checkpoint is not null ? new CheckpointCoordinator(checkpoint, _options.Checkpoint.Interval, logger) : null;
@@ -69,6 +89,26 @@ public abstract class AbstractCrawler<TResponse, TDocument, TResult> : ICrawler<
         _frontier = new HostFrontier(_throttling, GetCrawlDelay);
         _fetchChannel = CreateFetchChannel();
         _parseChannel = CreateParseChannel();
+    }
+
+    /// <summary>
+    /// Throws when two registered <see cref="IDomCollector"/>s share a <see cref="IDomCollector.Key"/>. On the
+    /// rendered backends the keys collide in the in-page envelope (last writer wins) and each colliding
+    /// collector then reads the same slice — silent data corruption, surfaced here once at construction rather
+    /// than as mysterious results mid-crawl.
+    /// </summary>
+    private static void VerifyUniqueCollectorKeys(IReadOnlyList<IDomCollector> collectors)
+    {
+        HashSet<string> seen = [];
+        foreach (var collector in collectors)
+        {
+            if (!seen.Add(collector.Key))
+            {
+                throw new InvalidOperationException(
+                    $"Two ICrawlCollectors are registered with the IDomCollector Key '{collector.Key}'. "
+                    + "Each IDomCollector.Key must be unique; on rendered backends duplicates corrupt collector results.");
+            }
+        }
     }
 
     public virtual Task<TResult> Start(string entry, CancellationToken cancellationToken = default)
@@ -442,8 +482,6 @@ public abstract class AbstractCrawler<TResponse, TDocument, TResult> : ICrawler<
             var resolvedUrl = Normalize(UriHelper.GetAbsoluteUrl(pageBase, pageData.CanonicalHref) ?? url);
             var depth = _state.Frontier.TryGetValue(url, out var d) ? d : 0;
 
-            await AnalyzeDocument(resolvedUrl, document);
-
             var robots = _options.RespectMetaRobots ? pageData.Robots : RobotsRules.All;
             if (robots.Index)
                 Visited.Add(resolvedUrl);
@@ -458,13 +496,7 @@ public abstract class AbstractCrawler<TResponse, TDocument, TResult> : ICrawler<
                 entry.LinkCount = discovered;
                 entry.Outcome = CrawlOutcome.Success;
 
-                if (pageData.Signals is { } domSignals)
-                {
-                    var signals = entry.Signals ??= new PageSignals();
-                    signals.ScriptSources = domSignals.ScriptSources;
-                    signals.MetaTags = domSignals.MetaTags;
-                    signals.JsonLdBlocks = domSignals.JsonLdBlocks;
-                }
+                await InvokeDocumentCollectors(entry, pageData.Dom, resolvedUrl);
             }
         }
         catch (OperationCanceledException) when (CrawlCancellationToken.IsCancellationRequested)
@@ -526,38 +558,54 @@ public abstract class AbstractCrawler<TResponse, TDocument, TResult> : ICrawler<
     }
 
     /// <summary>
-    /// Called by fetch backends once the HTTP status is known, to enrich the per-URL report with the
-    /// facts only the backend can see. Safe to call for any URL currently being fetched.
+    /// Called by fetch backends once the HTTP response is known, to enrich the per-URL report with the
+    /// facts only the backend can see (status, size, type) and to hand the normalized response to every
+    /// registered <see cref="ICrawlCollector"/>. Safe to call for any URL currently being fetched.
     /// </summary>
-    protected void ReportResponse(string url, int statusCode, long? contentLength, string? contentType)
+    protected void ReportResponse(string url, ResponseSignal response)
     {
         if (!_state.Reports.TryGetValue(url, out var entry))
             return;
 
-        entry.StatusCode = statusCode;
-        entry.ContentLength = contentLength;
-        entry.ContentType = contentType;
+        entry.StatusCode = response.StatusCode;
+        entry.ContentLength = response.ContentLength;
+        entry.ContentType = response.ContentType;
+
+        foreach (var collector in _collectors)
+        {
+            try
+            {
+                collector.OnResponse(entry, response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Collector '{collector}' failed on response for '{url}'", collector.GetType().Name, url);
+            }
+        }
     }
 
     /// <summary>
-    /// Opt-in companion to <see cref="ReportResponse"/>: called by a backend's fetch path (only when
-    /// <see cref="CrawlerOptions.CapturePageSignals"/> is on) to record response headers and cookie
-    /// names against the in-flight <see cref="UrlReport"/>. Lazily creates
-    /// <see cref="UrlReport.Signals"/> on first write; <see cref="ProcessPage"/> later merges DOM
-    /// signals (script sources, meta tags, JSON-LD) onto the same instance.
+    /// Feeds the parsed page's DOM material to every registered <see cref="IDomCollector"/> via the backend's
+    /// <paramref name="dom"/> dispatch (<c>null</c> when no DOM collectors are registered). Each collector is
+    /// isolated: a throw is logged and swallowed so one faulty collector neither aborts the crawl nor skips
+    /// the others (matching the documented collector contract).
     /// </summary>
-    protected void ReportSignals(string url, Dictionary<string, string>? headers, List<string>? cookieNames)
+    private async ValueTask InvokeDocumentCollectors(UrlReport report, IDomDispatch? dom, string resolvedUrl)
     {
-        if (!_state.Reports.TryGetValue(url, out var entry))
+        if (dom is null)
             return;
 
-        var signals = entry.Signals ??= new PageSignals();
-
-        if (headers is not null)
-            signals.Headers = headers;
-
-        if (cookieNames is not null)
-            signals.CookieNames = cookieNames;
+        foreach (var collector in _domCollectors)
+        {
+            try
+            {
+                await dom.Dispatch(report, collector, resolvedUrl);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Collector '{collector}' failed on document for '{url}'", collector.Key, report.Url);
+            }
+        }
     }
 
     /// <summary>
@@ -684,16 +732,6 @@ public abstract class AbstractCrawler<TResponse, TDocument, TResult> : ICrawler<
     protected abstract ValueTask<TResult> GetResult(CancellationToken cancellationToken);
 
     protected virtual ValueTask BackgroundDiscovery(CancellationToken cancellationToken)
-    {
-        return ValueTask.CompletedTask;
-    }
-
-    /// <summary>
-    /// Override to collect data beyond links from the already-parsed document. Runs on the parse workers,
-    /// so any shared state it touches must be thread-safe, and any exception it throws is logged by
-    /// ProcessPage rather than propagated - it will not stop the crawl.
-    /// </summary>
-    protected virtual ValueTask AnalyzeDocument(string url, TDocument document)
     {
         return ValueTask.CompletedTask;
     }

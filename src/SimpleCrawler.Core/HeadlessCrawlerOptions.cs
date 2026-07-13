@@ -24,6 +24,7 @@ public sealed class HeadlessCrawlerOptions : CrawlerOptions
         RespectMetaRobots = options.RespectMetaRobots;
         RespectRobotsTxt = options.RespectRobotsTxt;
         EnableSitemapDiscovery = options.EnableSitemapDiscovery;
+        CapturePageSignals = options.CapturePageSignals;
         BrowserProfile = options.BrowserProfile;
         ProxyPool = options.ProxyPool;
         Retry = options.Retry;

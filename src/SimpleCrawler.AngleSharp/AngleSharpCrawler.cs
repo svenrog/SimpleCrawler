@@ -1,11 +1,13 @@
 using AngleSharp.Dom;
 using AngleSharp.Html.Parser;
-using SimpleCrawler.Core;
-using SimpleCrawler.Core.Checkpoints;
-using SimpleCrawler.Core.Models;
-using SimpleCrawler.Core.Robots;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using SimpleCrawler.Core;
+using SimpleCrawler.Core.Checkpoints;
+using SimpleCrawler.Core.Collectors;
+using SimpleCrawler.Core.Helpers;
+using SimpleCrawler.Core.Models;
+using SimpleCrawler.Core.Robots;
 
 namespace SimpleCrawler.AngleSharp;
 
@@ -14,7 +16,7 @@ public abstract class AngleSharpCrawler<TResult> : AbstractStaticHtmlCrawler<IDo
 {
     private static readonly HtmlParser _parser = new();
 
-    protected AngleSharpCrawler(HttpClient client, IRobotClient robotClient, IOptions<CrawlerOptions> options, ILogger logger, ICheckpointStore? checkpoint = null) : base(client, robotClient, options, logger, checkpoint)
+    protected AngleSharpCrawler(HttpClient client, IRobotClient robotClient, IOptions<CrawlerOptions> options, ILogger logger, ICheckpointStore? checkpoint = null, IEnumerable<ICrawlCollector>? collectors = null) : base(client, robotClient, options, logger, checkpoint, collectors)
     {
     }
 
@@ -24,8 +26,7 @@ public abstract class AngleSharpCrawler<TResult> : AbstractStaticHtmlCrawler<IDo
         return _parser.ParseDocument(stream);
     }
 
-    protected override (string? CanonicalHref, string? RobotsContent, IReadOnlyList<string?> LinkHrefs, PageSignals? Signals)
-        ExtractStatic(IDocument document)
+    protected override PageExtract ExtractStatic(IDocument document)
     {
         var anchors = document.QuerySelectorAll("a");
 
@@ -36,39 +37,16 @@ public abstract class AngleSharpCrawler<TResult> : AbstractStaticHtmlCrawler<IDo
         var canonicalHref = document.QuerySelector("link[rel='canonical']")?.GetAttribute("href");
         var robotsContent = document.QuerySelector("meta[name='robots']")?.GetAttribute("content");
 
-        var signals = CaptureSignals ? ExtractSignals(document) : null;
+        var robots = IndexingHelper.ParseMetaRobots(robotsContent);
+        var dom = (IDomDispatch?)null;
 
-        return (canonicalHref, robotsContent, hrefs, signals);
-    }
-
-    private static PageSignals ExtractSignals(IDocument document)
-    {
-        var signals = new PageSignals();
-
-        foreach (var script in document.QuerySelectorAll("script"))
+        if (DomCollectors.Count > 0)
         {
-            var src = script.GetAttribute("src");
-            if (!string.IsNullOrEmpty(src))
-            {
-                signals.ScriptSources.Add(src);
-            }
-            else if (string.Equals(script.GetAttribute("type"), "application/ld+json", StringComparison.OrdinalIgnoreCase))
-            {
-                var jsonLd = script.TextContent.Trim();
-                if (jsonLd.Length > 0)
-                    signals.JsonLdBlocks.Add(jsonLd);
-            }
+            var page = new AngleSharpPageDom(document);
+            dom = new StaticDomDispatch(page);
         }
 
-        foreach (var meta in document.QuerySelectorAll("meta"))
-        {
-            var name = meta.GetAttribute("name") ?? meta.GetAttribute("property");
-            var content = meta.GetAttribute("content");
-            if (name is not null && content is not null)
-                signals.MetaTags[name] = content;
-        }
-
-        return signals;
+        return new PageExtract(canonicalHref, robots, hrefs, dom);
     }
 
     protected override Task DisposeDocument(IDocument document)
