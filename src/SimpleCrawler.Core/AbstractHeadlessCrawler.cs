@@ -21,13 +21,17 @@ public abstract class AbstractHeadlessCrawler<TPage, TResult> : AbstractRobotsCr
     private readonly ConcurrentDictionary<string, ConcurrentQueue<TPage>> _pagePools;
     private readonly ConcurrentDictionary<TPage, string> _pageKeys;
     private readonly ILogger _logger;
+    private readonly string _extractorScript;
 
     protected AbstractHeadlessCrawler(IRobotClient robotClient, IOptions<HeadlessCrawlerOptions> options, ILogger logger, IProxyPool? pool = null, ICheckpointStore? checkpoint = null, IEnumerable<ICrawlCollector>? collectors = null) : base(robotClient, options, logger, checkpoint, collectors)
     {
+        var staticCollectors = DomCollectors.OfType<IRenderedDomCollector>().ToList();
+
         _retry = new RetryExecutor(options.Value.Retry, pool);
         _pagePools = new ConcurrentDictionary<string, ConcurrentQueue<TPage>>();
         _pageKeys = new ConcurrentDictionary<TPage, string>();
         _logger = logger;
+        _extractorScript = RenderedPageExtractor.Compose(staticCollectors);
     }
 
     protected override async Task<TPage?> LoadResponse(string url, CancellationToken cancellationToken)
@@ -96,7 +100,7 @@ public abstract class AbstractHeadlessCrawler<TPage, TResult> : AbstractRobotsCr
     /// </summary>
     private ResponseSignal ToResponseSignal(int status, IReadOnlyDictionary<string, string>? headers)
     {
-        if (!CaptureSignals || headers is null)
+        if (!HasCollectors || headers is null)
             return new ResponseSignal { StatusCode = status };
 
         var normalized = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
@@ -125,14 +129,12 @@ public abstract class AbstractHeadlessCrawler<TPage, TResult> : AbstractRobotsCr
 
     protected override async ValueTask<PageExtract> ExtractPageData(TPage response)
     {
-        var json = await EvaluateExtractorAsync(response, RenderedPageExtractor.Script, CrawlCancellationToken);
+        var json = await EvaluateExtractorAsync(response, _extractorScript, CrawlCancellationToken);
         if (string.IsNullOrEmpty(json))
-            return new PageExtract(null, RobotsRules.All, [], CaptureSignals ? new PageSignals() : null);
+            return new PageExtract(null, RobotsRules.All, []);
 
         using var document = JsonDocument.Parse(json);
-        var (canonicalHref, robotsContent, linkHrefs, signals) = RenderedPageExtractor.Parse(document.RootElement);
-
-        return new PageExtract(canonicalHref, IndexingHelper.ParseMetaRobots(robotsContent), linkHrefs, signals);
+        return RenderedPageExtractor.Parse(document.RootElement);
     }
 
     private async ValueTask<TPage> AcquirePage(ProxyInfo? proxy)

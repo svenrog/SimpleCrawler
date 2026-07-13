@@ -48,7 +48,7 @@ public abstract class PlaywrightCrawler<TResult> : AbstractHeadlessCrawler<IPage
             return (null, null);
         }
 
-        var headers = CaptureSignals ? await CollectHeadersAsync(response) : null;
+        var headers = HasCollectors ? await CollectHeadersAsync(response) : null;
         return (response.Status, headers);
     }
 
@@ -93,6 +93,6 @@ public abstract class PlaywrightCrawler<TResult> : AbstractHeadlessCrawler<IPage
 
     protected override async Task<string?> EvaluateExtractorAsync(IPage page, string script, CancellationToken cancellationToken)
     {
-        return await page.EvaluateAsync<string?>(script, CaptureSignals).WaitAsync(cancellationToken);
+        return await page.EvaluateAsync<string?>(script).WaitAsync(cancellationToken);
     }
 }

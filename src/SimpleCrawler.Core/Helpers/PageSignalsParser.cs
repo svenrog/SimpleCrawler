@@ -4,10 +4,9 @@ using System.Text.Json;
 namespace SimpleCrawler.Core.Helpers;
 
 /// <summary>
-/// Reads the DOM half of a <see cref="PageSignals"/> (script sources, meta tags, JSON-LD blocks) out of
-/// the JSON an in-browser extractor produces. Shared by every backend that captures signals from a
-/// rendered tree — the headless <see cref="RenderedPageExtractor"/> and the in-process JS renderer —
-/// which differ only in where the signal object sits in their result, not in how its fields are shaped.
+/// Reads the DOM half of a <see cref="PageSignals"/> (script sources, meta tags, JSON-LD blocks) out of the
+/// JSON that <see cref="Collectors.PageSignalsCollector.DomScript"/> produces in-page. Kept next to that
+/// collector's static-DOM walk so the two forms of the same extraction stay shaped identically.
 /// </summary>
 public static class PageSignalsParser
 {

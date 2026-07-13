@@ -84,22 +84,16 @@ function getBaseHref(): string {
 // true parity with serializeNode: the serializer also iterates childNodes, so template .content and
 // shadowRoot (both off the childNodes axis) are skipped by both paths.
 //
-// When captureSignals is set, the same walk also collects script sources, meta tags, and JSON-LD blocks
-// (mirroring PageSignals on the C# side), so opting out costs nothing extra per page.
-function collectLinks(captureSignals: boolean): {
+// This collects only the crawl-essential fields. Any additional per-page data (e.g. PageSignals) is captured
+// by DOM collectors, whose JS fragments the host composes around this call — the renderer knows nothing of it.
+function collectLinks(): {
     anchors: (string | null)[];
     canonical: string | null;
     robots: string | null;
-    scriptSources?: string[];
-    metaTags?: Record<string, string>;
-    jsonLdBlocks?: string[];
 } {
     const anchors: (string | null)[] = [];
     let canonical: string | null = null;
     let robots: string | null = null;
-    const scriptSources: string[] = [];
-    const metaTags: Record<string, string> = {};
-    const jsonLdBlocks: string[] = [];
     if (!doc.documentElement) return { anchors, canonical, robots };
     function walk(n: any): void {
         for (const c of n.childNodes) {
@@ -110,31 +104,14 @@ function collectLinks(captureSignals: boolean): {
             } else if (canonical == null && tag === "link") {
                 const rel = (c.getAttribute("rel") || "").toLowerCase().split(/\s+/);
                 if (rel.indexOf("canonical") >= 0) canonical = c.getAttribute("href");
-            } else if (tag === "meta") {
-                if (robots == null && (c.getAttribute("name") || "").toLowerCase() === "robots") robots = c.getAttribute("content");
-            }
-            if (captureSignals) {
-                if (tag === "script") {
-                    const src = c.getAttribute("src");
-                    if (src) {
-                        scriptSources.push(src);
-                    } else if ((c.getAttribute("type") || "").toLowerCase() === "application/ld+json") {
-                        const text = (c.textContent || "").trim();
-                        if (text) jsonLdBlocks.push(text);
-                    }
-                } else if (tag === "meta") {
-                    const name = c.getAttribute("name") || c.getAttribute("property");
-                    const content = c.getAttribute("content");
-                    if (name && content !== null) metaTags[name] = content;
-                }
+            } else if (robots == null && tag === "meta") {
+                if ((c.getAttribute("name") || "").toLowerCase() === "robots") robots = c.getAttribute("content");
             }
             walk(c);
         }
     }
     walk(doc.documentElement);
-    return captureSignals
-        ? { anchors, canonical, robots, scriptSources, metaTags, jsonLdBlocks }
-        : { anchors, canonical, robots };
+    return { anchors, canonical, robots };
 }
 
 function countAnchors(): number {
@@ -189,7 +166,7 @@ export function installCrawlerApi(global: any): void {
     global.__crawlerLoadHtml = (html: unknown) => { parseHTML(doc, html); };
     global.__crawlerCollectScripts = () => JSON.stringify(collectScripts());
     global.__crawlerGetBaseHref = () => getBaseHref();
-    global.__crawlerCollectLinks = (captureSignals?: boolean) => JSON.stringify(collectLinks(!!captureSignals));
+    global.__crawlerCollectLinks = () => JSON.stringify(collectLinks());
     global.__crawlerPending = () => pendingCount();
     global.__crawlerPump = () => pumpTasks();
     global.__crawlerTakeResources = () => takeResources();

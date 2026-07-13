@@ -2,8 +2,8 @@ using Microsoft.Extensions.Logging;
 using SimpleCrawler.Core.Extensions;
 using SimpleCrawler.Js.Abstractions;
 using SimpleCrawler.Js.Errors;
+using SimpleCrawler.Core.Collectors;
 using SimpleCrawler.Core.Helpers;
-using SimpleCrawler.Core.Models;
 using SimpleCrawler.Js.Models;
 using SimpleCrawler.Js.Network;
 using SimpleCrawler.Js.Services;
@@ -19,27 +19,28 @@ public sealed class JsRenderer
     private static readonly UTF8Encoding _utf8NoBom = new(encoderShouldEmitUTF8Identifier: false);
     private static readonly JsExtract _emptyExtract = new(null, null, []);
 
-    /// <summary>
-    /// An extract with no links. When signal capture is on it still carries an (empty) <see cref="PageSignals"/>
-    /// so an empty or aborted render presents the same shape as a populated one — matching the static backends,
-    /// which always return a non-null signals object when capturing.
-    /// </summary>
-    private static JsExtract EmptyExtract(bool captureSignals) =>
-        captureSignals ? new JsExtract(null, null, [], new PageSignals()) : _emptyExtract;
-
     private readonly IJsEngineFactory _engineFactory;
     private readonly JsRenderOptions _options;
     private readonly ILogger _logger;
-    private readonly bool _captureSignals;
+    private readonly string _extractScript;
+    private readonly bool _hasCollectors;
     private readonly SourceCache _sources = new();
     private readonly RenderFetchCache _fetchCache = new();
 
-    public JsRenderer(IJsEngineFactory engineFactory, JsRenderOptions options, ILogger logger, bool captureSignals = false)
+    /// <summary>
+    /// <paramref name="collectorBlock"/> is the JavaScript (from <see cref="DomScriptComposer.CollectorBlock"/>)
+    /// that runs registered DOM collectors in-page; <c>null</c> when none are registered, so the extract is the
+    /// plain <c>__crawlerCollectLinks()</c> path with no added work.
+    /// </summary>
+    public JsRenderer(IJsEngineFactory engineFactory, JsRenderOptions options, ILogger logger, string? collectorBlock = null)
     {
         _engineFactory = engineFactory;
         _options = options;
         _logger = logger;
-        _captureSignals = captureSignals;
+        _hasCollectors = collectorBlock is not null;
+        _extractScript = collectorBlock is null
+            ? "__crawlerCollectLinks()"
+            : $"(() => {{ const out = JSON.parse(__crawlerCollectLinks()); {collectorBlock} return JSON.stringify(out); }})()";
     }
 
     /// <summary>
@@ -59,7 +60,7 @@ public sealed class JsRenderer
     /// AngleSharp reparse. Scriptless shells still parse, because extraction needs the tree.
     /// </summary>
     internal Task<JsExtract> ExtractAsync(byte[] shell, string pageUrl, HttpClient client, CancellationToken cancellationToken)
-        => RunAsync(shell, pageUrl, client, engine => CollectLinks(engine, _captureSignals), EmptyExtract(_captureSignals), cancellationToken);
+        => RunAsync(shell, pageUrl, client, CollectLinks, _emptyExtract, cancellationToken);
 
     /// <summary>
     /// The DOM lives entirely in JS (Preludes/dom.js). HTML goes in via __crawlerLoadHtml, the bundle mutates
@@ -373,11 +374,11 @@ public sealed class JsRenderer
     private static void FireResourceEvent(IJsEngine engine, int id, string type)
         => engine.CallGlobal("__crawlerFireResourceEvent", id, type);
 
-    private static JsExtract CollectLinks(IJsEngine engine, bool captureSignals)
+    private JsExtract CollectLinks(IJsEngine engine)
     {
-        var json = engine.Evaluate<string>(captureSignals ? "__crawlerCollectLinks(true)" : "__crawlerCollectLinks()");
+        var json = engine.Evaluate<string>(_extractScript);
         if (string.IsNullOrEmpty(json))
-            return EmptyExtract(captureSignals);
+            return _emptyExtract;
 
         using var doc = JsonDocument.Parse(json);
         var root = doc.RootElement;
@@ -392,7 +393,9 @@ public sealed class JsRenderer
         var canonical = root.TryGetProperty("canonical", out var canonicalProp) && canonicalProp.ValueKind == JsonValueKind.String ? canonicalProp.GetString() : null;
         var robots = root.TryGetProperty("robots", out var robotsProp) && robotsProp.ValueKind == JsonValueKind.String ? robotsProp.GetString() : null;
 
-        return new JsExtract(canonical, robots, hrefs, captureSignals ? PageSignalsParser.Read(root) : null);
+        var collectors = _hasCollectors ? DomScriptComposer.ReadCollectors(root) : null;
+
+        return new JsExtract(canonical, robots, hrefs, collectors);
     }
 
     private static byte[] SerializeJs(IJsEngine engine)

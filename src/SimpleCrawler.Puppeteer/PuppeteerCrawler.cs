@@ -53,7 +53,7 @@ public abstract class PuppeteerCrawler<TResult> : AbstractHeadlessCrawler<IPage,
 
         // response.Headers comes straight from CDP, which already joins repeated headers (e.g. multiple
         // Set-Cookie) with a newline — the same ResponseSignal.HeaderValueSeparator the other backends use.
-        return ((int)response.Status, CaptureSignals ? response.Headers : null);
+        return ((int)response.Status, HasCollectors ? response.Headers : null);
     }
 
     protected override async Task ClosePageCore(IPage page)
@@ -69,6 +69,6 @@ public abstract class PuppeteerCrawler<TResult> : AbstractHeadlessCrawler<IPage,
 
     protected override async Task<string?> EvaluateExtractorAsync(IPage page, string script, CancellationToken cancellationToken)
     {
-        return await page.EvaluateFunctionAsync<string?>(script, CaptureSignals).WaitAsync(cancellationToken);
+        return await page.EvaluateFunctionAsync<string?>(script).WaitAsync(cancellationToken);
     }
 }

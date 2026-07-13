@@ -1,11 +1,11 @@
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
+using SimpleCrawler.Core.Checkpoints;
 using SimpleCrawler.Core.Collectors;
 using SimpleCrawler.Core.Extensions;
 using SimpleCrawler.Core.Helpers;
 using SimpleCrawler.Core.Models;
 using SimpleCrawler.Core.Robots;
-using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
-using SimpleCrawler.Core.Checkpoints;
 
 namespace SimpleCrawler.Core;
 
@@ -29,7 +29,7 @@ public abstract class AbstractStaticHtmlCrawler<TDocument, TResult> : AbstractRo
 
         var authority = new Uri(url).Authority;
 
-        ReportResponse(url, HttpSignalCollector.ToResponseSignal(response, CaptureSignals));
+        ReportResponse(url, HttpSignalCollector.ToResponseSignal(response, HasCollectors));
 
         if (!response.IsSuccessStatus())
         {
@@ -63,10 +63,7 @@ public abstract class AbstractStaticHtmlCrawler<TDocument, TResult> : AbstractRo
 
     protected override ValueTask<PageExtract> ExtractPageData(TDocument document)
     {
-        var (canonicalHref, robotsContent, hrefs, signals) = ExtractStatic(document);
-
-        var extract = new PageExtract(canonicalHref, IndexingHelper.ParseMetaRobots(robotsContent), hrefs, signals);
-        return new ValueTask<PageExtract>(extract);
+        return new ValueTask<PageExtract>(ExtractStatic(document));
     }
 
     private static TimeSpan? GetRetryAfter(HttpResponseMessage response)
@@ -90,10 +87,9 @@ public abstract class AbstractStaticHtmlCrawler<TDocument, TResult> : AbstractRo
     protected abstract TDocument ParseDocument(byte[] response);
 
     /// <summary>
-    /// The returned <c>Signals</c> should only be populated (non-null) when <c>CaptureSignals</c> is
-    /// true (i.e. a collector is registered), so crawls that don't opt in pay no extra per-page
-    /// extraction cost.
+    /// The <see cref="PageExtract.Dom"/> is a neutral handle for registered DOM collectors to read; it should
+    /// be built (non-null) only when <see cref="AbstractCrawler{TResponse, TDocument, TResult}.DomCollectors"/>
+    /// is non-empty, so crawls with no DOM collector pay no extra per-page cost.
     /// </summary>
-    protected abstract (string? CanonicalHref, string? RobotsContent, IReadOnlyList<string?> LinkHrefs, PageSignals? Signals)
-        ExtractStatic(TDocument document);
+    protected abstract PageExtract ExtractStatic(TDocument document);
 }

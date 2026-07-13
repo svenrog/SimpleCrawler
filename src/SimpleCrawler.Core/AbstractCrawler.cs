@@ -35,6 +35,7 @@ public abstract class AbstractCrawler<TResponse, TDocument, TResult> : ICrawler<
     private readonly UrlFilter? _urlFilter;
     private readonly ILogger _logger;
     private readonly ICrawlCollector[] _collectors;
+    private readonly IDomCollector[] _domCollectors;
 
     private CrawlState _state;
 
@@ -57,17 +58,25 @@ public abstract class AbstractCrawler<TResponse, TDocument, TResult> : ICrawler<
     protected CancellationToken CrawlCancellationToken { get; private set; }
 
     /// <summary>
-    /// True when at least one <see cref="ICrawlCollector"/> is registered. Backends read this to gate
-    /// the extra single-pass extraction (response headers/cookies, DOM script/meta/JSON-LD) that
-    /// collectors consume, so a plain crawl with no collectors does no signal work.
+    /// True when at least one <see cref="ICrawlCollector"/> is registered. Backends read this to gate the
+    /// neutral response material (headers, cookie names) that collectors may consume, so a plain crawl with
+    /// no collectors builds none of it.
     /// </summary>
-    protected bool CaptureSignals => _collectors.Length > 0;
+    protected bool HasCollectors => _collectors.Length > 0;
+
+    /// <summary>
+    /// The registered <see cref="IDomCollector"/>s, in registration order. Backends gate their DOM extraction
+    /// on this being non-empty and feed each collector its per-page DOM material; the set is fixed for the
+    /// crawl, so backends can compose their in-page extraction script from it once.
+    /// </summary>
+    protected IReadOnlyList<IDomCollector> DomCollectors => _domCollectors;
 
     protected AbstractCrawler(IOptions<CrawlerOptions> options, ILogger logger, ICheckpointStore? checkpoint = null, IEnumerable<ICrawlCollector>? collectors = null)
     {
         _options = options.Value;
         _logger = logger;
         _collectors = collectors is null ? [] : [.. collectors];
+        _domCollectors = [.. _collectors.OfType<IDomCollector>()];
         _urlFilter = UrlFilter.Create(_options.IncludePatterns, _options.ExcludePatterns);
         _throttling = new AdaptiveThrottler(_options.Throttling, logger);
         _checkpoints = checkpoint is not null ? new CheckpointCoordinator(checkpoint, _options.Checkpoint.Interval, logger) : null;
@@ -466,7 +475,7 @@ public abstract class AbstractCrawler<TResponse, TDocument, TResult> : ICrawler<
                 entry.LinkCount = discovered;
                 entry.Outcome = CrawlOutcome.Success;
 
-                await InvokeDocumentCollectors(entry, pageData, resolvedUrl);
+                await InvokeDocumentCollectors(entry, pageData.Dom, resolvedUrl);
             }
         }
         catch (OperationCanceledException) when (CrawlCancellationToken.IsCancellationRequested)
@@ -555,21 +564,25 @@ public abstract class AbstractCrawler<TResponse, TDocument, TResult> : ICrawler<
     }
 
     /// <summary>
-    /// Dispatches the parsed page to every registered <see cref="ICrawlCollector"/>. Each collector is
-    /// isolated: a throw is logged and swallowed so one faulty collector neither aborts the crawl nor
-    /// skips the others (matching the documented collector contract).
+    /// Feeds the parsed page's DOM material to every registered <see cref="IDomCollector"/> via the backend's
+    /// <paramref name="dom"/> dispatch (<c>null</c> when no DOM collectors are registered). Each collector is
+    /// isolated: a throw is logged and swallowed so one faulty collector neither aborts the crawl nor skips
+    /// the others (matching the documented collector contract).
     /// </summary>
-    private async ValueTask InvokeDocumentCollectors(UrlReport report, PageExtract extract, string resolvedUrl)
+    private async ValueTask InvokeDocumentCollectors(UrlReport report, IDomDispatch? dom, string resolvedUrl)
     {
-        foreach (var collector in _collectors)
+        if (dom is null)
+            return;
+
+        foreach (var collector in _domCollectors)
         {
             try
             {
-                await collector.OnDocument(report, extract, resolvedUrl);
+                await dom.Dispatch(report, collector, resolvedUrl);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Collector '{collector}' failed on document for '{url}'", collector.GetType().Name, report.Url);
+                _logger.LogError(ex, "Collector '{collector}' failed on document for '{url}'", collector.Key, report.Url);
             }
         }
     }

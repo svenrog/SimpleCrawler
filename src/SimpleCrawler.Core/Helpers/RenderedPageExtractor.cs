@@ -1,63 +1,50 @@
+using SimpleCrawler.Core.Collectors;
 using SimpleCrawler.Core.Models;
 using System.Text.Json;
 
 namespace SimpleCrawler.Core.Helpers;
 
 /// <summary>
-/// One in-browser evaluation returns every anchor href, the canonical link and the meta-robots
-/// directive, collapsing one protocol round-trip per element into one round-trip per page. When
-/// invoked with <c>captureSignals</c> true, the same walk also collects script sources, meta tags,
-/// and JSON-LD blocks, so opting out costs nothing extra per page.
+/// Builds the one in-browser evaluation a headless backend runs per page: it returns every anchor href, the
+/// canonical link, and the meta-robots directive, collapsing one protocol round-trip per element into one per
+/// page. When DOM collectors are registered, <see cref="Compose"/> also injects their fragments (see
+/// <see cref="DomScriptComposer"/>) so their data rides the same single pass.
 ///
 /// The result is returned as a <c>JSON.stringify</c> string, not a live object: Playwright's evaluate
-/// protocol injects reference-tracking <c>$id</c> keys into every object it serializes, which would
-/// otherwise leak into the generically-enumerated meta-tag map. Serializing in-page sidesteps that (and
-/// matches how the in-process JS backends already return their extract).
+/// protocol injects reference-tracking <c>$id</c> keys into every object it serializes, which would otherwise
+/// leak into a generically-enumerated collector result. Serializing in-page sidesteps that (and matches how
+/// the in-process JS backends already return their extract).
 /// </summary>
 public static class RenderedPageExtractor
 {
-    public const string Script = """
-        (captureSignals) => {
-            const anchors = document.querySelectorAll('a[href]');
-            const links = new Array(anchors.length);
-            for (let i = 0; i < anchors.length; i++) {
-                links[i] = anchors[i].getAttribute('href');
-            }
-            const canonical = document.querySelector("link[rel='canonical']");
-            const robots = document.querySelector("meta[name='robots']");
-
-            let signals = null;
-            if (captureSignals) {
-                const scriptSources = [];
-                const jsonLdBlocks = [];
-                for (const script of document.querySelectorAll('script')) {
-                    const src = script.getAttribute('src');
-                    if (src) {
-                        scriptSources.push(src);
-                    } else if ((script.getAttribute('type') || '').toLowerCase() === 'application/ld+json') {
-                        const text = (script.textContent || '').trim();
-                        if (text) jsonLdBlocks.push(text);
-                    }
+    /// <summary>
+    /// The core extractor script, composed once from the registered <paramref name="collectors"/>. Their
+    /// fragments populate <c>out.collectors</c> alongside the crawl-essential links/canonical/robots, each
+    /// isolated so a faulty fragment can never break the core extraction.
+    /// </summary>
+    public static string Compose(IReadOnlyList<IRenderedDomCollector> collectors)
+    {
+        return $$"""
+            () => {
+                const anchors = document.querySelectorAll('a[href]');
+                const links = new Array(anchors.length);
+                for (let i = 0; i < anchors.length; i++) {
+                    links[i] = anchors[i].getAttribute('href');
                 }
-                const metaTags = {};
-                for (const meta of document.querySelectorAll('meta')) {
-                    const name = meta.getAttribute('name') || meta.getAttribute('property');
-                    const content = meta.getAttribute('content');
-                    if (name && content !== null) metaTags[name] = content;
-                }
-                signals = { scriptSources, metaTags, jsonLdBlocks };
+                const canonical = document.querySelector("link[rel='canonical']");
+                const robots = document.querySelector("meta[name='robots']");
+                const out = {
+                    links: links,
+                    canonical: canonical ? canonical.getAttribute('href') : null,
+                    robots: robots ? robots.getAttribute('content') : null
+                };
+                {{DomScriptComposer.CollectorBlock(collectors)}}
+                return JSON.stringify(out);
             }
+            """;
+    }
 
-            return JSON.stringify({
-                links: links,
-                canonical: canonical ? canonical.getAttribute('href') : null,
-                robots: robots ? robots.getAttribute('content') : null,
-                signals: signals
-            });
-        }
-        """;
-
-    public static (string? CanonicalHref, string? RobotsContent, IReadOnlyList<string?> LinkHrefs, PageSignals? Signals) Parse(JsonElement element)
+    public static PageExtract Parse(JsonElement element)
     {
         var links = new List<string?>();
         if (element.TryGetProperty("links", out var linksElement) && linksElement.ValueKind == JsonValueKind.Array)
@@ -66,14 +53,12 @@ public static class RenderedPageExtractor
                 links.Add(item.ValueKind == JsonValueKind.String ? item.GetString() : null);
         }
 
-        return (GetString(element, "canonical"), GetString(element, "robots"), links, ParseSignals(element));
-    }
+        var canonical = GetString(element, "canonical");
+        var robots = IndexingHelper.ParseMetaRobots(GetString(element, "robots"));
+        var collectors = DomScriptComposer.ReadCollectors(element);
+        var dom = new RenderedDomDispatch(collectors);
 
-    private static PageSignals? ParseSignals(JsonElement element)
-    {
-        return element.TryGetProperty("signals", out var signalsElement) && signalsElement.ValueKind == JsonValueKind.Object
-            ? PageSignalsParser.Read(signalsElement)
-            : null;
+        return new PageExtract(canonical, robots, links, dom);
     }
 
     private static string? GetString(JsonElement element, string propertyName)
