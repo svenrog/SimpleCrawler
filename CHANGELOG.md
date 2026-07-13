@@ -45,6 +45,7 @@ Package versions are derived from git tags (`v*`) via MinVer.
 
 ### Changed
 
+- Updated `Jint` dependency to `4.12.0`
 - Checkpoint format: the full discovered-URL set is no longer serialized. `CrawlState` now persists only the
   pending frontier with per-URL depth (`Frontier`) and rebuilds the in-memory `Discovered` on load from
   `Processed` plus the frontier. A completed crawl checkpoints an empty frontier, so the file shrinks rather
