@@ -77,6 +77,7 @@ public abstract class AbstractCrawler<TResponse, TDocument, TResult> : ICrawler<
         _logger = logger;
         _collectors = collectors is null ? [] : [.. collectors];
         _domCollectors = [.. _collectors.OfType<IDomCollector>()];
+        VerifyUniqueCollectorKeys(_domCollectors);
         _urlFilter = UrlFilter.Create(_options.IncludePatterns, _options.ExcludePatterns);
         _throttling = new AdaptiveThrottler(_options.Throttling, logger);
         _checkpoints = checkpoint is not null ? new CheckpointCoordinator(checkpoint, _options.Checkpoint.Interval, logger) : null;
@@ -88,6 +89,26 @@ public abstract class AbstractCrawler<TResponse, TDocument, TResult> : ICrawler<
         _frontier = new HostFrontier(_throttling, GetCrawlDelay);
         _fetchChannel = CreateFetchChannel();
         _parseChannel = CreateParseChannel();
+    }
+
+    /// <summary>
+    /// Throws when two registered <see cref="IDomCollector"/>s share a <see cref="IDomCollector.Key"/>. On the
+    /// rendered backends the keys collide in the in-page envelope (last writer wins) and each colliding
+    /// collector then reads the same slice — silent data corruption, surfaced here once at construction rather
+    /// than as mysterious results mid-crawl.
+    /// </summary>
+    private static void VerifyUniqueCollectorKeys(IReadOnlyList<IDomCollector> collectors)
+    {
+        HashSet<string> seen = [];
+        foreach (var collector in collectors)
+        {
+            if (!seen.Add(collector.Key))
+            {
+                throw new InvalidOperationException(
+                    $"Two ICrawlCollectors are registered with the IDomCollector Key '{collector.Key}'. "
+                    + "Each IDomCollector.Key must be unique; on rendered backends duplicates corrupt collector results.");
+            }
+        }
     }
 
     public virtual Task<TResult> Start(string entry, CancellationToken cancellationToken = default)

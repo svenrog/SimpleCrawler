@@ -86,5 +86,6 @@ public class CaptureSignalsTests : IClassFixture<SignalsHostFixture>
         Assert.Contains(signals.JsonLdBlocks, block => block.Contains("Organization"));
         Assert.Equal("index, follow", signals.MetaTags.GetValueOrDefault("robots"));
         Assert.Equal("SimpleCrawler test host", signals.MetaTags.GetValueOrDefault("generator"));
+        Assert.Equal("Signals Page", signals.MetaTags.GetValueOrDefault("og:title"));
     }
 }

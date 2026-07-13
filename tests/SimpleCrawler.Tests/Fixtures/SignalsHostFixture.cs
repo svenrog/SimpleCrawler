@@ -18,6 +18,7 @@ public sealed class SignalsHostFixture : AbstractHostFixture
             <head>
                 <meta name="robots" content="index, follow" />
                 <meta name="generator" content="SimpleCrawler test host" />
+                <meta property="og:title" content="Signals Page" />
                 <script src="/app.js"></script>
                 <script type="application/ld+json">{"@type":"Organization"}</script>
             </head>
