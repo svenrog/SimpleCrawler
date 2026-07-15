@@ -117,6 +117,30 @@ public class JsRendererCollectTests : IClassFixture<JsRendererFixture>
         Assert.Contains("globals", slices);
     }
 
+    // The pair overload is what a non-crawl caller composes with; it must produce an identical block to the
+    // IRenderedDomCollector one, since that equivalence is the only reason it is safe to offer both.
+    [Theory]
+    [InlineData(JsEngine.Jint)]
+    [InlineData(JsEngine.V8)]
+    public async Task CollectAsync_OverBareKeyScriptPairs_MatchesTheCollectorOverload(JsEngine engine)
+    {
+        if (engine == JsEngine.V8)
+            Assert.SkipUnless(V8Support.IsAvailable, V8Support.UnavailableReason);
+
+        var collector = new GlobalsCollector();
+        var fromPairs = DomScriptComposer.CollectorBlock([(collector.Key, collector.DomScript)]);
+        Assert.Equal(DomScriptComposer.CollectorBlock([collector]), fromPairs);
+
+        var renderer = new JsRenderer(
+            _fixture.GetFactory(engine), new JsRenderOptions(), NullLogger.Instance, fromPairs);
+
+        var slices = await renderer.CollectAsync(
+            Encoding.UTF8.GetBytes(_html), "http://localhost:5000/", new HttpClient(), TestContext.Current.CancellationToken);
+
+        var globals = Assert.Contains("globals", slices);
+        Assert.Equal("acme.example", globals.GetProperty("shop").GetString());
+    }
+
     [Theory]
     [InlineData(JsEngine.Jint)]
     [InlineData(JsEngine.V8)]

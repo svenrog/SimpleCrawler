@@ -30,8 +30,9 @@ public sealed class JsRenderer
     private readonly RenderFetchCache _fetchCache = new();
 
     /// <summary>
-    /// <paramref name="collectorBlock"/> is the JavaScript (from <see cref="DomScriptComposer.CollectorBlock"/>)
-    /// that runs registered DOM collectors in-page; <c>null</c> when none are registered, so the extract is the
+    /// <paramref name="collectorBlock"/> is the JavaScript (from
+    /// <see cref="DomScriptComposer.CollectorBlock(IReadOnlyList{IRenderedDomCollector})"/>) that runs
+    /// registered DOM collectors in-page; <c>null</c> when none are registered, so the extract is the
     /// plain <c>__crawlerCollectLinks()</c> path with no added work.
     /// </summary>
     public JsRenderer(IJsEngineFactory engineFactory, JsRenderOptions options, ILogger logger, string? collectorBlock = null)
