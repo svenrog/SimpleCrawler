@@ -355,8 +355,11 @@ public sealed class JsRenderer
     /// <summary>
     /// A same-origin &lt;script&gt; is fetched and executed so a webpack chunk's module registrations run; a &lt;link&gt;
     /// is treated as loaded without fetching (a crawl needs no CSS). Cross-origin scripts (AppInsights/GTM and
-    /// similar analytics SDKs) are left pending — running them is slow and yields no links, and nothing awaits
-    /// their load. Every other case fires the node's load (or error) event to settle the awaiting import().
+    /// similar analytics SDKs) are left pending unless
+    /// <see cref="JsRenderOptions.ExecuteCrossOriginScripts"/> is set — running them is slow and yields no
+    /// links, and nothing awaits their load, which is the right trade for a crawl but the wrong one when the
+    /// render exists to observe what the page installs. Every other case fires the node's load (or error)
+    /// event to settle the awaiting import().
     /// </summary>
     private async Task LoadResourceAsync(IJsEngine engine, int id, string? tag, string? src, Uri baseUri, Uri pageUri, HttpClient client, string pageUrl, CancellationToken cancellationToken)
     {
@@ -372,7 +375,8 @@ public sealed class JsRenderer
             return;
         }
 
-        if (!string.Equals(absolute.Host, pageUri.Host, StringComparison.OrdinalIgnoreCase))
+        if (!_options.ExecuteCrossOriginScripts
+            && !string.Equals(absolute.Host, pageUri.Host, StringComparison.OrdinalIgnoreCase))
             return;
 
         var source = await FetchSourceAsync(client, _sources, absolute, cancellationToken);
