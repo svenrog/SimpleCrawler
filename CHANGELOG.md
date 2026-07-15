@@ -8,6 +8,24 @@ Package versions are derived from git tags (`v*`) via MinVer.
 
 ## [Unreleased]
 
+
+
+## [3.3.1] - 2026-07-15
+
+### Added
+
+- Public collector-slice render surface (`JsRenderer.CollectAsync`): renders a shell and returns only the
+  per-collector JSON slices the registered `IRenderedDomCollector` fragments produced, keyed by collector.
+  This is `ExtractAsync`'s surface for a consumer that renders without crawling — same engine, same drain,
+  same per-fragment isolation, but no anchors/canonical/meta-robots and no anchor walk to pay for. The
+  crawl-shaped `ExtractAsync` stays internal and unchanged. Returns empty when no collectors are registered.
+- Engine-only DI registrations (`AddV8JsEngine`, `AddJintJsEngine`): register just an unkeyed
+  `IJsEngineFactory` (plus `V8EngineOptions` for V8), with no crawler, robots client, or `CrawlerOptions`.
+  Previously the engine factories were internal and registered only by `AddV8Crawler`/`AddJintCrawler` under
+  an internal-const key, so a consumer that drives `JsRenderer` itself had to stand up an entire crawl
+  pipeline and then resolve the factory by a key that was never public. The crawler registrations are
+  unchanged, and the two can coexist in one container.
+
 ## [3.3.0] - 2026-07-13
 
 ### Added
@@ -204,6 +222,7 @@ Public proxy types are removed and renamed (see _Removed_ and _Changed_), a brea
 - Initial release.
 
 [Unreleased]: https://github.com/svenrog/SimpleCrawler/compare/v3.3.0...HEAD
+[3.3.1]: https://github.com/svenrog/SimpleCrawler/releases/tag/v3.3.1
 [3.3.0]: https://github.com/svenrog/SimpleCrawler/releases/tag/v3.3.0
 [3.2.0]: https://github.com/svenrog/SimpleCrawler/releases/tag/v3.2.0
 [3.1.0]: https://github.com/svenrog/SimpleCrawler/releases/tag/v3.1.0

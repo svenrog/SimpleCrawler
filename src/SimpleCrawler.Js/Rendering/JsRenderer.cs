@@ -18,18 +18,21 @@ public sealed class JsRenderer
 
     private static readonly UTF8Encoding _utf8NoBom = new(encoderShouldEmitUTF8Identifier: false);
     private static readonly JsExtract _emptyExtract = new(null, null, []);
+    private static readonly IReadOnlyDictionary<string, JsonElement> _emptySlices = new Dictionary<string, JsonElement>();
 
     private readonly IJsEngineFactory _engineFactory;
     private readonly JsRenderOptions _options;
     private readonly ILogger _logger;
     private readonly string _extractScript;
+    private readonly string? _collectScript;
     private readonly bool _hasCollectors;
     private readonly SourceCache _sources = new();
     private readonly RenderFetchCache _fetchCache = new();
 
     /// <summary>
-    /// <paramref name="collectorBlock"/> is the JavaScript (from <see cref="DomScriptComposer.CollectorBlock"/>)
-    /// that runs registered DOM collectors in-page; <c>null</c> when none are registered, so the extract is the
+    /// <paramref name="collectorBlock"/> is the JavaScript (from
+    /// <see cref="DomScriptComposer.CollectorBlock(IReadOnlyList{IRenderedDomCollector})"/>) that runs
+    /// registered DOM collectors in-page; <c>null</c> when none are registered, so the extract is the
     /// plain <c>__crawlerCollectLinks()</c> path with no added work.
     /// </summary>
     public JsRenderer(IJsEngineFactory engineFactory, JsRenderOptions options, ILogger logger, string? collectorBlock = null)
@@ -41,6 +44,13 @@ public sealed class JsRenderer
         _extractScript = collectorBlock is null
             ? "__crawlerCollectLinks()"
             : $"(() => {{ const out = JSON.parse(__crawlerCollectLinks()); {collectorBlock} return JSON.stringify(out); }})()";
+
+        // The collect-only envelope deliberately does not call __crawlerCollectLinks: a consumer that only
+        // wants collector slices should not pay for the anchor walk, nor receive crawl semantics it has no
+        // use for. Same block, same per-collector isolation, different envelope.
+        _collectScript = collectorBlock is null
+            ? null
+            : $"(() => {{ const out = {{}}; {collectorBlock} return JSON.stringify(out); }})()";
     }
 
     /// <summary>
@@ -61,6 +71,26 @@ public sealed class JsRenderer
     /// </summary>
     internal Task<JsExtract> ExtractAsync(byte[] shell, string pageUrl, HttpClient client, CancellationToken cancellationToken)
         => RunAsync(shell, pageUrl, client, CollectLinks, _emptyExtract, cancellationToken);
+
+    /// <summary>
+    /// Collector path: renders the page and returns only the per-collector JSON slices the registered
+    /// <see cref="IRenderedDomCollector"/> fragments produced, keyed by <see cref="IDomCollector.Key"/>.
+    /// Empty when no collectors were registered, or when the DOM parse aborted before a tree existed.
+    /// <para>
+    /// This is <see cref="ExtractAsync"/>'s surface for a consumer that is not crawling: it renders on the
+    /// same engine, drains the same way, and isolates a misbehaving fragment identically, but it carries no
+    /// anchors, canonical or meta-robots — the crawl-essential fields a non-crawl caller has no use for and
+    /// would pay an anchor walk to receive. The renderer stays neutral about what any collector captures;
+    /// the slice is opaque JSON either way.
+    /// </para>
+    /// </summary>
+    public async Task<IReadOnlyDictionary<string, JsonElement>> CollectAsync(byte[] shell, string pageUrl, HttpClient client, CancellationToken cancellationToken)
+    {
+        if (_collectScript is null)
+            return _emptySlices;
+
+        return await RunAsync(shell, pageUrl, client, CollectSlices, _emptySlices, cancellationToken);
+    }
 
     /// <summary>
     /// The DOM lives entirely in JS (Preludes/dom.js). HTML goes in via __crawlerLoadHtml, the bundle mutates
@@ -396,6 +426,21 @@ public sealed class JsRenderer
         var collectors = _hasCollectors ? DomScriptComposer.ReadCollectors(root) : null;
 
         return new JsExtract(canonical, robots, hrefs, collectors);
+    }
+
+    /// <summary>
+    /// Reads the collector-only envelope produced by <c>_collectScript</c> into per-collector slices.
+    /// Shares <see cref="DomScriptComposer.ReadCollectors"/> with the crawl path, so a fragment that threw
+    /// or returned unserializable data is absent here for exactly the same reason it would be there.
+    /// </summary>
+    private IReadOnlyDictionary<string, JsonElement> CollectSlices(IJsEngine engine)
+    {
+        var json = engine.Evaluate<string>(_collectScript!);
+        if (string.IsNullOrEmpty(json))
+            return _emptySlices;
+
+        using var doc = JsonDocument.Parse(json);
+        return DomScriptComposer.ReadCollectors(doc.RootElement);
     }
 
     private static byte[] SerializeJs(IJsEngine engine)
