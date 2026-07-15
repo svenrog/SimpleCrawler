@@ -8,7 +8,19 @@ Package versions are derived from git tags (`v*`) via MinVer.
 
 ## [Unreleased]
 
+## [3.3.2] - 2026-07-15
 
+### Added
+
+- Opt-in execution of runtime-injected cross-origin scripts (`JsRenderOptions.ExecuteCrossOriginScripts`,
+  off by default): a `<script src>` appended while the page runs that points at another host is executed
+  rather than left pending. Off remains right for crawling — a tag manager's vendor SDK contributes no
+  links and costs a cross-origin fetch plus a slow evaluation each — but a render whose purpose is to
+  observe what a page *installs* needs them: the container runs from the page's own origin and injects the
+  SDK from the vendor's, so skipping it reports a site running a tag manager as running none. Measured
+  against a real browser, leaving them pending accounted for roughly half of the JavaScript globals a page
+  defines (`google_tag_manager`, `gtag`, `Optanon` and similar). Scripts in the initial HTML were already
+  executed regardless of origin; this governs only runtime-appended nodes.
 
 ## [3.3.1] - 2026-07-15
 
@@ -221,7 +233,8 @@ Public proxy types are removed and renamed (see _Removed_ and _Changed_), a brea
 
 - Initial release.
 
-[Unreleased]: https://github.com/svenrog/SimpleCrawler/compare/v3.3.0...HEAD
+[Unreleased]: https://github.com/svenrog/SimpleCrawler/compare/v3.3.2...HEAD
+[3.3.2]: https://github.com/svenrog/SimpleCrawler/releases/tag/v3.3.2
 [3.3.1]: https://github.com/svenrog/SimpleCrawler/releases/tag/v3.3.1
 [3.3.0]: https://github.com/svenrog/SimpleCrawler/releases/tag/v3.3.0
 [3.2.0]: https://github.com/svenrog/SimpleCrawler/releases/tag/v3.2.0

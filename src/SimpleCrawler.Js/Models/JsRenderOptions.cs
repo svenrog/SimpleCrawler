@@ -20,6 +20,24 @@ public class JsRenderOptions
     public bool EnableIndexedDb { get; set; }
 
     /// <summary>
+    /// Off by default: executes <c>&lt;script src&gt;</c> nodes appended at runtime that point at another
+    /// host, instead of leaving them pending. A tag manager's container is the archetype — it runs from the
+    /// page's own origin and then injects the vendor's SDK from theirs.
+    /// <para>
+    /// Off is right for crawling, which is why it stays the default: those SDKs are analytics/consent/chat
+    /// code that contributes no links, costs a cross-origin fetch and a slow evaluation each, and nothing on
+    /// the page awaits their load. Turn it on when the point of the render is to observe what a page
+    /// <em>installs</em> rather than where it links — technology fingerprinting reads precisely the globals
+    /// those SDKs define, so leaving them pending reports a site running a tag manager as running none.
+    /// </para>
+    /// <para>
+    /// Scripts present in the initial HTML are fetched and executed regardless of origin already; this
+    /// governs only the nodes a page appends while running.
+    /// </para>
+    /// </summary>
+    public bool ExecuteCrossOriginScripts { get; set; }
+
+    /// <summary>
     /// Off by default: installs a WHATWG Streams shim (<c>ReadableStream</c>, <c>TransformStream</c>,
     /// <c>TextDecoderStream</c>, …) and gives <c>Response.body</c> a readable stream. Bodies are
     /// buffered-complete (the fetch path already materializes the whole response), so this delivers
