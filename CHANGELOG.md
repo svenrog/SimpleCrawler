@@ -8,6 +8,10 @@ Package versions are derived from git tags (`v*`) via MinVer.
 
 ## [Unreleased]
 
+
+
+## [3.3.1] - 2026-07-15
+
 ### Added
 
 - Public collector-slice render surface (`JsRenderer.CollectAsync`): renders a shell and returns only the
@@ -218,6 +222,7 @@ Public proxy types are removed and renamed (see _Removed_ and _Changed_), a brea
 - Initial release.
 
 [Unreleased]: https://github.com/svenrog/SimpleCrawler/compare/v3.3.0...HEAD
+[3.3.1]: https://github.com/svenrog/SimpleCrawler/releases/tag/v3.3.1
 [3.3.0]: https://github.com/svenrog/SimpleCrawler/releases/tag/v3.3.0
 [3.2.0]: https://github.com/svenrog/SimpleCrawler/releases/tag/v3.2.0
 [3.1.0]: https://github.com/svenrog/SimpleCrawler/releases/tag/v3.1.0
