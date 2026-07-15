@@ -8,6 +8,8 @@ Package versions are derived from git tags (`v*`) via MinVer.
 
 ## [Unreleased]
 
+## [3.3.2] - 2026-07-15
+
 ### Added
 
 - Opt-in execution of runtime-injected cross-origin scripts (`JsRenderOptions.ExecuteCrossOriginScripts`,
@@ -19,8 +21,6 @@ Package versions are derived from git tags (`v*`) via MinVer.
   against a real browser, leaving them pending accounted for roughly half of the JavaScript globals a page
   defines (`google_tag_manager`, `gtag`, `Optanon` and similar). Scripts in the initial HTML were already
   executed regardless of origin; this governs only runtime-appended nodes.
-
-
 
 ## [3.3.1] - 2026-07-15
 
@@ -233,7 +233,8 @@ Public proxy types are removed and renamed (see _Removed_ and _Changed_), a brea
 
 - Initial release.
 
-[Unreleased]: https://github.com/svenrog/SimpleCrawler/compare/v3.3.0...HEAD
+[Unreleased]: https://github.com/svenrog/SimpleCrawler/compare/v3.3.2...HEAD
+[3.3.2]: https://github.com/svenrog/SimpleCrawler/releases/tag/v3.3.2
 [3.3.1]: https://github.com/svenrog/SimpleCrawler/releases/tag/v3.3.1
 [3.3.0]: https://github.com/svenrog/SimpleCrawler/releases/tag/v3.3.0
 [3.2.0]: https://github.com/svenrog/SimpleCrawler/releases/tag/v3.2.0
