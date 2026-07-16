@@ -2122,6 +2122,41 @@ public class JsDomRendererTests : IClassFixture<JsRendererFixture>
         Assert.Contains("href=\"/ok\"", rendered);
     }
 
+    // AbortController/AbortSignal are general Web APIs (timeouts, cancellation), not fetch-specific, so an SDK
+    // that does `new AbortController()` during init must not throw on the default render, where the fetch
+    // shim is off.
+    [Theory]
+    [InlineData(JsEngine.Jint)]
+    [InlineData(JsEngine.V8)]
+    public async Task JsMode_AbortController_IsPresentWithoutFetchShim(JsEngine engine)
+    {
+        if (engine == JsEngine.V8)
+            Assert.SkipUnless(V8Support.IsAvailable, V8Support.UnavailableReason);
+
+        const string html = """
+            <!doctype html><html><head></head><body>
+            <script>
+            try {
+              var c = new AbortController();
+              var ok = typeof AbortController !== 'undefined' && typeof AbortSignal !== 'undefined' &&
+                       c.signal && c.signal.aborted === false && typeof c.abort === 'function';
+              var l = document.createElement('a'); l.setAttribute('href', ok ? '/ok' : '/err');
+              document.body.appendChild(l);
+            } catch (err) {
+              var e = document.createElement('a'); e.setAttribute('href', '/err'); document.body.appendChild(e);
+            }
+            </script>
+            </body></html>
+            """;
+
+        var renderer = CreateJsRenderer(engine, new JsRenderOptions { EnableFetch = false });
+        var result = await renderer.RenderAsync(Encoding.UTF8.GetBytes(html), "http://localhost:5000/", new HttpClient(), CancellationToken.None);
+        var rendered = Encoding.UTF8.GetString(result);
+
+        Assert.DoesNotContain("href=\"/err\"", rendered);
+        Assert.Contains("href=\"/ok\"", rendered);
+    }
+
     private sealed class StreamBodyHandler : HttpMessageHandler
     {
         protected override HttpResponseMessage Send(HttpRequestMessage request, CancellationToken cancellationToken)

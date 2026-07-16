@@ -2862,6 +2862,31 @@
     }
   };
 
+  // network/types/AbortSignal.ts
+  var AbortSignal = class {
+    constructor() {
+      this.aborted = false;
+    }
+    throwIfAborted() {
+    }
+    addEventListener(type = null, listener = null, options = null) {
+    }
+    removeEventListener(type = null, listener = null, options = null) {
+    }
+    dispatchEvent(evt = null) {
+      return true;
+    }
+  };
+
+  // network/types/AbortController.ts
+  var AbortController = class {
+    constructor() {
+      this.signal = new AbortSignal();
+    }
+    abort(reason) {
+    }
+  };
+
   // browser/MessageChannel.ts
   var MessagePort = class {
     constructor() {
@@ -3391,6 +3416,8 @@
     global.TextEncoder = global.TextEncoder || TextEncoder;
     global.TextDecoder = global.TextDecoder || TextDecoder;
     global.crypto = global.crypto || crypto;
+    global.AbortController = global.AbortController || AbortController;
+    global.AbortSignal = global.AbortSignal || AbortSignal;
     global.MessageChannel = global.MessageChannel || MessageChannel;
     global.MessagePort = global.MessagePort || MessagePort;
     global.performance = global.performance || performance;

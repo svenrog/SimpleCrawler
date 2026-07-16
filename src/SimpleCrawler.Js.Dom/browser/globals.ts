@@ -24,6 +24,8 @@ import { CustomEvent } from "./CustomEvent";
 import { TextEncoder } from "./TextEncoder";
 import { TextDecoder } from "./TextDecoder";
 import { crypto } from "./crypto";
+import { AbortController } from "../network/types/AbortController";
+import { AbortSignal } from "../network/types/AbortSignal";
 import { MessageChannel, MessagePort } from "./MessageChannel";
 import { createStorage } from "./Storage";
 import { performance } from "./Performance";
@@ -158,6 +160,8 @@ export function installDOM(global: any): void {
     global.TextEncoder = global.TextEncoder || TextEncoder;
     global.TextDecoder = global.TextDecoder || TextDecoder;
     global.crypto = global.crypto || crypto;
+    global.AbortController = global.AbortController || AbortController;
+    global.AbortSignal = global.AbortSignal || AbortSignal;
     global.MessageChannel = global.MessageChannel || MessageChannel;
     global.MessagePort = global.MessagePort || MessagePort;
     global.performance = global.performance || performance;
