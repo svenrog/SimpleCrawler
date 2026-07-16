@@ -341,23 +341,25 @@
     }
     send(body) {
       const r = __http.request(this._url, this._method, JSON.stringify(this._h), body == null ? null : String(body));
-      if (r.error) {
-        this.status = 0;
+      Promise.resolve().then(() => {
+        if (r.error) {
+          this.status = 0;
+          this.readyState = 4;
+          this._emit("readystatechange", this.onerror, new Error(r.error));
+          this._emit("error", this.onerror, new Error(r.error));
+          this._emit("loadend", this.onloadend);
+          return;
+        }
+        this.status = r.status;
+        this.statusText = r.statusText || "";
+        this.responseText = r.body;
+        this.response = r.body;
+        this._rh = r.headersJson || "{}";
         this.readyState = 4;
-        this._emit("readystatechange", this.onerror, new Error(r.error));
-        this._emit("error", this.onerror, new Error(r.error));
+        this._emit("readystatechange");
+        this._emit("load", this.onload);
         this._emit("loadend", this.onloadend);
-        return;
-      }
-      this.status = r.status;
-      this.statusText = r.statusText || "";
-      this.responseText = r.body;
-      this.response = r.body;
-      this._rh = r.headersJson || "{}";
-      this.readyState = 4;
-      this._emit("readystatechange");
-      this._emit("load", this.onload);
-      this._emit("loadend", this.onloadend);
+      });
     }
     abort() {
     }

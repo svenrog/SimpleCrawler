@@ -264,7 +264,7 @@ public sealed class JsRenderer
                 if (isModule)
                     modules.Add(new ModuleScript(absolute.ToString(), source, External: true));
                 else
-                    regular.Add(new RegularScript(source, absolute.ToString(), External: true));
+                    regular.Add(new RegularScript(source, absolute.ToString(), src, External: true));
             }
             else
             {
@@ -274,7 +274,7 @@ public sealed class JsRenderer
                 if (isModule)
                     modules.Add(new ModuleScript(pageUrl, text, External: false));
                 else
-                    regular.Add(new RegularScript(text, pageUrl, External: false));
+                    regular.Add(new RegularScript(text, pageUrl, string.Empty, External: false));
             }
         }
 
@@ -283,7 +283,7 @@ public sealed class JsRenderer
 
     private void RunRegularJs(IJsEngine engine, RegularScript script, string pageUrl)
     {
-        SetCurrentScript(engine, script.External ? script.Src : "");
+        SetCurrentScript(engine, script.External ? script.RawSrc : "");
         try
         {
             if (script.External)
@@ -305,6 +305,13 @@ public sealed class JsRenderer
     /// A classic &lt;script&gt; exposes itself as document.currentScript only while it runs synchronously; webpack's
     /// auto-public-path (and Next's instanceof-HTMLScriptElement invariant over it) reads that during chunk
     /// evaluation, so it must be set around each execution and cleared after — exactly as a browser does.
+    /// <para>
+    /// <paramref name="src"/> is the <c>src</c> attribute as authored, not the URL this host resolved and
+    /// fetched. The synthetic node stores it as the attribute, so getAttribute("src") returns the literal
+    /// string a browser would and the .src property resolves it back to absolute for webpack — feeding the
+    /// resolved URL in collapses that distinction and breaks Turbopack's chunk identity (see
+    /// HTMLScriptElement.src).
+    /// </para>
     /// </summary>
     private static void SetCurrentScript(IJsEngine engine, string? src)
         => engine.CallGlobal("__crawlerSetCurrentScript", src);
@@ -386,7 +393,7 @@ public sealed class JsRenderer
             return;
         }
 
-        SetCurrentScript(engine, absolute.AbsoluteUri);
+        SetCurrentScript(engine, src);
         try
         {
             engine.ExecuteCached(absolute.AbsoluteUri, source);

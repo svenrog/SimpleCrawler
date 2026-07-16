@@ -29,18 +29,28 @@ export class XMLHttpRequest extends XMLHttpRequestEventTarget {
     setRequestHeader(k: string, v: any): void { this._h[k] = v; }
     send(body?: any): void {
         const r = __http.request(this._url, this._method, JSON.stringify(this._h), body == null ? null : String(body));
-        if (r.error) {
-            this.status = 0; this.readyState = 4;
-            this._emit("readystatechange", this.onerror, new Error(r.error));
-            this._emit("error", this.onerror, new Error(r.error));
+        // A real browser fires XHR readystatechange/load asynchronously off the event loop, not inline inside
+        // send(). Firing them synchronously runs the page's handler before the rest of the issuing script has
+        // executed, which breaks the ordinary shape of assigning what the handler depends on further down the
+        // same script than the request that triggers it — a consent stub whose geo onload calls an instance
+        // method defined below the send() throws a swallowed "not a function" instead of doing its work.
+        // Defer to the microtask queue — the renderer's drain pumps microtasks between turns — mirroring the
+        // fetch shim's resolved-Promise deferral. The network request still resolves synchronously; only the
+        // callbacks move.
+        Promise.resolve().then(() => {
+            if (r.error) {
+                this.status = 0; this.readyState = 4;
+                this._emit("readystatechange", this.onerror, new Error(r.error));
+                this._emit("error", this.onerror, new Error(r.error));
+                this._emit("loadend", this.onloadend);
+                return;
+            }
+            this.status = r.status; this.statusText = r.statusText || ""; this.responseText = r.body; this.response = r.body;
+            this._rh = r.headersJson || "{}"; this.readyState = 4;
+            this._emit("readystatechange");
+            this._emit("load", this.onload);
             this._emit("loadend", this.onloadend);
-            return;
-        }
-        this.status = r.status; this.statusText = r.statusText || ""; this.responseText = r.body; this.response = r.body;
-        this._rh = r.headersJson || "{}"; this.readyState = 4;
-        this._emit("readystatechange");
-        this._emit("load", this.onload);
-        this._emit("loadend", this.onloadend);
+        });
     }
     abort(): void { }
     getResponseHeader(n: string): string | null { try { const o = JSON.parse(this._rh); const v = o[n]; return v === undefined ? null : v; } catch (e) { return null; } }

@@ -835,6 +835,17 @@
     getBoundingClientRect() {
       return { top: 0, left: 0, right: 0, bottom: 0, width: 0, height: 0, x: 0, y: 0 };
     }
+    // Element-level scroll no-ops, mirroring the window shims in browser/scroll.ts. The single-pass render
+    // never scrolls, but a banner/nav component calls element.scrollTo({left,behavior}) during its init
+    // (e.g. OneTrust/Astro islands), and a missing method throws and trips the surrounding error boundary.
+    scrollTo() {
+    }
+    scrollBy() {
+    }
+    scroll() {
+    }
+    scrollIntoView() {
+    }
     // jQuery gates .offset()/visibility on `getClientRects().length` before reading the box: a connected
     // element has one (zero-sized) rect, a detached one has none — matching the browser so the "is this laid
     // out?" branch takes the attached path instead of throwing on a missing method.
@@ -1541,7 +1552,13 @@
       super("script");
     }
     get src() {
-      return this.getAttribute("src") || "";
+      const raw = this.getAttribute("src");
+      if (raw == null) return "";
+      try {
+        return new URL(raw).href;
+      } catch {
+        return raw;
+      }
     }
     set src(value) {
       this.setAttribute("src", value == null ? "" : String(value));
