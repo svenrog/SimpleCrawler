@@ -340,6 +340,13 @@ export class Element extends Node implements Animatable {
         this.attrs.set("dir", String(v));
     }
 
+    get lang(): string {
+        return this.attrs.get("lang") || "";
+    }
+    set lang(v: unknown) {
+        this.attrs.set("lang", String(v));
+    }
+
     get classList(): any {
         const read = (): string[] => (this.attrs.get("class") || "").split(/\s+/).filter(Boolean);
         const write = (tokens: string[]): void => { this.attrs.set("class", tokens.join(" ")); };

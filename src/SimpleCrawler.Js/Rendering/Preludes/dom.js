@@ -1030,6 +1030,12 @@
     set dir(v) {
       this.attrs.set("dir", String(v));
     }
+    get lang() {
+      return this.attrs.get("lang") || "";
+    }
+    set lang(v) {
+      this.attrs.set("lang", String(v));
+    }
     get classList() {
       const read = () => (this.attrs.get("class") || "").split(/\s+/).filter(Boolean);
       const write = (tokens) => {

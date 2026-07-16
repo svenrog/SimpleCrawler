@@ -1313,6 +1313,45 @@ public class JsDomRendererTests : IClassFixture<JsRendererFixture>
         Assert.Contains("href=\"/ok\"", rendered);
     }
 
+    // `lang` is a reflected attribute on every element; `document.documentElement.lang` must be a string ("" when
+    // unset), never undefined. i18n/consent code reads it as a string and calls string methods on it directly —
+    // a consent SDK does `document.documentElement.lang.replace(/_/, "-")` to pick its banner language — so an
+    // undefined `.lang` is a TypeError. Here that throw would land in an un-awaited init promise and be dropped,
+    // stalling the SDK with nothing in the render output to show for it; assert the reflection at this seam.
+    [Theory]
+    [InlineData(JsEngine.Jint)]
+    [InlineData(JsEngine.V8)]
+    public async Task JsMode_DocumentElementLang_ReflectsAttributeAsString(JsEngine engine)
+    {
+        if (engine == JsEngine.V8)
+            Assert.SkipUnless(V8Support.IsAvailable, V8Support.UnavailableReason);
+
+        const string html = """
+            <html lang="en"><body><div id="t"></div>
+            <script>
+            try {
+              var langed = document.documentElement.lang;                 // "en", set on <html>
+              var transformed = langed.replace(/_/, '-').toLowerCase();   // must not throw on undefined
+              var unset = document.createElement('div').lang;             // "" when unset, never undefined
+              var ok = langed === 'en' && transformed === 'en' && unset === '';
+              var a = document.createElement('a'); a.setAttribute('href', ok ? '/ok' : '/bad');
+              document.getElementById('t').appendChild(a);
+            } catch (err) {
+              var b = document.createElement('a'); b.setAttribute('href', '/err'); document.getElementById('t').appendChild(b);
+            }
+            </script>
+            </body></html>
+            """;
+
+        var renderer = CreateJsRenderer(engine);
+        var result = await renderer.RenderAsync(Encoding.UTF8.GetBytes(html), "http://localhost:5000/", new HttpClient(), CancellationToken.None);
+        var rendered = Encoding.UTF8.GetString(result);
+
+        Assert.DoesNotContain("href=\"/err\"", rendered);
+        Assert.DoesNotContain("href=\"/bad\"", rendered);
+        Assert.Contains("href=\"/ok\"", rendered);
+    }
+
     // Lazy prefetch/lazy-load libraries feature-detect IntersectionObserver support with the classic
     // `'isIntersecting' in IntersectionObserverEntry.prototype` probe (instant-page does exactly this in an
     // IIFE at parse time); the missing global threw ReferenceError before the page hydrated. The global must
