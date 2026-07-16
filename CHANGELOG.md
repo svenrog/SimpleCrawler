@@ -8,6 +8,33 @@ Package versions are derived from git tags (`v*`) via MinVer.
 
 ## [Unreleased]
 
+## [3.3.3] - 2026-07-16
+
+### Fixed
+
+- A script's `src` is reflected as a URL attribute again, so `getAttribute("src")` returns the literal string
+  the markup authored while the `.src` property returns it resolved against the document base. Both halves are
+  read, and by different consumers: webpack's auto-public-path wants the resolved URL off `.src`, while
+  Turbopack derives a chunk's identity by stripping its configured base path off `getAttribute("src")`
+  (`path.startsWith(base) ? path.slice(base.length) : path`). Collapsing the two onto the resolved URL — the
+  renderer handed `document.currentScript` the URL it had resolved to fetch, and the `src` setter reflected
+  that into the attribute — failed Turbopack's prefix test, so every chunk registered under a key nothing
+  awaited and the entry module's dependency gate never settled. A Next.js App Router page therefore never ran
+  its entry module and never set `window.next`: every chunk fetched, every script executed, nothing thrown, no
+  global defined. `HTMLScriptElement.src` now resolves in its getter (matching `HTMLAnchorElement.href`), and
+  both paths that expose `document.currentScript` — initial-HTML scripts and runtime-appended chunks — pass the
+  raw attribute.
+- `XMLHttpRequest` completion callbacks (`readystatechange`/`load`/`loadend`) fire off the microtask queue
+  instead of inline inside `send()`, matching a browser. Firing them synchronously ran a page's handler before
+  the rest of the issuing script had executed, which breaks the ordinary shape of assigning what the handler
+  depends on further down the same script than the request that triggers it — a consent stub whose geo `onload`
+  called an instance method defined below its `send()` threw a swallowed "not a function" and silently never
+  did its work. The request itself still resolves synchronously; only the callbacks moved.
+- `Element.prototype.scrollTo`/`scrollBy`/`scroll`/`scrollIntoView` exist as no-ops, mirroring the window-level
+  shims. Only the window half was installed, which is the half a page rarely calls; a component that scrolls an
+  element while initializing (a carousel, a sticky nav, a cookie banner) threw on the missing method, and the
+  throw landed inside that init and cost every link below it.
+
 ## [3.3.2] - 2026-07-15
 
 ### Added
@@ -233,7 +260,8 @@ Public proxy types are removed and renamed (see _Removed_ and _Changed_), a brea
 
 - Initial release.
 
-[Unreleased]: https://github.com/svenrog/SimpleCrawler/compare/v3.3.2...HEAD
+[Unreleased]: https://github.com/svenrog/SimpleCrawler/compare/v3.3.3...HEAD
+[3.3.3]: https://github.com/svenrog/SimpleCrawler/releases/tag/v3.3.3
 [3.3.2]: https://github.com/svenrog/SimpleCrawler/releases/tag/v3.3.2
 [3.3.1]: https://github.com/svenrog/SimpleCrawler/releases/tag/v3.3.1
 [3.3.0]: https://github.com/svenrog/SimpleCrawler/releases/tag/v3.3.0

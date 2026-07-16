@@ -1883,6 +1883,40 @@ public class JsDomRendererTests : IClassFixture<JsRendererFixture>
         Assert.Contains("href=\"/added-2\"", rendered);
     }
 
+    // Element-level scroll methods. A component that scrolls an element while initializing (a carousel, a
+    // sticky nav, a cookie banner) calls these on its way to building the rest of its subtree; the single-pass
+    // render never scrolls, so they no-op — but a *missing* method throws, and the throw lands inside that
+    // init, costing everything below it. Only the window-level shims existed, which is the half a page
+    // rarely calls.
+    [Theory]
+    [InlineData(JsEngine.Jint)]
+    [InlineData(JsEngine.V8)]
+    public async Task JsMode_ElementScrollMethods_NoOpRatherThanThrowingAndCostingTheSubtree(JsEngine engine)
+    {
+        if (engine == JsEngine.V8)
+            Assert.SkipUnless(V8Support.IsAvailable, V8Support.UnavailableReason);
+
+        const string html = """
+            <!doctype html><html><body><div id="r"></div>
+            <script>
+              var host = document.getElementById('r');
+              host.scrollTo({ left: 0, behavior: 'smooth' });
+              host.scrollBy(0, 10);
+              host.scroll(0, 0);
+              host.scrollIntoView({ block: 'center' });
+              var a = document.createElement('a');
+              a.setAttribute('href', '/after-scroll');
+              document.body.appendChild(a);
+            </script>
+            </body></html>
+            """;
+
+        var renderer = CreateJsRenderer(engine);
+        var result = await renderer.RenderAsync(Encoding.UTF8.GetBytes(html), "https://example.test/", new HttpClient(), CancellationToken.None);
+
+        Assert.Contains("href=\"/after-scroll\"", Encoding.UTF8.GetString(result));
+    }
+
     private sealed class StreamBodyHandler : HttpMessageHandler
     {
         protected override HttpResponseMessage Send(HttpRequestMessage request, CancellationToken cancellationToken)
