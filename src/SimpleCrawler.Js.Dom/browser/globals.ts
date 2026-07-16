@@ -21,9 +21,16 @@ import { URL } from "../url/URL";
 import { URLSearchParams } from "../url/URLSearchParams";
 import { Event } from "./Event";
 import { CustomEvent } from "./CustomEvent";
+import { PromiseRejectionEvent } from "./PromiseRejectionEvent";
+import { DOMRect, DOMRectReadOnly } from "./DOMRect";
+import { OffscreenCanvas } from "../dom/OffscreenCanvas";
 import { TextEncoder } from "./TextEncoder";
 import { TextDecoder } from "./TextDecoder";
 import { crypto } from "./crypto";
+import { AbortController } from "../network/types/AbortController";
+import { AbortSignal } from "../network/types/AbortSignal";
+import { XMLHttpRequestEventTarget } from "../network/XMLHttpRequestEventTarget";
+import { XMLHttpRequestStub } from "../network/XMLHttpRequestStub";
 import { MessageChannel, MessagePort } from "./MessageChannel";
 import { createStorage } from "./Storage";
 import { performance } from "./Performance";
@@ -155,9 +162,21 @@ export function installDOM(global: any): void {
     customElements.setDocument(doc);
     global.Event = Event;
     global.CustomEvent = CustomEvent;
+    // A callable PromiseRejectionEvent keeps core-js from force-replacing the native Promise with a polyfill
+    // whose finally/allSettled/withResolvers a bundle may have tree-shaken (native in real browsers).
+    global.PromiseRejectionEvent = global.PromiseRejectionEvent || PromiseRejectionEvent;
+    global.DOMRect = global.DOMRect || DOMRect;
+    global.DOMRectReadOnly = global.DOMRectReadOnly || DOMRectReadOnly;
+    global.OffscreenCanvas = global.OffscreenCanvas || OffscreenCanvas;
     global.TextEncoder = global.TextEncoder || TextEncoder;
     global.TextDecoder = global.TextDecoder || TextDecoder;
     global.crypto = global.crypto || crypto;
+    global.AbortController = global.AbortController || AbortController;
+    global.AbortSignal = global.AbortSignal || AbortSignal;
+    // An inert XMLHttpRequest so unguarded prototype patching at SDK init doesn't throw; installNetwork swaps
+    // in the functional one when the fetch shim is enabled (both extend the same-bundle event-target base).
+    global.XMLHttpRequestEventTarget = global.XMLHttpRequestEventTarget || XMLHttpRequestEventTarget;
+    global.XMLHttpRequest = global.XMLHttpRequest || XMLHttpRequestStub;
     global.MessageChannel = global.MessageChannel || MessageChannel;
     global.MessagePort = global.MessagePort || MessagePort;
     global.performance = global.performance || performance;

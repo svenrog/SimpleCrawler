@@ -111,7 +111,7 @@
   };
 
   // dom/Node.ts
-  var Node = class extends EventTarget {
+  var _Node = class _Node extends EventTarget {
     constructor(type) {
       super();
       this.parentNode = null;
@@ -233,7 +233,36 @@
       while (n.parentNode) n = n.parentNode;
       return n;
     }
+    // Focus/tab-order libraries sort nodes with an `a.compareDocumentPosition(b)` comparator; without it the
+    // sort throws inside a useMemo and the render subtree fails. Returns the bitmask describing `other`'s
+    // position relative to `this`.
+    compareDocumentPosition(other) {
+      if (other === this) return 0;
+      const thisChain = [];
+      for (let n = this; n; n = n.parentNode) thisChain.push(n);
+      const otherChain = [];
+      for (let n = other; n; n = n.parentNode) otherChain.push(n);
+      if (thisChain[thisChain.length - 1] !== otherChain[otherChain.length - 1])
+        return _Node.DOCUMENT_POSITION_DISCONNECTED | _Node.DOCUMENT_POSITION_IMPLEMENTATION_SPECIFIC | _Node.DOCUMENT_POSITION_FOLLOWING;
+      if (otherChain.indexOf(this) >= 0)
+        return _Node.DOCUMENT_POSITION_CONTAINED_BY | _Node.DOCUMENT_POSITION_FOLLOWING;
+      if (thisChain.indexOf(other) >= 0)
+        return _Node.DOCUMENT_POSITION_CONTAINS | _Node.DOCUMENT_POSITION_PRECEDING;
+      thisChain.reverse();
+      otherChain.reverse();
+      let i = 0;
+      while (thisChain[i] === otherChain[i]) i++;
+      const kids = thisChain[i - 1].childNodes;
+      return kids.indexOf(thisChain[i]) < kids.indexOf(otherChain[i]) ? _Node.DOCUMENT_POSITION_FOLLOWING : _Node.DOCUMENT_POSITION_PRECEDING;
+    }
   };
+  _Node.DOCUMENT_POSITION_DISCONNECTED = 1;
+  _Node.DOCUMENT_POSITION_PRECEDING = 2;
+  _Node.DOCUMENT_POSITION_FOLLOWING = 4;
+  _Node.DOCUMENT_POSITION_CONTAINS = 8;
+  _Node.DOCUMENT_POSITION_CONTAINED_BY = 16;
+  _Node.DOCUMENT_POSITION_IMPLEMENTATION_SPECIFIC = 32;
+  var Node = _Node;
   function asNode(value) {
     return value instanceof Node ? value : documentRef.current.createTextNode(value);
   }
@@ -308,7 +337,18 @@
         }
         store[k] = v;
         return true;
-      }
+      },
+      // A real style object answers `in` for every CSS property it supports, set or not, and for both the
+      // unprefixed and vendor-prefixed spellings. Without a has trap `in` falls through to the bare target
+      // and is false for everything — including properties this shim itself just stored — which contradicts
+      // the get trap above. The gap is not cosmetic: a prefix probe of the shape
+      // `"transform" in style || "WebkitTransform" in style || ...` concludes the property is unsupported,
+      // and libraries then use that null as a property name rather than taking a fallback (GSAP's
+      // _checkPropPrefix does exactly this, and every subsequent transform read throws). This answers true
+      // for unknown names too, where a real browser answers false; that mirrors the get trap, which already
+      // returns "" for any key rather than shipping a CSS-property table, and feature probes ask about real
+      // (possibly prefixed/future) properties, never deliberate non-properties.
+      has: () => true
     };
     return new Proxy({}, handler);
   }
@@ -883,11 +923,21 @@
       return null;
     }
     // Web Animations: unlaid-out elements never animate, but the returned Animation is used synchronously
-    // (cancel/play/pause, onfinish, currentTime), so a missing method would throw inside the effect that a
-    // finite offsetWidth now lets run. Hand back an inert Animation instead.
+    // (cancel/play/pause, onfinish, currentTime) and animation-sequencing code awaits `.finished`/`.ready`
+    // then calls `.commitStyles()`, so a missing member throws inside the effect that a finite offsetWidth now
+    // lets run. Hand back an inert, already-settled Animation. Each call gets its own resolved promises.
     animate() {
       return {
         currentTime: 0,
+        startTime: null,
+        playState: "finished",
+        playbackRate: 1,
+        pending: false,
+        effect: null,
+        timeline: null,
+        id: "",
+        finished: Promise.resolve(),
+        ready: Promise.resolve(),
         onfinish: null,
         oncancel: null,
         play() {
@@ -899,6 +949,12 @@
         finish() {
         },
         reverse() {
+        },
+        persist() {
+        },
+        commitStyles() {
+        },
+        updatePlaybackRate() {
         },
         addEventListener() {
         },
@@ -1018,6 +1074,12 @@
     }
     set dir(v) {
       this.attrs.set("dir", String(v));
+    }
+    get lang() {
+      return this.attrs.get("lang") || "";
+    }
+    set lang(v) {
+      this.attrs.set("lang", String(v));
     }
     get classList() {
       const read = () => (this.attrs.get("class") || "").split(/\s+/).filter(Boolean);
@@ -2731,6 +2793,79 @@
     }
   };
 
+  // browser/PromiseRejectionEvent.ts
+  var PromiseRejectionEvent = class extends Event {
+    constructor(type, init) {
+      super(type, init);
+      this.promise = init ? init.promise : void 0;
+      this.reason = init ? init.reason : void 0;
+    }
+  };
+
+  // browser/DOMRect.ts
+  var DOMRectReadOnly = class _DOMRectReadOnly {
+    constructor(x, y, width, height) {
+      this.x = +x || 0;
+      this.y = +y || 0;
+      this.width = +width || 0;
+      this.height = +height || 0;
+    }
+    get top() {
+      return Math.min(this.y, this.y + this.height);
+    }
+    get bottom() {
+      return Math.max(this.y, this.y + this.height);
+    }
+    get left() {
+      return Math.min(this.x, this.x + this.width);
+    }
+    get right() {
+      return Math.max(this.x, this.x + this.width);
+    }
+    toJSON() {
+      return {
+        x: this.x,
+        y: this.y,
+        width: this.width,
+        height: this.height,
+        top: this.top,
+        right: this.right,
+        bottom: this.bottom,
+        left: this.left
+      };
+    }
+    static fromRect(other) {
+      other = other || {};
+      return new _DOMRectReadOnly(other.x, other.y, other.width, other.height);
+    }
+  };
+  var DOMRect = class _DOMRect extends DOMRectReadOnly {
+    static fromRect(other) {
+      other = other || {};
+      return new _DOMRect(other.x, other.y, other.width, other.height);
+    }
+  };
+
+  // dom/OffscreenCanvas.ts
+  var OffscreenCanvas = class {
+    constructor(width, height) {
+      this.width = width || 0;
+      this.height = height || 0;
+    }
+    getContext(type) {
+      return type === "2d" ? createContext2D(this) : null;
+    }
+    transferToImageBitmap() {
+      return { width: this.width, height: this.height, close() {
+      } };
+    }
+    convertToBlob() {
+      return Promise.resolve(null);
+    }
+    close() {
+    }
+  };
+
   // browser/TextEncoder.ts
   var TextEncoder = class {
     constructor() {
@@ -2815,6 +2950,107 @@
       return h[0] + h[1] + h[2] + h[3] + "-" + h[4] + h[5] + "-" + h[6] + h[7] + "-" + h[8] + h[9] + "-" + h[10] + h[11] + h[12] + h[13] + h[14] + h[15];
     }
   };
+
+  // network/types/AbortSignal.ts
+  var AbortSignal = class {
+    constructor() {
+      this.aborted = false;
+    }
+    throwIfAborted() {
+    }
+    addEventListener(type = null, listener = null, options = null) {
+    }
+    removeEventListener(type = null, listener = null, options = null) {
+    }
+    dispatchEvent(evt = null) {
+      return true;
+    }
+  };
+
+  // network/types/AbortController.ts
+  var AbortController = class {
+    constructor() {
+      this.signal = new AbortSignal();
+    }
+    abort(reason) {
+    }
+  };
+
+  // network/XMLHttpRequestEventTarget.ts
+  var XMLHttpRequestEventTarget = class {
+    constructor() {
+      this._listeners = {};
+    }
+    addEventListener(type, cb) {
+      if (typeof cb !== "function") return;
+      (this._listeners[type] || (this._listeners[type] = [])).push(cb);
+    }
+    removeEventListener(type, cb) {
+      const list = this._listeners[type];
+      if (!list) return;
+      const index = list.indexOf(cb);
+      if (index >= 0) list.splice(index, 1);
+    }
+    dispatchEvent(event) {
+      const list = event && this._listeners[event.type];
+      if (list) {
+        for (const cb of list.slice()) {
+          try {
+            cb.call(this, event);
+          } catch {
+          }
+        }
+      }
+      return true;
+    }
+  };
+
+  // network/XMLHttpRequestStub.ts
+  var XMLHttpRequestStub = class extends XMLHttpRequestEventTarget {
+    constructor() {
+      super();
+      this.readyState = 0;
+      this.status = 0;
+      this.statusText = "";
+      this.responseText = "";
+      this.response = "";
+      this.responseType = "";
+      this.responseURL = "";
+      this.withCredentials = false;
+      this.timeout = 0;
+      this.onreadystatechange = null;
+      this.onload = null;
+      this.onerror = null;
+      this.onloadend = null;
+      this.onloadstart = null;
+      this.onprogress = null;
+      this.onabort = null;
+      this.ontimeout = null;
+      this.upload = new XMLHttpRequestEventTarget();
+    }
+    open() {
+      this.readyState = 1;
+    }
+    setRequestHeader() {
+    }
+    send() {
+    }
+    abort() {
+    }
+    overrideMimeType() {
+    }
+    getResponseHeader() {
+      return null;
+    }
+    getAllResponseHeaders() {
+      return "";
+    }
+  };
+  XMLHttpRequestStub.UNSENT = 0;
+  XMLHttpRequestStub.OPENED = 1;
+  XMLHttpRequestStub.HEADERS_RECEIVED = 2;
+  XMLHttpRequestStub.LOADING = 3;
+  XMLHttpRequestStub.DONE = 4;
 
   // browser/MessageChannel.ts
   var MessagePort = class {
@@ -3342,9 +3578,17 @@
     customElements.setDocument(doc);
     global.Event = Event;
     global.CustomEvent = CustomEvent;
+    global.PromiseRejectionEvent = global.PromiseRejectionEvent || PromiseRejectionEvent;
+    global.DOMRect = global.DOMRect || DOMRect;
+    global.DOMRectReadOnly = global.DOMRectReadOnly || DOMRectReadOnly;
+    global.OffscreenCanvas = global.OffscreenCanvas || OffscreenCanvas;
     global.TextEncoder = global.TextEncoder || TextEncoder;
     global.TextDecoder = global.TextDecoder || TextDecoder;
     global.crypto = global.crypto || crypto;
+    global.AbortController = global.AbortController || AbortController;
+    global.AbortSignal = global.AbortSignal || AbortSignal;
+    global.XMLHttpRequestEventTarget = global.XMLHttpRequestEventTarget || XMLHttpRequestEventTarget;
+    global.XMLHttpRequest = global.XMLHttpRequest || XMLHttpRequestStub;
     global.MessageChannel = global.MessageChannel || MessageChannel;
     global.MessagePort = global.MessagePort || MessagePort;
     global.performance = global.performance || performance;

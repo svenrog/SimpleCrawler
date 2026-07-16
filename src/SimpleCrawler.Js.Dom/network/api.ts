@@ -1,6 +1,4 @@
 import { fetch } from "./fetch";
-import { AbortController } from "./types/AbortController";
-import { AbortSignal } from "./types/AbortSignal";
 import { FormData } from "./types/FormData";
 import { Headers } from "./types/Headers";
 import { Request } from "./types/Request";
@@ -21,8 +19,9 @@ export function installNetwork(global: any): void {
     global.Request = global.Request || Request;
     global.FormData = global.FormData || FormData;
     global.fetch = global.fetch || fetch;
-    global.XMLHttpRequest = global.XMLHttpRequest || XMLHttpRequest;
-    global.XMLHttpRequestEventTarget = global.XMLHttpRequestEventTarget || XMLHttpRequestEventTarget;
-    global.AbortController = global.AbortController || AbortController;
-    global.AbortSignal = global.AbortSignal || AbortSignal;
+    // Override the base prelude's inert stub: with the fetch shim enabled, XHR issues real requests through
+    // __http. Assigned unconditionally (not `||`) so the functional pair wins over the stub, and paired so
+    // both come from this bundle — Zone.js patches the event-target prototype the functional XHR extends.
+    global.XMLHttpRequest = XMLHttpRequest;
+    global.XMLHttpRequestEventTarget = XMLHttpRequestEventTarget;
 }

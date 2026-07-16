@@ -151,6 +151,43 @@ export abstract class Node extends EventTarget {
         return n;
     }
 
+    static readonly DOCUMENT_POSITION_DISCONNECTED = 1;
+    static readonly DOCUMENT_POSITION_PRECEDING = 2;
+    static readonly DOCUMENT_POSITION_FOLLOWING = 4;
+    static readonly DOCUMENT_POSITION_CONTAINS = 8;
+    static readonly DOCUMENT_POSITION_CONTAINED_BY = 16;
+    static readonly DOCUMENT_POSITION_IMPLEMENTATION_SPECIFIC = 32;
+
+    // Focus/tab-order libraries sort nodes with an `a.compareDocumentPosition(b)` comparator; without it the
+    // sort throws inside a useMemo and the render subtree fails. Returns the bitmask describing `other`'s
+    // position relative to `this`.
+    compareDocumentPosition(other: Node): number {
+        if (other === this) return 0;
+
+        const thisChain: Node[] = [];
+        for (let n: Node | null = this; n; n = n.parentNode) thisChain.push(n);
+        const otherChain: Node[] = [];
+        for (let n: Node | null = other; n; n = n.parentNode) otherChain.push(n);
+
+        if (thisChain[thisChain.length - 1] !== otherChain[otherChain.length - 1])
+            return Node.DOCUMENT_POSITION_DISCONNECTED | Node.DOCUMENT_POSITION_IMPLEMENTATION_SPECIFIC |
+                Node.DOCUMENT_POSITION_FOLLOWING;
+
+        if (otherChain.indexOf(this) >= 0)
+            return Node.DOCUMENT_POSITION_CONTAINED_BY | Node.DOCUMENT_POSITION_FOLLOWING;
+        if (thisChain.indexOf(other) >= 0)
+            return Node.DOCUMENT_POSITION_CONTAINS | Node.DOCUMENT_POSITION_PRECEDING;
+
+        thisChain.reverse();
+        otherChain.reverse();
+        let i = 0;
+        while (thisChain[i] === otherChain[i]) i++;
+        const kids = thisChain[i - 1].childNodes;
+        return kids.indexOf(thisChain[i]) < kids.indexOf(otherChain[i])
+            ? Node.DOCUMENT_POSITION_FOLLOWING
+            : Node.DOCUMENT_POSITION_PRECEDING;
+    }
+
     protected abstract _shallowClone(): Node;
 }
 

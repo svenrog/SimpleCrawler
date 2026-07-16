@@ -1264,6 +1264,94 @@ public class JsDomRendererTests : IClassFixture<JsRendererFixture>
         Assert.Contains("href=\"/ok\"", rendered);
     }
 
+    // A style declaration must answer the `in` operator for every CSS property, set or not, and for the
+    // vendor-prefixed spellings a real browser supports. Animation libraries pick the working transform
+    // spelling with a prefix probe (`"transform" in style || "WebkitTransform" in style || ...`) and then use
+    // the result as a property name with no fallback — GSAP's _checkPropPrefix returns null when none match,
+    // and every later transform read throws "Cannot read properties of null (reading 'replace')". A style
+    // object that reads a property back but denies it under `in` contradicts itself, so the probe finds
+    // nothing even for a property just assigned.
+    [Theory]
+    [InlineData(JsEngine.Jint)]
+    [InlineData(JsEngine.V8)]
+    public async Task JsMode_StyleDeclaration_InOperatorFindsProperties(JsEngine engine)
+    {
+        if (engine == JsEngine.V8)
+            Assert.SkipUnless(V8Support.IsAvailable, V8Support.UnavailableReason);
+
+        const string html = """
+            <html><body><div id="t"></div>
+            <script>
+            try {
+              var st = document.createElement('div').style;
+              // GSAP's prefix probe, verbatim in shape: unprefixed first, then vendor-prefixed spellings.
+              var kt = "O,Moz,ms,Ms,Webkit".split(",");
+              var check = function (e) {
+                var _ = 5;
+                if (e in st) return e;
+                for (e = e.charAt(0).toUpperCase() + e.substr(1); _-- && !(kt[_] + e in st);) ;
+                return _ < 0 ? null : (_ === 3 ? "ms" : _ >= 0 ? kt[_] : "") + e;
+              };
+              st.color = "red";                 // a property this shim itself set must be visible to `in`
+              var found = check("transform");   // must resolve to a non-null spelling, not null
+              var ok = found !== null && found !== undefined && ("color" in st);
+              var a = document.createElement('a'); a.setAttribute('href', ok ? '/ok' : '/bad');
+              document.getElementById('t').appendChild(a);
+            } catch (err) {
+              var b = document.createElement('a'); b.setAttribute('href', '/err'); document.getElementById('t').appendChild(b);
+            }
+            </script>
+            </body></html>
+            """;
+
+        var renderer = CreateJsRenderer(engine);
+        var result = await renderer.RenderAsync(Encoding.UTF8.GetBytes(html), "http://localhost:5000/", new HttpClient(), CancellationToken.None);
+        var rendered = Encoding.UTF8.GetString(result);
+
+        Assert.DoesNotContain("href=\"/err\"", rendered);
+        Assert.DoesNotContain("href=\"/bad\"", rendered);
+        Assert.Contains("href=\"/ok\"", rendered);
+    }
+
+    // `lang` is a reflected attribute on every element; `document.documentElement.lang` must be a string ("" when
+    // unset), never undefined. i18n/consent code reads it as a string and calls string methods on it directly —
+    // a consent SDK does `document.documentElement.lang.replace(/_/, "-")` to pick its banner language — so an
+    // undefined `.lang` is a TypeError. Here that throw would land in an un-awaited init promise and be dropped,
+    // stalling the SDK with nothing in the render output to show for it; assert the reflection at this seam.
+    [Theory]
+    [InlineData(JsEngine.Jint)]
+    [InlineData(JsEngine.V8)]
+    public async Task JsMode_DocumentElementLang_ReflectsAttributeAsString(JsEngine engine)
+    {
+        if (engine == JsEngine.V8)
+            Assert.SkipUnless(V8Support.IsAvailable, V8Support.UnavailableReason);
+
+        const string html = """
+            <html lang="en"><body><div id="t"></div>
+            <script>
+            try {
+              var langed = document.documentElement.lang;                 // "en", set on <html>
+              var transformed = langed.replace(/_/, '-').toLowerCase();   // must not throw on undefined
+              var unset = document.createElement('div').lang;             // "" when unset, never undefined
+              var ok = langed === 'en' && transformed === 'en' && unset === '';
+              var a = document.createElement('a'); a.setAttribute('href', ok ? '/ok' : '/bad');
+              document.getElementById('t').appendChild(a);
+            } catch (err) {
+              var b = document.createElement('a'); b.setAttribute('href', '/err'); document.getElementById('t').appendChild(b);
+            }
+            </script>
+            </body></html>
+            """;
+
+        var renderer = CreateJsRenderer(engine);
+        var result = await renderer.RenderAsync(Encoding.UTF8.GetBytes(html), "http://localhost:5000/", new HttpClient(), CancellationToken.None);
+        var rendered = Encoding.UTF8.GetString(result);
+
+        Assert.DoesNotContain("href=\"/err\"", rendered);
+        Assert.DoesNotContain("href=\"/bad\"", rendered);
+        Assert.Contains("href=\"/ok\"", rendered);
+    }
+
     // Lazy prefetch/lazy-load libraries feature-detect IntersectionObserver support with the classic
     // `'isIntersecting' in IntersectionObserverEntry.prototype` probe (instant-page does exactly this in an
     // IIFE at parse time); the missing global threw ReferenceError before the page hydrated. The global must
@@ -1987,6 +2075,274 @@ public class JsDomRendererTests : IClassFixture<JsRendererFixture>
         var result = await renderer.RenderAsync(Encoding.UTF8.GetBytes(html), "https://example.test/", new HttpClient(), CancellationToken.None);
 
         Assert.Contains("href=\"/sdk-installed\"", Encoding.UTF8.GetString(result));
+    }
+
+    // Focus/tab-order libraries sort DOM nodes with an `a.compareDocumentPosition(b)` comparator, inside a
+    // useMemo during render. Without the method the sort throws, the render subtree fails, and every effect
+    // below it (e.g. an SDK's init) silently never runs.
+    [Theory]
+    [InlineData(JsEngine.Jint)]
+    [InlineData(JsEngine.V8)]
+    public async Task JsMode_CompareDocumentPosition_OrdersNodesByDocumentPosition(JsEngine engine)
+    {
+        if (engine == JsEngine.V8)
+            Assert.SkipUnless(V8Support.IsAvailable, V8Support.UnavailableReason);
+
+        const string html = """
+            <!doctype html><html><head></head><body>
+            <div id="a"></div><div id="b"><span id="c"></span></div>
+            <script>
+            try {
+              var a = document.getElementById('a'), b = document.getElementById('b'), c = document.getElementById('c');
+              var F = Node.DOCUMENT_POSITION_FOLLOWING, P = Node.DOCUMENT_POSITION_PRECEDING,
+                  CB = Node.DOCUMENT_POSITION_CONTAINED_BY;
+              var ok = (a.compareDocumentPosition(b) & F) &&      // b follows a
+                       (b.compareDocumentPosition(a) & P) &&      // a precedes b
+                       (b.compareDocumentPosition(c) & CB) &&     // c is inside b
+                       (a.compareDocumentPosition(a) === 0);
+              // A tab-order sort: nodes must come out in document order without throwing.
+              var sorted = [c, b, a].sort(function (x, y) {
+                return (x.compareDocumentPosition(y) & F) ? -1 : 1;
+              }).map(function (n) { return n.id; }).join('');
+              var l = document.createElement('a');
+              l.setAttribute('href', ok && sorted === 'abc' ? '/ok' : '/err');
+              document.body.appendChild(l);
+            } catch (err) {
+              var e = document.createElement('a'); e.setAttribute('href', '/err'); document.body.appendChild(e);
+            }
+            </script>
+            </body></html>
+            """;
+
+        var renderer = CreateJsRenderer(engine);
+        var result = await renderer.RenderAsync(Encoding.UTF8.GetBytes(html), "http://localhost:5000/", new HttpClient(), CancellationToken.None);
+        var rendered = Encoding.UTF8.GetString(result);
+
+        Assert.DoesNotContain("href=\"/err\"", rendered);
+        Assert.Contains("href=\"/ok\"", rendered);
+    }
+
+    // AbortController/AbortSignal are general Web APIs (timeouts, cancellation), not fetch-specific, so an SDK
+    // that does `new AbortController()` during init must not throw on the default render, where the fetch
+    // shim is off.
+    [Theory]
+    [InlineData(JsEngine.Jint)]
+    [InlineData(JsEngine.V8)]
+    public async Task JsMode_AbortController_IsPresentWithoutFetchShim(JsEngine engine)
+    {
+        if (engine == JsEngine.V8)
+            Assert.SkipUnless(V8Support.IsAvailable, V8Support.UnavailableReason);
+
+        const string html = """
+            <!doctype html><html><head></head><body>
+            <script>
+            try {
+              var c = new AbortController();
+              var ok = typeof AbortController !== 'undefined' && typeof AbortSignal !== 'undefined' &&
+                       c.signal && c.signal.aborted === false && typeof c.abort === 'function';
+              var l = document.createElement('a'); l.setAttribute('href', ok ? '/ok' : '/err');
+              document.body.appendChild(l);
+            } catch (err) {
+              var e = document.createElement('a'); e.setAttribute('href', '/err'); document.body.appendChild(e);
+            }
+            </script>
+            </body></html>
+            """;
+
+        var renderer = CreateJsRenderer(engine, new JsRenderOptions { EnableFetch = false });
+        var result = await renderer.RenderAsync(Encoding.UTF8.GetBytes(html), "http://localhost:5000/", new HttpClient(), CancellationToken.None);
+        var rendered = Encoding.UTF8.GetString(result);
+
+        Assert.DoesNotContain("href=\"/err\"", rendered);
+        Assert.Contains("href=\"/ok\"", rendered);
+    }
+
+    // The base prelude provides an inert XMLHttpRequest so an SDK that patches XMLHttpRequest.prototype.open
+    // unguarded at init doesn't throw when the fetch shim is off. send() must not reach for __http (absent
+    // without the shim), so it makes no request and doesn't throw.
+    [Theory]
+    [InlineData(JsEngine.Jint)]
+    [InlineData(JsEngine.V8)]
+    public async Task JsMode_XmlHttpRequest_IsInertStubWithoutFetchShim(JsEngine engine)
+    {
+        if (engine == JsEngine.V8)
+            Assert.SkipUnless(V8Support.IsAvailable, V8Support.UnavailableReason);
+
+        const string html = """
+            <!doctype html><html><head></head><body>
+            <script>
+            try {
+              var patched = false, origOpen = XMLHttpRequest.prototype.open;
+              XMLHttpRequest.prototype.open = function () { patched = true; return origOpen.apply(this, arguments); };
+              var x = new XMLHttpRequest();
+              x.open('GET', 'https://example.test/beacon');
+              x.setRequestHeader('a', 'b');
+              x.send('{}');
+              var ok = typeof XMLHttpRequest !== 'undefined' && patched && x.readyState === 1 &&
+                       typeof x.addEventListener === 'function';
+              var l = document.createElement('a'); l.setAttribute('href', ok ? '/ok' : '/err');
+              document.body.appendChild(l);
+            } catch (err) {
+              var e = document.createElement('a'); e.setAttribute('href', '/err'); document.body.appendChild(e);
+            }
+            </script>
+            </body></html>
+            """;
+
+        var renderer = CreateJsRenderer(engine, new JsRenderOptions { EnableFetch = false });
+        var result = await renderer.RenderAsync(Encoding.UTF8.GetBytes(html), "http://localhost:5000/", new HttpClient(), CancellationToken.None);
+        var rendered = Encoding.UTF8.GetString(result);
+
+        Assert.DoesNotContain("href=\"/err\"", rendered);
+        Assert.Contains("href=\"/ok\"", rendered);
+    }
+
+    // core-js's Promise feature-detection forces its own (potentially finally-less) Promise polyfill unless
+    // window.PromiseRejectionEvent is a callable global; a bundle then hits `promise.finally is not a function`
+    // and its hydration dies. The global must exist, be callable, and carry promise/reason as an Event.
+    [Theory]
+    [InlineData(JsEngine.Jint)]
+    [InlineData(JsEngine.V8)]
+    public async Task JsMode_PromiseRejectionEvent_IsCallableEventGlobal(JsEngine engine)
+    {
+        if (engine == JsEngine.V8)
+            Assert.SkipUnless(V8Support.IsAvailable, V8Support.UnavailableReason);
+
+        const string html = """
+            <!doctype html><html><head></head><body>
+            <script>
+            try {
+              var p = Promise.resolve();
+              var ev = new PromiseRejectionEvent('unhandledrejection', { promise: p, reason: 'boom' });
+              var ok = typeof PromiseRejectionEvent === 'function' && ev instanceof Event &&
+                       ev.type === 'unhandledrejection' && ev.promise === p && ev.reason === 'boom';
+              var l = document.createElement('a'); l.setAttribute('href', ok ? '/ok' : '/err');
+              document.body.appendChild(l);
+            } catch (err) {
+              var e = document.createElement('a'); e.setAttribute('href', '/err'); document.body.appendChild(e);
+            }
+            </script>
+            </body></html>
+            """;
+
+        var renderer = CreateJsRenderer(engine);
+        var result = await renderer.RenderAsync(Encoding.UTF8.GetBytes(html), "http://localhost:5000/", new HttpClient(), CancellationToken.None);
+        var rendered = Encoding.UTF8.GetString(result);
+
+        Assert.DoesNotContain("href=\"/err\"", rendered);
+        Assert.Contains("href=\"/ok\"", rendered);
+    }
+
+    // Layout libraries construct DOMRect/DOMRectReadOnly bare during init and read the derived edges; absence
+    // is a ReferenceError inside the mount. The edges must derive from the supplied box.
+    [Theory]
+    [InlineData(JsEngine.Jint)]
+    [InlineData(JsEngine.V8)]
+    public async Task JsMode_DomRect_ConstructsAndDerivesEdges(JsEngine engine)
+    {
+        if (engine == JsEngine.V8)
+            Assert.SkipUnless(V8Support.IsAvailable, V8Support.UnavailableReason);
+
+        const string html = """
+            <!doctype html><html><head></head><body>
+            <script>
+            try {
+              var r = new DOMRect(10, 20, 30, 40);
+              var f = DOMRectReadOnly.fromRect({ x: 1, y: 2, width: 3, height: 4 });
+              var ok = r.x === 10 && r.y === 20 && r.width === 30 && r.height === 40 &&
+                       r.left === 10 && r.top === 20 && r.right === 40 && r.bottom === 60 &&
+                       r instanceof DOMRectReadOnly &&
+                       f.right === 4 && f.bottom === 6;
+              var l = document.createElement('a'); l.setAttribute('href', ok ? '/ok' : '/err');
+              document.body.appendChild(l);
+            } catch (err) {
+              var e = document.createElement('a'); e.setAttribute('href', '/err'); document.body.appendChild(e);
+            }
+            </script>
+            </body></html>
+            """;
+
+        var renderer = CreateJsRenderer(engine);
+        var result = await renderer.RenderAsync(Encoding.UTF8.GetBytes(html), "http://localhost:5000/", new HttpClient(), CancellationToken.None);
+        var rendered = Encoding.UTF8.GetString(result);
+
+        Assert.DoesNotContain("href=\"/err\"", rendered);
+        Assert.Contains("href=\"/ok\"", rendered);
+    }
+
+    // Graphics widgets composite off-screen with `new OffscreenCanvas(w, h).getContext("2d")` then draw; the
+    // global must exist and hand back the same no-op 2d context as <canvas> (null for other context types).
+    [Theory]
+    [InlineData(JsEngine.Jint)]
+    [InlineData(JsEngine.V8)]
+    public async Task JsMode_OffscreenCanvas_ReturnsInert2dContext(JsEngine engine)
+    {
+        if (engine == JsEngine.V8)
+            Assert.SkipUnless(V8Support.IsAvailable, V8Support.UnavailableReason);
+
+        const string html = """
+            <!doctype html><html><head></head><body>
+            <script>
+            try {
+              var c = new OffscreenCanvas(64, 32);
+              var ctx = c.getContext('2d');
+              ctx.clearRect(0, 0, 64, 32);
+              var ok = c.width === 64 && c.height === 32 && ctx && typeof ctx.clearRect === 'function' &&
+                       typeof ctx.drawImage === 'function' && c.getContext('webgl') === null &&
+                       typeof c.convertToBlob().then === 'function';
+              var l = document.createElement('a'); l.setAttribute('href', ok ? '/ok' : '/err');
+              document.body.appendChild(l);
+            } catch (err) {
+              var e = document.createElement('a'); e.setAttribute('href', '/err'); document.body.appendChild(e);
+            }
+            </script>
+            </body></html>
+            """;
+
+        var renderer = CreateJsRenderer(engine);
+        var result = await renderer.RenderAsync(Encoding.UTF8.GetBytes(html), "http://localhost:5000/", new HttpClient(), CancellationToken.None);
+        var rendered = Encoding.UTF8.GetString(result);
+
+        Assert.DoesNotContain("href=\"/err\"", rendered);
+        Assert.Contains("href=\"/ok\"", rendered);
+    }
+
+    // Animation-sequencing code awaits `element.animate(...).finished` (and `.ready`) then calls
+    // `.commitStyles()`; the inert Animation must expose those as settled promises and methods, or the exact
+    // idiom `r.finished.then(...)` throws on undefined and fails the effect.
+    [Theory]
+    [InlineData(JsEngine.Jint)]
+    [InlineData(JsEngine.V8)]
+    public async Task JsMode_Animate_ExposesFinishedAndReadyPromises(JsEngine engine)
+    {
+        if (engine == JsEngine.V8)
+            Assert.SkipUnless(V8Support.IsAvailable, V8Support.UnavailableReason);
+
+        const string html = """
+            <!doctype html><html><head></head><body><div id="t"></div>
+            <script>
+            try {
+              var r = document.getElementById('t').animate([{ opacity: 0 }, { opacity: 1 }], { duration: 100 });
+              var ok = r && typeof r.finished.then === 'function' && typeof r.ready.then === 'function' &&
+                       typeof r.commitStyles === 'function' && typeof r.persist === 'function' &&
+                       typeof r.cancel === 'function';
+              // The failure-mode idiom must not throw.
+              r.finished.then(function () { });
+              var l = document.createElement('a'); l.setAttribute('href', ok ? '/ok' : '/err');
+              document.body.appendChild(l);
+            } catch (err) {
+              var e = document.createElement('a'); e.setAttribute('href', '/err'); document.body.appendChild(e);
+            }
+            </script>
+            </body></html>
+            """;
+
+        var renderer = CreateJsRenderer(engine);
+        var result = await renderer.RenderAsync(Encoding.UTF8.GetBytes(html), "http://localhost:5000/", new HttpClient(), CancellationToken.None);
+        var rendered = Encoding.UTF8.GetString(result);
+
+        Assert.DoesNotContain("href=\"/err\"", rendered);
+        Assert.Contains("href=\"/ok\"", rendered);
     }
 
     private sealed class StreamBodyHandler : HttpMessageHandler

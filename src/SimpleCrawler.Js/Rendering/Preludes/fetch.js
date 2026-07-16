@@ -170,31 +170,6 @@
     return Promise.resolve(response);
   }
 
-  // network/types/AbortSignal.ts
-  var AbortSignal = class {
-    constructor() {
-      this.aborted = false;
-    }
-    throwIfAborted() {
-    }
-    addEventListener(type = null, listener = null, options = null) {
-    }
-    removeEventListener(type = null, listener = null, options = null) {
-    }
-    dispatchEvent(evt = null) {
-      return true;
-    }
-  };
-
-  // network/types/AbortController.ts
-  var AbortController = class {
-    constructor() {
-      this.signal = new AbortSignal();
-    }
-    abort(reason) {
-    }
-  };
-
   // network/types/FormData.ts
   var FormData = class {
     constructor() {
@@ -414,10 +389,8 @@
     global.Request = global.Request || Request;
     global.FormData = global.FormData || FormData;
     global.fetch = global.fetch || fetch;
-    global.XMLHttpRequest = global.XMLHttpRequest || XMLHttpRequest;
-    global.XMLHttpRequestEventTarget = global.XMLHttpRequestEventTarget || XMLHttpRequestEventTarget;
-    global.AbortController = global.AbortController || AbortController;
-    global.AbortSignal = global.AbortSignal || AbortSignal;
+    global.XMLHttpRequest = XMLHttpRequest;
+    global.XMLHttpRequestEventTarget = XMLHttpRequestEventTarget;
   }
 
   // network/index.ts
