@@ -8,6 +8,25 @@ Package versions are derived from git tags (`v*`) via MinVer.
 
 ## [Unreleased]
 
+### Fixed
+
+- `<meta>` reflects its `content` (and `name`/`http-equiv`) as a property. There was no `HTMLMetaElement` at
+  all, so a meta tag parsed to a plain `Element` and `.content` read `undefined` — and a page's own bootstrap
+  data is routinely parked in a meta tag and read back through the property, never the attribute
+  (`JSON.parse(meta.content)`). That read is then `JSON.parse(undefined)`, a `SyntaxError` thrown during
+  render, which a framework turns into a client-side exception and an error route: the container is emptied,
+  hydration never commits, and so not one `useEffect` runs and nothing the page would have mounted appears.
+  Every script fetched, every script executed, nothing surfaced — a Next.js page went from 1 hydrated node to
+  1,389, and recovered its consent manager, its error tracker, its analytics and a utility library, all of
+  which are injected from effects. Nothing caught this because the internal robots read goes through
+  `getAttribute("content")` — the attribute, which worked.
+- `window.frames`, `window.top` and `window.parent` are the window itself, and `window.length` is 0, matching
+  a top-level browsing context with no child frames. The IAB TCF consent stub — shipped by essentially every
+  consent platform — probes for an already-present CMP with a bare `window.frames['__tcfapiLocator']`, an
+  indexed read rather than a feature test, so an absent `frames` was a `TypeError` that aborted the stub's
+  entire script and took everything it would have installed with it. Measured against a real browser this
+  recovers a live-chat SDK's global outright, and it clears that bundle-execution error on an unrelated page.
+
 ## [3.3.3] - 2026-07-16
 
 ### Added
