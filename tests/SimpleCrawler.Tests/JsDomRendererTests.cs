@@ -2157,6 +2157,46 @@ public class JsDomRendererTests : IClassFixture<JsRendererFixture>
         Assert.Contains("href=\"/ok\"", rendered);
     }
 
+    // The base prelude provides an inert XMLHttpRequest so an SDK that patches XMLHttpRequest.prototype.open
+    // unguarded at init doesn't throw when the fetch shim is off. send() must not reach for __http (absent
+    // without the shim), so it makes no request and doesn't throw.
+    [Theory]
+    [InlineData(JsEngine.Jint)]
+    [InlineData(JsEngine.V8)]
+    public async Task JsMode_XmlHttpRequest_IsInertStubWithoutFetchShim(JsEngine engine)
+    {
+        if (engine == JsEngine.V8)
+            Assert.SkipUnless(V8Support.IsAvailable, V8Support.UnavailableReason);
+
+        const string html = """
+            <!doctype html><html><head></head><body>
+            <script>
+            try {
+              var patched = false, origOpen = XMLHttpRequest.prototype.open;
+              XMLHttpRequest.prototype.open = function () { patched = true; return origOpen.apply(this, arguments); };
+              var x = new XMLHttpRequest();
+              x.open('GET', 'https://example.test/beacon');
+              x.setRequestHeader('a', 'b');
+              x.send('{}');
+              var ok = typeof XMLHttpRequest !== 'undefined' && patched && x.readyState === 1 &&
+                       typeof x.addEventListener === 'function';
+              var l = document.createElement('a'); l.setAttribute('href', ok ? '/ok' : '/err');
+              document.body.appendChild(l);
+            } catch (err) {
+              var e = document.createElement('a'); e.setAttribute('href', '/err'); document.body.appendChild(e);
+            }
+            </script>
+            </body></html>
+            """;
+
+        var renderer = CreateJsRenderer(engine, new JsRenderOptions { EnableFetch = false });
+        var result = await renderer.RenderAsync(Encoding.UTF8.GetBytes(html), "http://localhost:5000/", new HttpClient(), CancellationToken.None);
+        var rendered = Encoding.UTF8.GetString(result);
+
+        Assert.DoesNotContain("href=\"/err\"", rendered);
+        Assert.Contains("href=\"/ok\"", rendered);
+    }
+
     private sealed class StreamBodyHandler : HttpMessageHandler
     {
         protected override HttpResponseMessage Send(HttpRequestMessage request, CancellationToken cancellationToken)

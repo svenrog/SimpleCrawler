@@ -389,8 +389,8 @@
     global.Request = global.Request || Request;
     global.FormData = global.FormData || FormData;
     global.fetch = global.fetch || fetch;
-    global.XMLHttpRequest = global.XMLHttpRequest || XMLHttpRequest;
-    global.XMLHttpRequestEventTarget = global.XMLHttpRequestEventTarget || XMLHttpRequestEventTarget;
+    global.XMLHttpRequest = XMLHttpRequest;
+    global.XMLHttpRequestEventTarget = XMLHttpRequestEventTarget;
   }
 
   // network/index.ts

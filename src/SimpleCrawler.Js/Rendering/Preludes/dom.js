@@ -2887,6 +2887,82 @@
     }
   };
 
+  // network/XMLHttpRequestEventTarget.ts
+  var XMLHttpRequestEventTarget = class {
+    constructor() {
+      this._listeners = {};
+    }
+    addEventListener(type, cb) {
+      if (typeof cb !== "function") return;
+      (this._listeners[type] || (this._listeners[type] = [])).push(cb);
+    }
+    removeEventListener(type, cb) {
+      const list = this._listeners[type];
+      if (!list) return;
+      const index = list.indexOf(cb);
+      if (index >= 0) list.splice(index, 1);
+    }
+    dispatchEvent(event) {
+      const list = event && this._listeners[event.type];
+      if (list) {
+        for (const cb of list.slice()) {
+          try {
+            cb.call(this, event);
+          } catch {
+          }
+        }
+      }
+      return true;
+    }
+  };
+
+  // network/XMLHttpRequestStub.ts
+  var XMLHttpRequestStub = class extends XMLHttpRequestEventTarget {
+    constructor() {
+      super();
+      this.readyState = 0;
+      this.status = 0;
+      this.statusText = "";
+      this.responseText = "";
+      this.response = "";
+      this.responseType = "";
+      this.responseURL = "";
+      this.withCredentials = false;
+      this.timeout = 0;
+      this.onreadystatechange = null;
+      this.onload = null;
+      this.onerror = null;
+      this.onloadend = null;
+      this.onloadstart = null;
+      this.onprogress = null;
+      this.onabort = null;
+      this.ontimeout = null;
+      this.upload = new XMLHttpRequestEventTarget();
+    }
+    open() {
+      this.readyState = 1;
+    }
+    setRequestHeader() {
+    }
+    send() {
+    }
+    abort() {
+    }
+    overrideMimeType() {
+    }
+    getResponseHeader() {
+      return null;
+    }
+    getAllResponseHeaders() {
+      return "";
+    }
+  };
+  XMLHttpRequestStub.UNSENT = 0;
+  XMLHttpRequestStub.OPENED = 1;
+  XMLHttpRequestStub.HEADERS_RECEIVED = 2;
+  XMLHttpRequestStub.LOADING = 3;
+  XMLHttpRequestStub.DONE = 4;
+
   // browser/MessageChannel.ts
   var MessagePort = class {
     constructor() {
@@ -3418,6 +3494,8 @@
     global.crypto = global.crypto || crypto;
     global.AbortController = global.AbortController || AbortController;
     global.AbortSignal = global.AbortSignal || AbortSignal;
+    global.XMLHttpRequestEventTarget = global.XMLHttpRequestEventTarget || XMLHttpRequestEventTarget;
+    global.XMLHttpRequest = global.XMLHttpRequest || XMLHttpRequestStub;
     global.MessageChannel = global.MessageChannel || MessageChannel;
     global.MessagePort = global.MessagePort || MessagePort;
     global.performance = global.performance || performance;

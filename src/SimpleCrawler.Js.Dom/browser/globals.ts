@@ -26,6 +26,8 @@ import { TextDecoder } from "./TextDecoder";
 import { crypto } from "./crypto";
 import { AbortController } from "../network/types/AbortController";
 import { AbortSignal } from "../network/types/AbortSignal";
+import { XMLHttpRequestEventTarget } from "../network/XMLHttpRequestEventTarget";
+import { XMLHttpRequestStub } from "../network/XMLHttpRequestStub";
 import { MessageChannel, MessagePort } from "./MessageChannel";
 import { createStorage } from "./Storage";
 import { performance } from "./Performance";
@@ -162,6 +164,10 @@ export function installDOM(global: any): void {
     global.crypto = global.crypto || crypto;
     global.AbortController = global.AbortController || AbortController;
     global.AbortSignal = global.AbortSignal || AbortSignal;
+    // An inert XMLHttpRequest so unguarded prototype patching at SDK init doesn't throw; installNetwork swaps
+    // in the functional one when the fetch shim is enabled (both extend the same-bundle event-target base).
+    global.XMLHttpRequestEventTarget = global.XMLHttpRequestEventTarget || XMLHttpRequestEventTarget;
+    global.XMLHttpRequest = global.XMLHttpRequest || XMLHttpRequestStub;
     global.MessageChannel = global.MessageChannel || MessageChannel;
     global.MessagePort = global.MessagePort || MessagePort;
     global.performance = global.performance || performance;
