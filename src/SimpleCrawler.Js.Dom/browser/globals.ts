@@ -30,6 +30,8 @@ import { performance } from "./Performance";
 import { installViewport } from "./viewport";
 import { IntersectionObserver } from "./IntersectionObserver";
 import { IntersectionObserverEntry } from "./IntersectionObserverEntry";
+import { PerformanceObserver } from "./PerformanceObserver";
+import { Worker } from "./Worker";
 import { Blob } from "./Blob";
 import { DOMException } from "./DOMException";
 import { FileList } from "./FileList";
@@ -103,6 +105,17 @@ export function installDOM(global: any): void {
         this.unobserve = () => { };
         this.disconnect = () => { };
     };
+    global.PerformanceObserver = global.PerformanceObserver || PerformanceObserver;
+    // Worker earns its place on how it is *reached*, which is the distinction that decides this whole class:
+    // across sampled production bundles it is constructed bare (`new Worker(url)`, no feature test) and never
+    // guarded, so its absence is not a branch a page chooses — it is a certain ReferenceError inside whatever
+    // SDK constructs it. Nothing here runs the worker's script; the stub exists so that init survives.
+    global.Worker = global.Worker || Worker;
+    // declined: WebSocket, Notification. Both are plausible on the same story Worker is justified by — a chat
+    // or push SDK constructing one during init — and neither was observed being constructed or feature-tested
+    // on any sampled target, so there is no evidence to price. Worker's case is not that a story exists but
+    // that the bare construction was counted in shipped code; absent that, this is how the prelude would
+    // accumulate surface it cannot justify. Revisit when a target is shown losing a global to either.
     // A deep-clone good enough for the JSON-serialisable state bundles round-trip; non-JSON inputs
     // (functions, cycles) aren't supported, matching nothing real but never reached by our targets.
     global.structuredClone = global.structuredClone || ((value: any) => value == null ? value : JSON.parse(JSON.stringify(value)));

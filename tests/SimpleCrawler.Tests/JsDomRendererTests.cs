@@ -1917,6 +1917,78 @@ public class JsDomRendererTests : IClassFixture<JsRendererFixture>
         Assert.Contains("href=\"/after-scroll\"", Encoding.UTF8.GetString(result));
     }
 
+    // The globals an analytics/tracing SDK reaches for while installing itself. Each is constructed or called
+    // during init, so a missing one throws a ReferenceError *through* that init and the SDK sets none of the
+    // globals it would have — the page still renders, nothing surfaces, and the technology reads as absent.
+    // PerformanceObserver never fires (a layout-less render produces no timing entries, the same reason
+    // performance.getEntries() is empty) but must exist and accept observe(); Worker is constructed bare in
+    // real bundles, so it must not throw; sendBeacon must report success, because the default no-fetch posture
+    // exists precisely so a bundle runs while its beacon goes nowhere.
+    [Theory]
+    [InlineData(JsEngine.Jint)]
+    [InlineData(JsEngine.V8)]
+    public async Task JsMode_SdkInitGlobals_ExistAndAreInert(JsEngine engine)
+    {
+        if (engine == JsEngine.V8)
+            Assert.SkipUnless(V8Support.IsAvailable, V8Support.UnavailableReason);
+
+        const string html = """
+            <!doctype html><html><body>
+            <script>
+              var fired = false;
+              var po = new PerformanceObserver(function () { fired = true; });
+              po.observe({ type: 'largest-contentful-paint', buffered: true });
+              var lcp = PerformanceObserver.supportedEntryTypes.indexOf('largest-contentful-paint') >= 0;
+              var records = po.takeRecords().length;
+              po.disconnect();
+              var w = new Worker('/worker.js');
+              w.postMessage({ hello: 1 });
+              w.terminate();
+              var beacon = navigator.sendBeacon('/collect', 'x');
+              var a = document.createElement('a');
+              a.setAttribute('href', '/ok-' + lcp + '-' + fired + '-' + records + '-' + beacon);
+              document.body.appendChild(a);
+            </script>
+            </body></html>
+            """;
+
+        var renderer = CreateJsRenderer(engine);
+        var result = await renderer.RenderAsync(Encoding.UTF8.GetBytes(html), "https://example.test/", new HttpClient(), CancellationToken.None);
+
+        // supported, never fired, no records, beacon accepted — and the subtree below the SDK init survived.
+        Assert.Contains("href=\"/ok-true-false-0-true\"", Encoding.UTF8.GetString(result));
+    }
+
+    // The counterpart to the above: what a *missing* SDK-init global costs. The throw lands inside the init,
+    // so everything the SDK would have built — here the link standing in for its globals — is silently gone.
+    [Theory]
+    [InlineData(JsEngine.Jint)]
+    [InlineData(JsEngine.V8)]
+    public async Task JsMode_SdkInitGlobals_AreReachedBeforeTheSdkSetsAnything(JsEngine engine)
+    {
+        if (engine == JsEngine.V8)
+            Assert.SkipUnless(V8Support.IsAvailable, V8Support.UnavailableReason);
+
+        const string html = """
+            <!doctype html><html><body>
+            <script>
+              (function initSdk() {
+                new PerformanceObserver(function () { }).observe({ type: 'paint' });
+                window.__sdk = 'installed';
+                var a = document.createElement('a');
+                a.setAttribute('href', '/sdk-installed');
+                document.body.appendChild(a);
+              })();
+            </script>
+            </body></html>
+            """;
+
+        var renderer = CreateJsRenderer(engine);
+        var result = await renderer.RenderAsync(Encoding.UTF8.GetBytes(html), "https://example.test/", new HttpClient(), CancellationToken.None);
+
+        Assert.Contains("href=\"/sdk-installed\"", Encoding.UTF8.GetString(result));
+    }
+
     private sealed class StreamBodyHandler : HttpMessageHandler
     {
         protected override HttpResponseMessage Send(HttpRequestMessage request, CancellationToken cancellationToken)
