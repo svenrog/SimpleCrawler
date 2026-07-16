@@ -6,7 +6,7 @@ import { createWebGLContext, isWebGlContextType, isWebGlEnabled } from "./webgl"
 // the method and a no-op context must exist or the mount throws and trips the SPA error boundary. Every
 // drawing call is swallowed; the few accessors that must hand back an object (measureText, gradients,
 // image data) return zero-sized stubs so chained reads don't fault.
-function createContext2D(canvas: HTMLCanvasElement): any {
+export function createContext2D(canvas: any): any {
     const noop = () => { };
     return {
         canvas,

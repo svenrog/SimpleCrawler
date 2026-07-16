@@ -923,11 +923,21 @@
       return null;
     }
     // Web Animations: unlaid-out elements never animate, but the returned Animation is used synchronously
-    // (cancel/play/pause, onfinish, currentTime), so a missing method would throw inside the effect that a
-    // finite offsetWidth now lets run. Hand back an inert Animation instead.
+    // (cancel/play/pause, onfinish, currentTime) and animation-sequencing code awaits `.finished`/`.ready`
+    // then calls `.commitStyles()`, so a missing member throws inside the effect that a finite offsetWidth now
+    // lets run. Hand back an inert, already-settled Animation. Each call gets its own resolved promises.
     animate() {
       return {
         currentTime: 0,
+        startTime: null,
+        playState: "finished",
+        playbackRate: 1,
+        pending: false,
+        effect: null,
+        timeline: null,
+        id: "",
+        finished: Promise.resolve(),
+        ready: Promise.resolve(),
         onfinish: null,
         oncancel: null,
         play() {
@@ -939,6 +949,12 @@
         finish() {
         },
         reverse() {
+        },
+        persist() {
+        },
+        commitStyles() {
+        },
+        updatePlaybackRate() {
         },
         addEventListener() {
         },
@@ -2777,6 +2793,79 @@
     }
   };
 
+  // browser/PromiseRejectionEvent.ts
+  var PromiseRejectionEvent = class extends Event {
+    constructor(type, init) {
+      super(type, init);
+      this.promise = init ? init.promise : void 0;
+      this.reason = init ? init.reason : void 0;
+    }
+  };
+
+  // browser/DOMRect.ts
+  var DOMRectReadOnly = class _DOMRectReadOnly {
+    constructor(x, y, width, height) {
+      this.x = +x || 0;
+      this.y = +y || 0;
+      this.width = +width || 0;
+      this.height = +height || 0;
+    }
+    get top() {
+      return Math.min(this.y, this.y + this.height);
+    }
+    get bottom() {
+      return Math.max(this.y, this.y + this.height);
+    }
+    get left() {
+      return Math.min(this.x, this.x + this.width);
+    }
+    get right() {
+      return Math.max(this.x, this.x + this.width);
+    }
+    toJSON() {
+      return {
+        x: this.x,
+        y: this.y,
+        width: this.width,
+        height: this.height,
+        top: this.top,
+        right: this.right,
+        bottom: this.bottom,
+        left: this.left
+      };
+    }
+    static fromRect(other) {
+      other = other || {};
+      return new _DOMRectReadOnly(other.x, other.y, other.width, other.height);
+    }
+  };
+  var DOMRect = class _DOMRect extends DOMRectReadOnly {
+    static fromRect(other) {
+      other = other || {};
+      return new _DOMRect(other.x, other.y, other.width, other.height);
+    }
+  };
+
+  // dom/OffscreenCanvas.ts
+  var OffscreenCanvas = class {
+    constructor(width, height) {
+      this.width = width || 0;
+      this.height = height || 0;
+    }
+    getContext(type) {
+      return type === "2d" ? createContext2D(this) : null;
+    }
+    transferToImageBitmap() {
+      return { width: this.width, height: this.height, close() {
+      } };
+    }
+    convertToBlob() {
+      return Promise.resolve(null);
+    }
+    close() {
+    }
+  };
+
   // browser/TextEncoder.ts
   var TextEncoder = class {
     constructor() {
@@ -3489,6 +3578,10 @@
     customElements.setDocument(doc);
     global.Event = Event;
     global.CustomEvent = CustomEvent;
+    global.PromiseRejectionEvent = global.PromiseRejectionEvent || PromiseRejectionEvent;
+    global.DOMRect = global.DOMRect || DOMRect;
+    global.DOMRectReadOnly = global.DOMRectReadOnly || DOMRectReadOnly;
+    global.OffscreenCanvas = global.OffscreenCanvas || OffscreenCanvas;
     global.TextEncoder = global.TextEncoder || TextEncoder;
     global.TextDecoder = global.TextDecoder || TextDecoder;
     global.crypto = global.crypto || crypto;

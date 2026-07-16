@@ -21,6 +21,9 @@ import { URL } from "../url/URL";
 import { URLSearchParams } from "../url/URLSearchParams";
 import { Event } from "./Event";
 import { CustomEvent } from "./CustomEvent";
+import { PromiseRejectionEvent } from "./PromiseRejectionEvent";
+import { DOMRect, DOMRectReadOnly } from "./DOMRect";
+import { OffscreenCanvas } from "../dom/OffscreenCanvas";
 import { TextEncoder } from "./TextEncoder";
 import { TextDecoder } from "./TextDecoder";
 import { crypto } from "./crypto";
@@ -159,6 +162,12 @@ export function installDOM(global: any): void {
     customElements.setDocument(doc);
     global.Event = Event;
     global.CustomEvent = CustomEvent;
+    // A callable PromiseRejectionEvent keeps core-js from force-replacing the native Promise with a polyfill
+    // whose finally/allSettled/withResolvers a bundle may have tree-shaken (native in real browsers).
+    global.PromiseRejectionEvent = global.PromiseRejectionEvent || PromiseRejectionEvent;
+    global.DOMRect = global.DOMRect || DOMRect;
+    global.DOMRectReadOnly = global.DOMRectReadOnly || DOMRectReadOnly;
+    global.OffscreenCanvas = global.OffscreenCanvas || OffscreenCanvas;
     global.TextEncoder = global.TextEncoder || TextEncoder;
     global.TextDecoder = global.TextDecoder || TextDecoder;
     global.crypto = global.crypto || crypto;

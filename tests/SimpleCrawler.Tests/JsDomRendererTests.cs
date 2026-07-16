@@ -2197,6 +2197,154 @@ public class JsDomRendererTests : IClassFixture<JsRendererFixture>
         Assert.Contains("href=\"/ok\"", rendered);
     }
 
+    // core-js's Promise feature-detection forces its own (potentially finally-less) Promise polyfill unless
+    // window.PromiseRejectionEvent is a callable global; a bundle then hits `promise.finally is not a function`
+    // and its hydration dies. The global must exist, be callable, and carry promise/reason as an Event.
+    [Theory]
+    [InlineData(JsEngine.Jint)]
+    [InlineData(JsEngine.V8)]
+    public async Task JsMode_PromiseRejectionEvent_IsCallableEventGlobal(JsEngine engine)
+    {
+        if (engine == JsEngine.V8)
+            Assert.SkipUnless(V8Support.IsAvailable, V8Support.UnavailableReason);
+
+        const string html = """
+            <!doctype html><html><head></head><body>
+            <script>
+            try {
+              var p = Promise.resolve();
+              var ev = new PromiseRejectionEvent('unhandledrejection', { promise: p, reason: 'boom' });
+              var ok = typeof PromiseRejectionEvent === 'function' && ev instanceof Event &&
+                       ev.type === 'unhandledrejection' && ev.promise === p && ev.reason === 'boom';
+              var l = document.createElement('a'); l.setAttribute('href', ok ? '/ok' : '/err');
+              document.body.appendChild(l);
+            } catch (err) {
+              var e = document.createElement('a'); e.setAttribute('href', '/err'); document.body.appendChild(e);
+            }
+            </script>
+            </body></html>
+            """;
+
+        var renderer = CreateJsRenderer(engine);
+        var result = await renderer.RenderAsync(Encoding.UTF8.GetBytes(html), "http://localhost:5000/", new HttpClient(), CancellationToken.None);
+        var rendered = Encoding.UTF8.GetString(result);
+
+        Assert.DoesNotContain("href=\"/err\"", rendered);
+        Assert.Contains("href=\"/ok\"", rendered);
+    }
+
+    // Layout libraries construct DOMRect/DOMRectReadOnly bare during init and read the derived edges; absence
+    // is a ReferenceError inside the mount. The edges must derive from the supplied box.
+    [Theory]
+    [InlineData(JsEngine.Jint)]
+    [InlineData(JsEngine.V8)]
+    public async Task JsMode_DomRect_ConstructsAndDerivesEdges(JsEngine engine)
+    {
+        if (engine == JsEngine.V8)
+            Assert.SkipUnless(V8Support.IsAvailable, V8Support.UnavailableReason);
+
+        const string html = """
+            <!doctype html><html><head></head><body>
+            <script>
+            try {
+              var r = new DOMRect(10, 20, 30, 40);
+              var f = DOMRectReadOnly.fromRect({ x: 1, y: 2, width: 3, height: 4 });
+              var ok = r.x === 10 && r.y === 20 && r.width === 30 && r.height === 40 &&
+                       r.left === 10 && r.top === 20 && r.right === 40 && r.bottom === 60 &&
+                       r instanceof DOMRectReadOnly &&
+                       f.right === 4 && f.bottom === 6;
+              var l = document.createElement('a'); l.setAttribute('href', ok ? '/ok' : '/err');
+              document.body.appendChild(l);
+            } catch (err) {
+              var e = document.createElement('a'); e.setAttribute('href', '/err'); document.body.appendChild(e);
+            }
+            </script>
+            </body></html>
+            """;
+
+        var renderer = CreateJsRenderer(engine);
+        var result = await renderer.RenderAsync(Encoding.UTF8.GetBytes(html), "http://localhost:5000/", new HttpClient(), CancellationToken.None);
+        var rendered = Encoding.UTF8.GetString(result);
+
+        Assert.DoesNotContain("href=\"/err\"", rendered);
+        Assert.Contains("href=\"/ok\"", rendered);
+    }
+
+    // Graphics widgets composite off-screen with `new OffscreenCanvas(w, h).getContext("2d")` then draw; the
+    // global must exist and hand back the same no-op 2d context as <canvas> (null for other context types).
+    [Theory]
+    [InlineData(JsEngine.Jint)]
+    [InlineData(JsEngine.V8)]
+    public async Task JsMode_OffscreenCanvas_ReturnsInert2dContext(JsEngine engine)
+    {
+        if (engine == JsEngine.V8)
+            Assert.SkipUnless(V8Support.IsAvailable, V8Support.UnavailableReason);
+
+        const string html = """
+            <!doctype html><html><head></head><body>
+            <script>
+            try {
+              var c = new OffscreenCanvas(64, 32);
+              var ctx = c.getContext('2d');
+              ctx.clearRect(0, 0, 64, 32);
+              var ok = c.width === 64 && c.height === 32 && ctx && typeof ctx.clearRect === 'function' &&
+                       typeof ctx.drawImage === 'function' && c.getContext('webgl') === null &&
+                       typeof c.convertToBlob().then === 'function';
+              var l = document.createElement('a'); l.setAttribute('href', ok ? '/ok' : '/err');
+              document.body.appendChild(l);
+            } catch (err) {
+              var e = document.createElement('a'); e.setAttribute('href', '/err'); document.body.appendChild(e);
+            }
+            </script>
+            </body></html>
+            """;
+
+        var renderer = CreateJsRenderer(engine);
+        var result = await renderer.RenderAsync(Encoding.UTF8.GetBytes(html), "http://localhost:5000/", new HttpClient(), CancellationToken.None);
+        var rendered = Encoding.UTF8.GetString(result);
+
+        Assert.DoesNotContain("href=\"/err\"", rendered);
+        Assert.Contains("href=\"/ok\"", rendered);
+    }
+
+    // Animation-sequencing code awaits `element.animate(...).finished` (and `.ready`) then calls
+    // `.commitStyles()`; the inert Animation must expose those as settled promises and methods, or the exact
+    // idiom `r.finished.then(...)` throws on undefined and fails the effect.
+    [Theory]
+    [InlineData(JsEngine.Jint)]
+    [InlineData(JsEngine.V8)]
+    public async Task JsMode_Animate_ExposesFinishedAndReadyPromises(JsEngine engine)
+    {
+        if (engine == JsEngine.V8)
+            Assert.SkipUnless(V8Support.IsAvailable, V8Support.UnavailableReason);
+
+        const string html = """
+            <!doctype html><html><head></head><body><div id="t"></div>
+            <script>
+            try {
+              var r = document.getElementById('t').animate([{ opacity: 0 }, { opacity: 1 }], { duration: 100 });
+              var ok = r && typeof r.finished.then === 'function' && typeof r.ready.then === 'function' &&
+                       typeof r.commitStyles === 'function' && typeof r.persist === 'function' &&
+                       typeof r.cancel === 'function';
+              // The failure-mode idiom must not throw.
+              r.finished.then(function () { });
+              var l = document.createElement('a'); l.setAttribute('href', ok ? '/ok' : '/err');
+              document.body.appendChild(l);
+            } catch (err) {
+              var e = document.createElement('a'); e.setAttribute('href', '/err'); document.body.appendChild(e);
+            }
+            </script>
+            </body></html>
+            """;
+
+        var renderer = CreateJsRenderer(engine);
+        var result = await renderer.RenderAsync(Encoding.UTF8.GetBytes(html), "http://localhost:5000/", new HttpClient(), CancellationToken.None);
+        var rendered = Encoding.UTF8.GetString(result);
+
+        Assert.DoesNotContain("href=\"/err\"", rendered);
+        Assert.Contains("href=\"/ok\"", rendered);
+    }
+
     private sealed class StreamBodyHandler : HttpMessageHandler
     {
         protected override HttpResponseMessage Send(HttpRequestMessage request, CancellationToken cancellationToken)

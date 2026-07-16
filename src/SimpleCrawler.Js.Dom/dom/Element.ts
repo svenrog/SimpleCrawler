@@ -199,11 +199,21 @@ export class Element extends Node implements Animatable {
     }
 
     // Web Animations: unlaid-out elements never animate, but the returned Animation is used synchronously
-    // (cancel/play/pause, onfinish, currentTime), so a missing method would throw inside the effect that a
-    // finite offsetWidth now lets run. Hand back an inert Animation instead.
+    // (cancel/play/pause, onfinish, currentTime) and animation-sequencing code awaits `.finished`/`.ready`
+    // then calls `.commitStyles()`, so a missing member throws inside the effect that a finite offsetWidth now
+    // lets run. Hand back an inert, already-settled Animation. Each call gets its own resolved promises.
     animate(): any {
         return {
             currentTime: 0,
+            startTime: null,
+            playState: "finished",
+            playbackRate: 1,
+            pending: false,
+            effect: null,
+            timeline: null,
+            id: "",
+            finished: Promise.resolve(),
+            ready: Promise.resolve(),
             onfinish: null,
             oncancel: null,
             play() { },
@@ -211,6 +221,9 @@ export class Element extends Node implements Animatable {
             cancel() { },
             finish() { },
             reverse() { },
+            persist() { },
+            commitStyles() { },
+            updatePlaybackRate() { },
             addEventListener() { },
             removeEventListener() { },
         };
