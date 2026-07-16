@@ -8,6 +8,8 @@ Package versions are derived from git tags (`v*`) via MinVer.
 
 ## [Unreleased]
 
+## [3.4.0] - 2026-07-16
+
 ### Fixed
 
 - `<meta>` reflects its `content` (and `name`/`http-equiv`) as a property. There was no `HTMLMetaElement` at
@@ -295,7 +297,8 @@ Public proxy types are removed and renamed (see _Removed_ and _Changed_), a brea
 
 - Initial release.
 
-[Unreleased]: https://github.com/svenrog/SimpleCrawler/compare/v3.3.3...HEAD
+[Unreleased]: https://github.com/svenrog/SimpleCrawler/compare/v3.4.0...HEAD
+[3.4.0]: https://github.com/svenrog/SimpleCrawler/releases/tag/v3.4.0
 [3.3.3]: https://github.com/svenrog/SimpleCrawler/releases/tag/v3.3.3
 [3.3.2]: https://github.com/svenrog/SimpleCrawler/releases/tag/v3.3.2
 [3.3.1]: https://github.com/svenrog/SimpleCrawler/releases/tag/v3.3.1
