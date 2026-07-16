@@ -8,6 +8,8 @@ Package versions are derived from git tags (`v*`) via MinVer.
 
 ## [Unreleased]
 
+## [3.5.0] - 2026-07-16
+
 ### Added
 
 - `PromiseRejectionEvent` as a callable global. It is inert — nothing dispatches it, because the renderer has
@@ -351,7 +353,8 @@ Public proxy types are removed and renamed (see _Removed_ and _Changed_), a brea
 
 - Initial release.
 
-[Unreleased]: https://github.com/svenrog/SimpleCrawler/compare/v3.4.0...HEAD
+[Unreleased]: https://github.com/svenrog/SimpleCrawler/compare/v3.5.0...HEAD
+[3.5.0]: https://github.com/svenrog/SimpleCrawler/releases/tag/v3.5.0
 [3.4.0]: https://github.com/svenrog/SimpleCrawler/releases/tag/v3.4.0
 [3.3.3]: https://github.com/svenrog/SimpleCrawler/releases/tag/v3.3.3
 [3.3.2]: https://github.com/svenrog/SimpleCrawler/releases/tag/v3.3.2
