@@ -2077,6 +2077,51 @@ public class JsDomRendererTests : IClassFixture<JsRendererFixture>
         Assert.Contains("href=\"/sdk-installed\"", Encoding.UTF8.GetString(result));
     }
 
+    // Focus/tab-order libraries sort DOM nodes with an `a.compareDocumentPosition(b)` comparator, inside a
+    // useMemo during render. Without the method the sort throws, the render subtree fails, and every effect
+    // below it (e.g. an SDK's init) silently never runs.
+    [Theory]
+    [InlineData(JsEngine.Jint)]
+    [InlineData(JsEngine.V8)]
+    public async Task JsMode_CompareDocumentPosition_OrdersNodesByDocumentPosition(JsEngine engine)
+    {
+        if (engine == JsEngine.V8)
+            Assert.SkipUnless(V8Support.IsAvailable, V8Support.UnavailableReason);
+
+        const string html = """
+            <!doctype html><html><head></head><body>
+            <div id="a"></div><div id="b"><span id="c"></span></div>
+            <script>
+            try {
+              var a = document.getElementById('a'), b = document.getElementById('b'), c = document.getElementById('c');
+              var F = Node.DOCUMENT_POSITION_FOLLOWING, P = Node.DOCUMENT_POSITION_PRECEDING,
+                  CB = Node.DOCUMENT_POSITION_CONTAINED_BY;
+              var ok = (a.compareDocumentPosition(b) & F) &&      // b follows a
+                       (b.compareDocumentPosition(a) & P) &&      // a precedes b
+                       (b.compareDocumentPosition(c) & CB) &&     // c is inside b
+                       (a.compareDocumentPosition(a) === 0);
+              // A tab-order sort: nodes must come out in document order without throwing.
+              var sorted = [c, b, a].sort(function (x, y) {
+                return (x.compareDocumentPosition(y) & F) ? -1 : 1;
+              }).map(function (n) { return n.id; }).join('');
+              var l = document.createElement('a');
+              l.setAttribute('href', ok && sorted === 'abc' ? '/ok' : '/err');
+              document.body.appendChild(l);
+            } catch (err) {
+              var e = document.createElement('a'); e.setAttribute('href', '/err'); document.body.appendChild(e);
+            }
+            </script>
+            </body></html>
+            """;
+
+        var renderer = CreateJsRenderer(engine);
+        var result = await renderer.RenderAsync(Encoding.UTF8.GetBytes(html), "http://localhost:5000/", new HttpClient(), CancellationToken.None);
+        var rendered = Encoding.UTF8.GetString(result);
+
+        Assert.DoesNotContain("href=\"/err\"", rendered);
+        Assert.Contains("href=\"/ok\"", rendered);
+    }
+
     private sealed class StreamBodyHandler : HttpMessageHandler
     {
         protected override HttpResponseMessage Send(HttpRequestMessage request, CancellationToken cancellationToken)
