@@ -1264,6 +1264,55 @@ public class JsDomRendererTests : IClassFixture<JsRendererFixture>
         Assert.Contains("href=\"/ok\"", rendered);
     }
 
+    // A style declaration must answer the `in` operator for every CSS property, set or not, and for the
+    // vendor-prefixed spellings a real browser supports. Animation libraries pick the working transform
+    // spelling with a prefix probe (`"transform" in style || "WebkitTransform" in style || ...`) and then use
+    // the result as a property name with no fallback — GSAP's _checkPropPrefix returns null when none match,
+    // and every later transform read throws "Cannot read properties of null (reading 'replace')". A style
+    // object that reads a property back but denies it under `in` contradicts itself, so the probe finds
+    // nothing even for a property just assigned.
+    [Theory]
+    [InlineData(JsEngine.Jint)]
+    [InlineData(JsEngine.V8)]
+    public async Task JsMode_StyleDeclaration_InOperatorFindsProperties(JsEngine engine)
+    {
+        if (engine == JsEngine.V8)
+            Assert.SkipUnless(V8Support.IsAvailable, V8Support.UnavailableReason);
+
+        const string html = """
+            <html><body><div id="t"></div>
+            <script>
+            try {
+              var st = document.createElement('div').style;
+              // GSAP's prefix probe, verbatim in shape: unprefixed first, then vendor-prefixed spellings.
+              var kt = "O,Moz,ms,Ms,Webkit".split(",");
+              var check = function (e) {
+                var _ = 5;
+                if (e in st) return e;
+                for (e = e.charAt(0).toUpperCase() + e.substr(1); _-- && !(kt[_] + e in st);) ;
+                return _ < 0 ? null : (_ === 3 ? "ms" : _ >= 0 ? kt[_] : "") + e;
+              };
+              st.color = "red";                 // a property this shim itself set must be visible to `in`
+              var found = check("transform");   // must resolve to a non-null spelling, not null
+              var ok = found !== null && found !== undefined && ("color" in st);
+              var a = document.createElement('a'); a.setAttribute('href', ok ? '/ok' : '/bad');
+              document.getElementById('t').appendChild(a);
+            } catch (err) {
+              var b = document.createElement('a'); b.setAttribute('href', '/err'); document.getElementById('t').appendChild(b);
+            }
+            </script>
+            </body></html>
+            """;
+
+        var renderer = CreateJsRenderer(engine);
+        var result = await renderer.RenderAsync(Encoding.UTF8.GetBytes(html), "http://localhost:5000/", new HttpClient(), CancellationToken.None);
+        var rendered = Encoding.UTF8.GetString(result);
+
+        Assert.DoesNotContain("href=\"/err\"", rendered);
+        Assert.DoesNotContain("href=\"/bad\"", rendered);
+        Assert.Contains("href=\"/ok\"", rendered);
+    }
+
     // Lazy prefetch/lazy-load libraries feature-detect IntersectionObserver support with the classic
     // `'isIntersecting' in IntersectionObserverEntry.prototype` probe (instant-page does exactly this in an
     // IIFE at parse time); the missing global threw ReferenceError before the page hydrated. The global must

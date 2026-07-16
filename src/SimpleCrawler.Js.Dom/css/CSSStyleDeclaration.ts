@@ -33,6 +33,17 @@ export function createStyleDeclaration(): any {
             store[k as string] = v;
             return true;
         },
+        // A real style object answers `in` for every CSS property it supports, set or not, and for both the
+        // unprefixed and vendor-prefixed spellings. Without a has trap `in` falls through to the bare target
+        // and is false for everything — including properties this shim itself just stored — which contradicts
+        // the get trap above. The gap is not cosmetic: a prefix probe of the shape
+        // `"transform" in style || "WebkitTransform" in style || ...` concludes the property is unsupported,
+        // and libraries then use that null as a property name rather than taking a fallback (GSAP's
+        // _checkPropPrefix does exactly this, and every subsequent transform read throws). This answers true
+        // for unknown names too, where a real browser answers false; that mirrors the get trap, which already
+        // returns "" for any key rather than shipping a CSS-property table, and feature probes ask about real
+        // (possibly prefixed/future) properties, never deliberate non-properties.
+        has: () => true,
     };
     return new Proxy({}, handler);
 }
