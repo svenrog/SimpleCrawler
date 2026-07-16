@@ -8,6 +8,60 @@ Package versions are derived from git tags (`v*`) via MinVer.
 
 ## [Unreleased]
 
+### Added
+
+- `PromiseRejectionEvent` as a callable global. It is inert — nothing dispatches it, because the renderer has
+  no way to observe an unhandled rejection — but its *presence* is load-bearing, and its absence silently
+  corrupted Promise semantics on any page carrying core-js. core-js decides the native `Promise` needs
+  replacing when it looks like a browser but `window.PromiseRejectionEvent` is not callable; it then installs
+  its own `Promise`, and a bundle that tree-shook the `es.promise.finally` add-on — reasonable, since `finally`
+  is native everywhere it ships — gets a `Promise` without it. So `p.finally(...)` threw "not a function" deep
+  in a hydration path that a real browser runs without complaint. Providing the global keeps core-js on its
+  native-Promise path, exactly as it stays in Chrome.
+- `DOMRect` and `DOMRectReadOnly`, constructible and deriving `top`/`right`/`bottom`/`left` from
+  `x`/`y`/`width`/`height`, plus `fromRect`. Geometry code references them bare, so an absent global was a
+  certain `ReferenceError`. They are not tied to layout: an unlaid-out element's rects stay zero-sized, as
+  `getBoundingClientRect` already reports.
+- `OffscreenCanvas`, wrapping the no-op 2d context `<canvas>` already returns. Graphics widgets composite
+  off-screen with `new OffscreenCanvas(w, h).getContext("2d")`, sometimes from an effect during hydration, so
+  the missing global failed the subtree. `transferToImageBitmap`/`convertToBlob` hand back inert results; this
+  adds no drawing surface that was not already stubbed.
+- `Node.prototype.compareDocumentPosition` and the `DOCUMENT_POSITION_*` constants. Focus and tab-order
+  libraries sort nodes with an unguarded `a.compareDocumentPosition(b)` comparator, typically inside a memo
+  during render, so the missing method threw, failed that subtree, and every effect below it silently never
+  ran.
+- `AbortController` and `AbortSignal` in the base prelude. They were installed only alongside the fetch shim,
+  so under the default render an SDK constructing one during init hit a `ReferenceError`. They are general
+  cancellation primitives with no network behaviour of their own and belong next to `crypto`/`TextEncoder`.
+  Measured against a real browser this recovers an analytics SDK's two globals on one page and a 3D library's
+  on another.
+- An inert `XMLHttpRequest` in the base prelude — present and patchable, but `send()` issues no request and
+  `readyState` never advances. `XMLHttpRequest` was absent by default while the rest of the shim surface is
+  present-but-inert, so an SDK patching `XMLHttpRequest.prototype.open` unguarded at init threw where a
+  no-op would have done. Enabling the fetch shim now overrides the stub with the functional implementation
+  rather than deferring to it, so the network-quiet default is unchanged.
+
+### Fixed
+
+- `in` on a style declaration answers for every CSS property, matching what the property read already claimed.
+  The style proxy had `get` and `set` traps but no `has`, so `"transform" in style` was false even for a
+  property just assigned, while `style.transform` read back its value — the object contradicted itself. An
+  animation library probes `"transform" in style || "WebkitTransform" in style || …` to pick a vendor prefix,
+  found none, and used the resulting null as a property name, throwing on every transform read it made
+  thereafter. The trap answers true for unknown names too, where a browser says false; feature probes ask
+  about real properties, and the universal-`""` get trap already made that trade.
+- `lang` is reflected on `Element` as a string. It read `undefined` where a browser returns the attribute or
+  `""`, and since `lang` is a global attribute this reached any code doing `document.documentElement.lang`
+  followed by a string method — routine in internationalization paths, on essentially every page that sets
+  `<html lang>`. One consent platform's language lookup called `.replace()` on it, threw inside an un-awaited
+  init, and left the whole consent manager parked: no lifecycle event, and every tag gated behind it unfired.
+  With `lang` reflected, that manager's initialization matches a real browser's, down to its computed consent
+  groups.
+- `Element.animate()` returns an Animation carrying the Web Animations `finished` and `ready` promises, plus
+  `commitStyles`/`persist`/`updatePlaybackRate`. The inert Animation covered the synchronous surface only, so
+  sequencing code awaiting `.finished` before committing styles read `undefined.then` and threw. Both promises
+  are already resolved, which is the truthful answer for an element that never animates.
+
 ## [3.4.0] - 2026-07-16
 
 ### Fixed
