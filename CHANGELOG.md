@@ -10,6 +10,22 @@ Package versions are derived from git tags (`v*`) via MinVer.
 
 ## [3.3.3] - 2026-07-16
 
+### Added
+
+- `PerformanceObserver`, `Worker` and `navigator.sendBeacon` on the rendered window. All three are reached
+  while an analytics/tracing SDK installs itself, so a missing one threw a `ReferenceError` *through* that
+  init and the SDK set none of the globals it would have — the page still rendered and nothing surfaced, so
+  the technology simply read as absent. `PerformanceObserver` never fires its callback (a layout-less
+  single-pass render produces no timing entries — the same reason `performance.getEntries()` is empty) but
+  reports the usual `supportedEntryTypes`; `Worker` never runs the worker's script; `sendBeacon` reports
+  success and sends nothing, which is what the default no-fetch posture already promises for a beacon.
+  Measured against a real browser, `PerformanceObserver` alone recovers two technologies on a Next.js page
+  whose tracing SDK carried a syntax highlighter into the same entry.
+  `WebSocket`, `Notification`, `navigator.connection` and `navigator.serviceWorker` were considered and
+  declined in code: `connection`/`serviceWorker` are feature-detected in practice, so a stub only diverts a
+  page onto a branch it had deliberately skipped, and none of the four recovered a global on any sampled
+  target. `Worker` is included on the opposite evidence — it is constructed bare, never guarded.
+
 ### Fixed
 
 - A script's `src` is reflected as a URL attribute again, so `getAttribute("src")` returns the literal string

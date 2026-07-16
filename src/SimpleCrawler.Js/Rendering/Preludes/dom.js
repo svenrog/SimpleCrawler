@@ -2595,7 +2595,22 @@
       },
       clearWatch() {
       }
+    },
+    // The beacon an analytics bundle sends on its way out. Reporting success is the point: this render
+    // installs no fetch/XHR by default precisely so such a bundle runs and sets its globals while its beacon
+    // goes nowhere, and sendBeacon was the one exit that threw instead of quietly no-opping. Returning false
+    // would invite the documented fallback — re-send over XHR — which is the path we are avoiding.
+    sendBeacon() {
+      return true;
     }
+    // declined: connection — and the measurement is the reason, not an oversight. Unlike sendBeacon above,
+    // every observed read is *guarded* (`navigator.connection && …`), so its absence is already a path real
+    // pages take deliberately; supplying a stub instead diverts them onto their adaptive branch on the
+    // strength of a connection we invented, and it recovered no global on any sampled target. A shim whose
+    // only measured effect is to change which branch a page takes is surface this cannot justify.
+    // declined: serviceWorker — same shape. Feature-detected via `"serviceWorker" in navigator`, so absence
+    // is the clean, handled path, and no sampled target read it at all. Revisit if a target is shown losing a
+    // global to either.
   };
 
   // browser/location.ts
@@ -2944,6 +2959,54 @@
     }
   };
 
+  // browser/PerformanceObserver.ts
+  var _supportedEntryTypes = [
+    "element",
+    "event",
+    "first-input",
+    "largest-contentful-paint",
+    "layout-shift",
+    "longtask",
+    "mark",
+    "measure",
+    "navigation",
+    "paint",
+    "resource",
+    "visibility-state"
+  ];
+  var PerformanceObserver = class {
+    constructor(_callback) {
+    }
+    observe() {
+    }
+    disconnect() {
+    }
+    takeRecords() {
+      return [];
+    }
+  };
+  PerformanceObserver.supportedEntryTypes = _supportedEntryTypes;
+
+  // browser/Worker.ts
+  var Worker = class {
+    constructor(_url, _options) {
+      this.onmessage = null;
+      this.onmessageerror = null;
+      this.onerror = null;
+    }
+    postMessage() {
+    }
+    terminate() {
+    }
+    addEventListener() {
+    }
+    removeEventListener() {
+    }
+    dispatchEvent() {
+      return false;
+    }
+  };
+
   // browser/Blob.ts
   var _encoder = new TextEncoder();
   var _decoder = new TextDecoder();
@@ -3217,6 +3280,8 @@
       this.disconnect = () => {
       };
     };
+    global.PerformanceObserver = global.PerformanceObserver || PerformanceObserver;
+    global.Worker = global.Worker || Worker;
     global.structuredClone = global.structuredClone || ((value) => value == null ? value : JSON.parse(JSON.stringify(value)));
     global.Blob = Blob;
     global.DOMException = global.DOMException || DOMException;
