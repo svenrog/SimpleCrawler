@@ -53,6 +53,13 @@ export function installDOM(global: any): void {
     global.document = doc;
     global.window = global;
     global.self = global;
+    // A top-level browsing context with no child frames: window.frames/top/parent are all the window itself
+    // and length is 0. Consent stubs probe for a sibling CMP with a bare `window.frames['__tcfapiLocator']`,
+    // so leaving these out is a TypeError that kills the stub's whole script rather than a missed lookup.
+    global.frames = global;
+    global.top = global;
+    global.parent = global;
+    if (!("length" in global)) global.length = 0;
     global.navigator = navigator;
     global.location = createLocation();
     global.history = createHistory();

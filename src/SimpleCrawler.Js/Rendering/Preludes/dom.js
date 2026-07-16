@@ -2021,6 +2021,31 @@
     }
   };
 
+  // dom/HTMLMetaElement.ts
+  var HTMLMetaElement = class extends HTMLElement {
+    constructor() {
+      super("meta");
+    }
+    get content() {
+      return this.getAttribute("content") || "";
+    }
+    set content(value) {
+      this.setAttribute("content", value == null ? "" : String(value));
+    }
+    get name() {
+      return this.getAttribute("name") || "";
+    }
+    set name(value) {
+      this.setAttribute("name", value == null ? "" : String(value));
+    }
+    get httpEquiv() {
+      return this.getAttribute("http-equiv") || "";
+    }
+    set httpEquiv(value) {
+      this.setAttribute("http-equiv", value == null ? "" : String(value));
+    }
+  };
+
   // dom/reflectedElements.ts
   var reflectedElementFactories = {
     a: () => new HTMLAnchorElement(),
@@ -2033,7 +2058,8 @@
     video: () => new HTMLVideoElement(),
     audio: () => new HTMLAudioElement(),
     dialog: () => new HTMLDialogElement(),
-    canvas: () => new HTMLCanvasElement()
+    canvas: () => new HTMLCanvasElement(),
+    meta: () => new HTMLMetaElement()
   };
 
   // html/entities.ts
@@ -3211,6 +3237,10 @@
     global.document = doc;
     global.window = global;
     global.self = global;
+    global.frames = global;
+    global.top = global;
+    global.parent = global;
+    if (!("length" in global)) global.length = 0;
     global.navigator = navigator;
     global.location = createLocation();
     global.history = createHistory();
