@@ -8,6 +8,19 @@ Package versions are derived from git tags (`v*`) via MinVer.
 
 ## [Unreleased]
 
+## [3.5.1] - 2026-07-18
+
+### Added
+
+- `DOMParser`, with a working `parseFromString`. A bundle that parses a string of markup it fetched or built
+  and then queries the result constructs `new DOMParser().parseFromString(html, "text/html")`; the missing
+  global was a certain `ReferenceError` that failed the script before it could assign whatever it derived from
+  the parse. `text/html` nests the result under `html`/`head`/`body` through the same document parser the shell
+  uses, so `querySelector`/`getElementById` reach the parsed tree; `xml`/`svg` keeps the parsed root element as
+  `documentElement`, since XML has no implied body. It never throws on malformed input, returning a near-empty
+  document the way a browser hands back a `<parsererror>` one. Measured against a real browser this recovers
+  a self-hosted Git forge's version global, read off a document it parses during init.
+
 ## [3.5.0] - 2026-07-16
 
 ### Added
@@ -353,7 +366,8 @@ Public proxy types are removed and renamed (see _Removed_ and _Changed_), a brea
 
 - Initial release.
 
-[Unreleased]: https://github.com/svenrog/SimpleCrawler/compare/v3.5.0...HEAD
+[Unreleased]: https://github.com/svenrog/SimpleCrawler/compare/v3.5.1...HEAD
+[3.5.1]: https://github.com/svenrog/SimpleCrawler/releases/tag/v3.5.1
 [3.5.0]: https://github.com/svenrog/SimpleCrawler/releases/tag/v3.5.0
 [3.4.0]: https://github.com/svenrog/SimpleCrawler/releases/tag/v3.4.0
 [3.3.3]: https://github.com/svenrog/SimpleCrawler/releases/tag/v3.3.3
