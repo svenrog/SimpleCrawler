@@ -353,6 +353,47 @@ public class JsDomRendererEnvironmentTests : JsDomRendererTestBase, IClassFixtur
         Assert.Contains("href=\"/dispatched\"", rendered);
     }
 
+    // DOMParser: bundles that parse a fetched or hand-built markup string and query it construct
+    // `new DOMParser().parseFromString(html, 'text/html')`; the missing global threw ReferenceError before the
+    // bundle assigned the value it derived (a self-hosted Git forge reads its asset-version off a parsed document, so the version
+    // global went unset). The parsed result must be a queryable Document — querySelector/getElementById reach the
+    // parsed tree — and the constructor must not throw on malformed input.
+    [Theory]
+    [InlineData(JsEngine.Jint)]
+    [InlineData(JsEngine.V8)]
+    public async Task JsMode_DOMParser_ParsesHtmlIntoQueryableDocument(JsEngine engine)
+    {
+        if (engine == JsEngine.V8)
+            Assert.SkipUnless(V8Support.IsAvailable, V8Support.UnavailableReason);
+
+        const string html = """
+            <html><body><div id="t"></div>
+            <script>
+            try {
+              var p = new DOMParser();
+              var doc = p.parseFromString('<html><head><meta name="ver" content="1.23.4"></head><body><span id="s">hi</span></body></html>', 'text/html');
+              var meta = doc.querySelector('meta[name="ver"]').getAttribute('content');
+              var byId = doc.getElementById('s').textContent;
+              p.parseFromString('<<<', 'text/html');   // malformed must not throw
+              var ok = (doc instanceof Document) && meta === '1.23.4' && byId === 'hi';
+              var a = document.createElement('a'); a.setAttribute('href', ok ? '/ok' : '/bad');
+              document.getElementById('t').appendChild(a);
+            } catch (err) {
+              var b = document.createElement('a'); b.setAttribute('href', '/err'); document.getElementById('t').appendChild(b);
+            }
+            </script>
+            </body></html>
+            """;
+
+        var renderer = CreateJsRenderer(engine);
+        var result = await renderer.RenderAsync(Encoding.UTF8.GetBytes(html), "http://localhost:5000/", new HttpClient(), CancellationToken.None);
+        var rendered = Encoding.UTF8.GetString(result);
+
+        Assert.DoesNotContain("href=\"/err\"", rendered);
+        Assert.DoesNotContain("href=\"/bad\"", rendered);
+        Assert.Contains("href=\"/ok\"", rendered);
+    }
+
     // MessageChannel: port2.postMessage schedules port1.onmessage as a macrotask on the unified task queue,
     // which the drain pumps — so the anchor lands only after the drain settles.
     [Theory]

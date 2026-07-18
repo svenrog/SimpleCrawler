@@ -3369,6 +3369,25 @@
   DOMException.INVALID_NODE_TYPE_ERR = 24;
   DOMException.DATA_CLONE_ERR = 25;
 
+  // browser/DOMParser.ts
+  var DOMParser = class {
+    parseFromString(input, type) {
+      const mime = String(type ?? "").toLowerCase();
+      const doc2 = new Document();
+      if (mime.indexOf("xml") >= 0 || mime.indexOf("svg") >= 0) {
+        const root = parseFragment(input).find((n) => n.nodeType === 1 /* Element */) || null;
+        if (root) {
+          root.parentNode = doc2;
+          doc2.documentElement = root;
+          doc2.childNodes = [root];
+        }
+        return doc2;
+      }
+      parseHTML(doc2, input);
+      return doc2;
+    }
+  };
+
   // browser/FileList.ts
   var FileList = class {
     constructor() {
@@ -3551,6 +3570,7 @@
     global.structuredClone = global.structuredClone || ((value) => value == null ? value : JSON.parse(JSON.stringify(value)));
     global.Blob = Blob;
     global.DOMException = global.DOMException || DOMException;
+    global.DOMParser = global.DOMParser || DOMParser;
     global.FileList = global.FileList || FileList;
     global.btoa = global.btoa || btoa;
     global.atob = global.atob || atob;
