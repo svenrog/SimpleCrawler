@@ -394,6 +394,47 @@ public class JsDomRendererEnvironmentTests : JsDomRendererTestBase, IClassFixtur
         Assert.Contains("href=\"/ok\"", rendered);
     }
 
+    // XMLSerializer: the inverse of DOMParser, constructed bare during init by the same round-tripping bundles.
+    // A missing global is a ReferenceError that aborts the whole render, not one derived value — so the guard is
+    // that the anchor lands at all. serializeToString must round-trip a live element back to markup (the same
+    // output that backs outerHTML) and must not throw on a non-node input, returning "" instead.
+    [Theory]
+    [InlineData(JsEngine.Jint)]
+    [InlineData(JsEngine.V8)]
+    public async Task JsMode_XMLSerializer_SerializesNodeToMarkup(JsEngine engine)
+    {
+        if (engine == JsEngine.V8)
+            Assert.SkipUnless(V8Support.IsAvailable, V8Support.UnavailableReason);
+
+        const string html = """
+            <html><body><div id="t"></div>
+            <script>
+            try {
+              var s = new XMLSerializer();
+              var el = document.createElement('span');
+              el.setAttribute('data-k', 'v');
+              el.textContent = 'hi';
+              var out = s.serializeToString(el);
+              var empty = s.serializeToString(null);   // non-node must not throw
+              var ok = out.indexOf('data-k="v"') >= 0 && out.indexOf('hi') >= 0 && empty === '';
+              var a = document.createElement('a'); a.setAttribute('href', ok ? '/ok' : '/bad');
+              document.getElementById('t').appendChild(a);
+            } catch (err) {
+              var b = document.createElement('a'); b.setAttribute('href', '/err'); document.getElementById('t').appendChild(b);
+            }
+            </script>
+            </body></html>
+            """;
+
+        var renderer = CreateJsRenderer(engine);
+        var result = await renderer.RenderAsync(Encoding.UTF8.GetBytes(html), "http://localhost:5000/", new HttpClient(), CancellationToken.None);
+        var rendered = Encoding.UTF8.GetString(result);
+
+        Assert.DoesNotContain("href=\"/err\"", rendered);
+        Assert.DoesNotContain("href=\"/bad\"", rendered);
+        Assert.Contains("href=\"/ok\"", rendered);
+    }
+
     // MessageChannel: port2.postMessage schedules port1.onmessage as a macrotask on the unified task queue,
     // which the drain pumps — so the anchor lands only after the drain settles.
     [Theory]

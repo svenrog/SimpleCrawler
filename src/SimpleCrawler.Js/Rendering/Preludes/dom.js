@@ -3388,6 +3388,14 @@
     }
   };
 
+  // browser/XMLSerializer.ts
+  var XMLSerializer = class {
+    serializeToString(node) {
+      if (node == null || typeof node.nodeType !== "number") return "";
+      return serializeNode(node);
+    }
+  };
+
   // browser/FileList.ts
   var FileList = class {
     constructor() {
@@ -3571,6 +3579,7 @@
     global.Blob = Blob;
     global.DOMException = global.DOMException || DOMException;
     global.DOMParser = global.DOMParser || DOMParser;
+    global.XMLSerializer = global.XMLSerializer || XMLSerializer;
     global.FileList = global.FileList || FileList;
     global.btoa = global.btoa || btoa;
     global.atob = global.atob || atob;
