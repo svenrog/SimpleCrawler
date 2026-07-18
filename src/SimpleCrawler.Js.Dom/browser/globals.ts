@@ -16,7 +16,7 @@ import { customElements } from "../dom/customElements";
 import { navigator } from "./navigator";
 import { createLocation } from "./location";
 import { createHistory } from "./history";
-import { installTimerGlobals } from "../scheduler/taskQueue";
+import { installTimerGlobals, enqueue } from "../scheduler/taskQueue";
 import { URL } from "../url/URL";
 import { URLSearchParams } from "../url/URLSearchParams";
 import { Event } from "./Event";
@@ -183,6 +183,24 @@ export function installDOM(global: any): void {
     global.XMLHttpRequest = global.XMLHttpRequest || XMLHttpRequestStub;
     global.MessageChannel = global.MessageChannel || MessageChannel;
     global.MessagePort = global.MessagePort || MessagePort;
+    // window.postMessage is called bare (unguarded) by SDKs handing a MessageChannel port to a peer — a
+    // reCAPTCHA worker handshake does `postMessage(msg, [channel.port2])` during init, so its absence is a
+    // certain ReferenceError, the same case Worker earns its stub on. It also doubles as a zero-delay
+    // scheduler (post to self, act on the message event), so a no-op would silently drop that scheduled work;
+    // instead delivery is deferred through the task queue to both the onmessage handler prop and the
+    // addEventListener('message') listeners (dispatchEvent/fireEvent covers only the latter). No cross-realm
+    // peer exists, so a transferred port is delivered back to this same window — enough for init to survive,
+    // never a live channel. Second arg is the worker-style transfer array or the window-style targetOrigin.
+    global.postMessage = global.postMessage || ((message: any, targetOrigin?: any, transfer?: any) => {
+        const ports = Array.isArray(targetOrigin) ? targetOrigin : Array.isArray(transfer) ? transfer : [];
+        enqueue(() => {
+            const event: any = { type: "message", data: message, origin: "", lastEventId: "", source: global, ports };
+            if (typeof global.onmessage === "function") {
+                try { global.onmessage(event); } catch { /* a message handler must not abort delivery */ }
+            }
+            global.dispatchEvent(event);
+        });
+    });
     global.performance = global.performance || performance;
     global.localStorage = createStorage();
     global.sessionStorage = createStorage();

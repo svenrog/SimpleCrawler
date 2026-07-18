@@ -198,6 +198,45 @@ public class JsDomRendererSdkGlobalsTests : JsDomRendererTestBase, IClassFixture
         Assert.Empty(suppressed.Entries);
     }
 
+    // window.postMessage is called bare by SDKs that hand a MessageChannel port to a peer (a reCAPTCHA worker
+    // handshake does `postMessage(msg, [channel.port2])` during init), so its absence is a ReferenceError that
+    // aborts the chunk. The shim must not throw, must transfer the ports, and must deliver asynchronously to
+    // both the onmessage handler prop and addEventListener('message') listeners (the postMessage-as-scheduler
+    // pattern relies on the delivery actually arriving, not a no-op).
+    [Theory]
+    [InlineData(JsEngine.Jint)]
+    [InlineData(JsEngine.V8)]
+    public async Task JsMode_PostMessage_DeliversAsyncToBothHandlerAndListener(JsEngine engine)
+    {
+        if (engine == JsEngine.V8)
+            Assert.SkipUnless(V8Support.IsAvailable, V8Support.UnavailableReason);
+
+        const string html = """
+            <html><body><div id="t"></div>
+            <script>
+            var t = document.getElementById('t');
+            window.onmessage = function (e) { t.setAttribute('data-h', String(e.data)); };
+            window.addEventListener('message', function (e) { t.setAttribute('data-l', e.data + '-' + e.ports.length); });
+            try {
+              var ch = new MessageChannel();
+              postMessage('PING', [ch.port2]);
+            } catch (err) { t.setAttribute('data-threw', '1'); }
+            </script>
+            </body></html>
+            """;
+
+        var renderer = CreateJsRenderer(engine);
+        var result = await renderer.RenderAsync(Encoding.UTF8.GetBytes(html), "http://localhost:5000/", new HttpClient(), CancellationToken.None);
+        var rendered = Encoding.UTF8.GetString(result);
+
+        // Attribute forms, not bare substrings: the rendered output echoes the <script> source verbatim, so
+        // the string literals inside it ('data-threw', 'data-h') are present regardless of execution — only
+        // the serialized attribute (name="value") proves setAttribute actually ran.
+        Assert.DoesNotContain("data-threw=\"1\"", rendered);
+        Assert.Contains("data-h=\"PING\"", rendered);
+        Assert.Contains("data-l=\"PING-1\"", rendered);
+    }
+
     private sealed class CapturingLogger : ILogger
     {
         public List<(LogLevel Level, string Message)> Entries { get; } = [];

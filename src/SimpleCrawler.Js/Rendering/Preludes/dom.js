@@ -3620,6 +3620,19 @@
     global.XMLHttpRequest = global.XMLHttpRequest || XMLHttpRequestStub;
     global.MessageChannel = global.MessageChannel || MessageChannel;
     global.MessagePort = global.MessagePort || MessagePort;
+    global.postMessage = global.postMessage || ((message, targetOrigin, transfer) => {
+      const ports = Array.isArray(targetOrigin) ? targetOrigin : Array.isArray(transfer) ? transfer : [];
+      enqueue(() => {
+        const event = { type: "message", data: message, origin: "", lastEventId: "", source: global, ports };
+        if (typeof global.onmessage === "function") {
+          try {
+            global.onmessage(event);
+          } catch {
+          }
+        }
+        global.dispatchEvent(event);
+      });
+    });
     global.performance = global.performance || performance;
     global.localStorage = createStorage();
     global.sessionStorage = createStorage();
