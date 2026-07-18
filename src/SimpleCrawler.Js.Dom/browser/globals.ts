@@ -42,6 +42,7 @@ import { Worker } from "./Worker";
 import { Blob } from "./Blob";
 import { DOMException } from "./DOMException";
 import { DOMParser } from "./DOMParser";
+import { XMLSerializer } from "./XMLSerializer";
 import { FileList } from "./FileList";
 import { btoa, atob } from "./base64";
 import { documentRef } from "../dom/documentRef";
@@ -137,6 +138,7 @@ export function installDOM(global: any): void {
     global.Blob = Blob;
     global.DOMException = global.DOMException || DOMException;
     global.DOMParser = global.DOMParser || DOMParser;
+    global.XMLSerializer = global.XMLSerializer || XMLSerializer;
     global.FileList = global.FileList || FileList;
     global.btoa = global.btoa || btoa;
     global.atob = global.atob || atob;
