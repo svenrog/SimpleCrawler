@@ -8,6 +8,31 @@ Package versions are derived from git tags (`v*`) via MinVer.
 
 ## [Unreleased]
 
+## [3.6.0] - 2026-07-28
+
+### Changed
+
+- Raised the `Jint` dependency floor to `4.15.0` (from `4.12.0`); the range stays open across 4.x
+  (`[4.15.0,5)`). `SimpleCrawler.Js.Jint` renders against a pure-JS DOM, so the engine's own conformance
+  is what the render fidelity rests on and there is no reason to keep consumers on an older interpreter.
+  Because the floor is a minimum and not a pin, a consumer holding an earlier 4.x now resolves upward.
+
+## [3.5.2] - 2026-07-18
+
+### Added
+
+- `XMLSerializer`, the inverse of the `DOMParser` added in 3.5.1 and reached by the same round-tripping
+  bundles. Constructed bare during init, so the missing global threw `ReferenceError` and aborted the whole
+  render — every global lost, not one. `serializeToString` delegates to the serializer that already backs
+  `Element.outerHTML`, so the HTML and XML spellings agree, and it never throws (non-node input yields `""`).
+- `window.postMessage`. An SDK handing a `MessageChannel` port to a peer calls it bare during init — a
+  reCAPTCHA worker handshake does `postMessage(msg, [channel.port2])` — so its absence was a `ReferenceError`
+  that aborted the chunk, the same case `Worker` earns its stub on. Delivery is deferred through the task
+  queue to both the `onmessage` handler property and `addEventListener("message")` listeners, so the
+  postMessage-as-zero-delay-scheduler pattern still advances rather than silently dropping work the way a
+  no-op would. There is no cross-realm peer, so a transferred port is delivered back to the same window:
+  enough for init to survive, never a live channel.
+
 ## [3.5.1] - 2026-07-18
 
 ### Added
@@ -366,7 +391,9 @@ Public proxy types are removed and renamed (see _Removed_ and _Changed_), a brea
 
 - Initial release.
 
-[Unreleased]: https://github.com/svenrog/SimpleCrawler/compare/v3.5.1...HEAD
+[Unreleased]: https://github.com/svenrog/SimpleCrawler/compare/v3.6.0...HEAD
+[3.6.0]: https://github.com/svenrog/SimpleCrawler/releases/tag/v3.6.0
+[3.5.2]: https://github.com/svenrog/SimpleCrawler/releases/tag/v3.5.2
 [3.5.1]: https://github.com/svenrog/SimpleCrawler/releases/tag/v3.5.1
 [3.5.0]: https://github.com/svenrog/SimpleCrawler/releases/tag/v3.5.0
 [3.4.0]: https://github.com/svenrog/SimpleCrawler/releases/tag/v3.4.0
