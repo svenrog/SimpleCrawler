@@ -48,7 +48,7 @@ Passed to `AddJintCrawler`/`AddV8Crawler`.
 
 Next.js App Router (React Server Components) sites render on the **V8** engine.
 
-The same sites still fail on **Jint** with "Cannot convert undefined or null to object" from React's Flight deserialization, this is a bug in Jint [#2607](https://github.com/sebastienros/jint/pull/2607), use V8 (the default) for RSC sites while that is fixed.
+**Jint** used to fail on the same sites with "Cannot convert undefined or null to object" from React's Flight deserialization. That was an interpreter bug — an unlabeled `break` escaped a labeled `switch`, so a function fell off its end and returned `undefined` where Flight expected an object ([jint#2607](https://github.com/sebastienros/jint/pull/2607)). It was fixed upstream and shipped in Jint 4.12.0; since SimpleCrawler 3.6.0 this backend requires 4.15.0 or newer, so that failure is gone. RSC sites aren't part of the offline test suite, so V8 (the default) is still the safer choice for them — and the faster one on pages that heavy.
 
 `EnableStreams` delivers a buffered-complete body (the fetch already materialises the whole response), so consumers get spec-compliant reader/transform semantics, not chunks-over-time, and the baseline guard keeps the server markup intact if the
 streaming path would otherwise tear it down. Sites that need real streaming should use the [Playwright](./configuration.md) or [Puppeteer](./configuration.md) headless backends.
