@@ -8,6 +8,21 @@ Package versions are derived from git tags (`v*`) via MinVer.
 
 ## [Unreleased]
 
+## [3.6.2] - 2026-07-29
+
+### Fixed
+
+- `Function.prototype.toString()` on the Jint backend now returns the source of a function an **external**
+  script defined, rather than a `function name() { [native code] }` placeholder. External scripts are parsed
+  outside the engine as cached prepared scripts, and a prepared script does not inherit the engine's
+  `RetainFunctionSourceText` — so an inline script kept its source while every bundle fetched over the wire
+  lost it, which is invisible until a bundle reads its own source. Anything that does breaks quietly:
+  dependency injection that parses a function's argument names, polyfill detection that greps for
+  `[native code]`, a framework inferring a component's name. The case that surfaced it is an anti-bot payload
+  whose self-defence check compares a function against its expected text and, on failing it, calls a function
+  that appends to the array it is iterating — an unbounded loop that took the process to `OutOfMemoryException`
+  with no thrown error and no diagnostic. Rendering the site that carries it now holds steady around 150 MB.
+
 ## [3.6.1] - 2026-07-29
 
 ### Added
@@ -406,7 +421,8 @@ Public proxy types are removed and renamed (see _Removed_ and _Changed_), a brea
 
 - Initial release.
 
-[Unreleased]: https://github.com/svenrog/SimpleCrawler/compare/v3.6.1...HEAD
+[Unreleased]: https://github.com/svenrog/SimpleCrawler/compare/v3.6.2...HEAD
+[3.6.2]: https://github.com/svenrog/SimpleCrawler/releases/tag/v3.6.2
 [3.6.1]: https://github.com/svenrog/SimpleCrawler/releases/tag/v3.6.1
 [3.6.0]: https://github.com/svenrog/SimpleCrawler/releases/tag/v3.6.0
 [3.5.2]: https://github.com/svenrog/SimpleCrawler/releases/tag/v3.5.2
