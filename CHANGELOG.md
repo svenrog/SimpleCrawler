@@ -15,21 +15,18 @@ Package versions are derived from git tags (`v*`) via MinVer.
 - A page whose script recurses without end no longer takes the process down on the Jint backend. Interpreted
   JS runs on the CLR stack, so runaway recursion in page code was a `StackOverflowException` — which .NET
   gives a host no way to catch, so the crawl died mid-run and every page already rendered went with it.
-  Two changes, complements rather than alternatives:
-  - **The engine owns the stack its JavaScript runs on** — a dedicated thread with a 16 MB stack, which every
-    engine call is marshalled onto. This belongs at the engine and not at the top of a render: the renderer is
-    async, so after its first `await` the JS would resume on a thread-pool thread with that thread's ~1 MB.
-    Reserved address space, committed as used. A host function the running script calls back into runs inline
-    rather than queueing behind the thread that would have to drain it.
-  - **A recursion limit** (`LimitRecursion`), which now has room to fire before the stack ends and arrives as
-    a catchable script failure. It is not sufficient alone — Jint counts one function's own repetitions, and
-    live pages recurse in cycles through several functions, reaching the stack's end with no counter near its
-    limit — which is why the stack is the load-bearing half. The limit is presented as the script error it is,
-    so it costs the script that ran away and not the whole render.
+  `MaxExecutionStackCount` makes the engine probe the stack it actually has left, continue on a fresh one
+  while the count is under the limit, and raise a JS `RangeError` at it — the same `Maximum call stack size
+  exceeded` a browser raises, which the page's own `try` can see and which costs the script that ran away
+  rather than the render. The limit is 2000 frames: deeper than page code legitimately nests, and far short of
+  the point where continuing on fresh stacks becomes the slowest thing in the render (at V8's own 13955 the
+  two sites that prompted this took 31 s and 35 s instead of 6 s and 10 s, for identical output).
 
-  `// declined: LimitMemory` — it measures cumulative allocation on the thread that started the script rather
-  than live heap, so a long render trips it on garbage already collected, and it stops checking once an async
-  continuation resumes elsewhere.
+  Two nearby levers are deliberately unused. `// declined: LimitRecursion` counts one function's own
+  repetitions, and live runaways cycle through several functions, reaching the stack's end with no counter
+  near its limit — measured against both sites, it changed nothing. `// declined: LimitMemory` measures
+  cumulative allocation on the thread that started the script rather than live heap, so a long render trips it
+  on garbage already collected, and it stops checking once an async continuation resumes elsewhere.
 
 ## [3.6.2] - 2026-07-29
 
