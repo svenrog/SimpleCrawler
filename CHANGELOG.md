@@ -8,6 +8,19 @@ Package versions are derived from git tags (`v*`) via MinVer.
 
 ## [Unreleased]
 
+## [3.6.4] - 2026-07-29
+
+### Fixed
+
+- A `<script src>` answered with something that does not parse as JavaScript no longer costs the page every
+  script after it on the Jint backend. An external script is parsed outside the engine as a cached prepared
+  script, so a parse failure arrived as a host `ScriptPreparationException` rather than as the JS `SyntaxError`
+  the engine guards an inline script's parse into — and a host exception is not the renderer's per-script
+  failure, so it escaped the isolation around that one script and aborted the render whole. It is now raised as
+  the script error it is, both for scripts and for modules. A misconfigured third-party tag served the site's
+  HTML error page under a 200 is the ordinary way this happens, and the V8 backend already behaved this way,
+  so it was invisible to the engine differential.
+
 ## [3.6.3] - 2026-07-29
 
 ### Fixed

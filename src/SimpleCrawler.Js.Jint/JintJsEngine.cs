@@ -91,6 +91,16 @@ internal sealed class JintJsEngine : IJsEngine, IDisposable
         }
     }
 
+    /// <summary>
+    /// Runs an external script from its cached parsed form.
+    /// </summary>
+    /// <remarks>
+    /// Preparing happens outside the engine, so a source that does not parse arrives as a CLR
+    /// <see cref="ScriptPreparationException"/> rather than as the JS <c>SyntaxError</c> the engine guards an
+    /// inline script's parse into. Unwrapped it is not the renderer's per-script failure and escapes the
+    /// isolation around this call, costing the page every script after it — and a <c>src</c> answered with an
+    /// error page instead of JavaScript is an ordinary thing for a live third-party tag to do.
+    /// </remarks>
     public void ExecuteCached(string cacheKey, string script)
     {
         try
@@ -102,8 +112,13 @@ internal sealed class JintJsEngine : IJsEngine, IDisposable
         {
             throw new JsException(ex.Message, ex.JavaScriptStackTrace, ex);
         }
+        catch (ScriptPreparationException ex)
+        {
+            throw new JsException(ex.Message, ex.InnerException?.Message, ex);
+        }
     }
 
+    /// <inheritdoc cref="ExecuteCached" />
     public void EvaluateModule(string specifier, string source, bool cache)
     {
         try
@@ -117,6 +132,10 @@ internal sealed class JintJsEngine : IJsEngine, IDisposable
         catch (JavaScriptException ex)
         {
             throw new JsException(ex.Message, ex.JavaScriptStackTrace, ex);
+        }
+        catch (ScriptPreparationException ex)
+        {
+            throw new JsException(ex.Message, ex.InnerException?.Message, ex);
         }
     }
 
