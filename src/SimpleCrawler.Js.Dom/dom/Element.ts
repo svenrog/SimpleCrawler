@@ -87,6 +87,9 @@ export class Element extends Node implements Animatable {
     // `.length`/`[i].name`/`[i].value`, and React's singleton-attribute teardown does
     // `for (c = el.attributes; c.length;) el.removeAttributeNode(c[0])` — that loop only terminates if
     // `.length` is read live off the current attribute set, not snapshotted once when `.attributes` is accessed.
+    // A NamedNodeMap also exposes its attributes as named properties, which is how a jQuery-era feature
+    // detection reads one back after setting it (`div.attributes[name].expando`); it dereferences the
+    // result, so an undefined there throws during the library's own init.
     get attributes(): any {
         const el = this;
         return new Proxy({}, {
@@ -94,8 +97,9 @@ export class Element extends Node implements Animatable {
                 if (prop === "length") return el.attrs.size;
                 if (prop === "item") return (i: number) => nthAttrNode(el.attrs, i, el);
                 if (prop === "getNamedItem") return (name: string) => el.getAttributeNode(name);
-                if (typeof prop === "string" && /^\d+$/.test(prop)) return nthAttrNode(el.attrs, Number(prop), el);
-                return undefined;
+                if (typeof prop !== "string") return undefined;
+                if (/^\d+$/.test(prop)) return nthAttrNode(el.attrs, Number(prop), el);
+                return el.attrs.has(prop) ? attrNode(prop, el.attrs.get(prop)!, el) : undefined;
             },
         });
     }

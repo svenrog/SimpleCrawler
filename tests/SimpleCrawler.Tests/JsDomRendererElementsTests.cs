@@ -623,4 +623,36 @@ public class JsDomRendererElementsTests : JsDomRendererTestBase, IClassFixture<J
 
         Assert.Contains("href=\"/webgl-true-2d-true\"", rendered);
     }
+
+    // `element.attributes` is a NamedNodeMap, so an attribute is reachable by name and not only by index.
+    // jQuery 1.9–1.12 read one back that way during its own init (`div.attributes[name].expando`) and
+    // dereferenced the result immediately, so the undefined this returned threw before `window.jQuery` was
+    // ever assigned — losing the library and every plugin loaded over it while the render reported success.
+    [Theory]
+    [InlineData(JsEngine.Jint)]
+    [InlineData(JsEngine.V8)]
+    public async Task JsMode_AttributesAreReachableByName(JsEngine engine)
+    {
+        if (engine == JsEngine.V8)
+            Assert.SkipUnless(V8Support.IsAvailable, V8Support.UnavailableReason);
+
+        const string html = """
+            <html><body><div id="t"></div>
+            <script>
+            var div = document.createElement('div');
+            div.setAttribute('onsubmit', 't');
+            var named = div.attributes['onsubmit'];
+            var a = document.createElement('a');
+            a.setAttribute('href', '/named-' + (named && named.value) + '-expando-' + (named.expando === false) + '-absent-' + (div.attributes['onchange'] === undefined));
+            document.getElementById('t').appendChild(a);
+            </script>
+            </body></html>
+            """;
+
+        var renderer = CreateJsRenderer(engine);
+        var result = await renderer.RenderAsync(Encoding.UTF8.GetBytes(html), "http://localhost:5000/", new HttpClient(), CancellationToken.None);
+        var rendered = Encoding.UTF8.GetString(result);
+
+        Assert.Contains("href=\"/named-t-expando-false-absent-true\"", rendered);
+    }
 }

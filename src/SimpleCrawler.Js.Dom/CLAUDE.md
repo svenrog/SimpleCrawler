@@ -27,5 +27,6 @@ Types that page code extends or `instanceof`-checks must be JS classes here (eng
 ## Debugging a site that renders wrong
 
 - Symptom "error-boundary shell + 0/few anchors" almost always means a shim gap threw inside the bundle, not a rendering bug per se.
+- A library whose own init throws costs every global built on it, plugins included, while the render still reports success. Feature detection dereferences what a DOM read returns without guarding it, so a shim answering `undefined` where a browser answers an object is a throw rather than a `false` — return the object even when the property the caller then reads is one no browser defines.
 - Start with `rendersize` from `tests/SimpleCrawler.ProfileRunner` and read the serialized HTML; log fetches and loaded chunks; then slice the failing minified chunk down to the browser API it touches (V8 names stack frames by chunk URL).
 - Timers matter: delay-aware task-queue rules live in `scheduler/taskQueue.ts` (long `setTimeout`s are dropped, `clearTimeout` is real) — chunk-load "timeout" errors usually trace here, not to networking.
