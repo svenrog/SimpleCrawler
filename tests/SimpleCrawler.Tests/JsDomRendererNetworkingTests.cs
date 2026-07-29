@@ -312,6 +312,47 @@ public class JsDomRendererNetworkingTests : JsDomRendererTestBase, IClassFixture
         Assert.Contains("href=\"/ok\"", rendered);
     }
 
+    // Same reason as the XHR stub, one step further out: a module shim resolving an import map calls fetch bare
+    // during init, so with the shim off its absence was a ReferenceError that took the rest of that script —
+    // and every global it would have registered — with it. The stub rejects the way a browser rejects a
+    // refused request, which is a path the caller already handles, and still issues no request.
+    [Theory]
+    [InlineData(JsEngine.Jint)]
+    [InlineData(JsEngine.V8)]
+    public async Task JsMode_Fetch_IsInertStubWithoutFetchShim(JsEngine engine)
+    {
+        if (engine == JsEngine.V8)
+            Assert.SkipUnless(V8Support.IsAvailable, V8Support.UnavailableReason);
+
+        const string html = """
+            <!doctype html><html><head></head><body>
+            <script>
+            fetch('https://example.test/config.json').then(function () {
+              var r = document.createElement('a'); r.setAttribute('href', '/resolved'); document.body.appendChild(r);
+            }, function (err) {
+              var c = document.createElement('a');
+              c.setAttribute('href', err instanceof TypeError ? '/rejected' : '/err');
+              document.body.appendChild(c);
+            });
+            var l = document.createElement('a'); l.setAttribute('href', '/after'); document.body.appendChild(l);
+            </script>
+            </body></html>
+            """;
+
+        var host = new RequestCountingHandler();
+        using var client = new HttpClient(host);
+        var renderer = CreateJsRenderer(engine, new JsRenderOptions { EnableFetch = false });
+        var result = await renderer.RenderAsync(Encoding.UTF8.GetBytes(html), "http://localhost:5000/", client, CancellationToken.None);
+        var rendered = Encoding.UTF8.GetString(result);
+
+        // The trailing anchor proves the bare call didn't abort the script; the rejection proves the page's own
+        // error path ran instead.
+        Assert.Contains("href=\"/after\"", rendered);
+        Assert.Contains("href=\"/rejected\"", rendered);
+        Assert.DoesNotContain("href=\"/resolved\"", rendered);
+        Assert.Equal(0, host.Requests);
+    }
+
     // EnableStreams installs a WHATWG Streams shim: a standalone ReadableStream can be driven to completion
     // through getReader().read(), with chunks decoded back to text via TextDecoder. Read promises settle on
     // the same drain that runs the rest of the render, so an anchor injected only after the stream ends still
@@ -554,6 +595,23 @@ public class JsDomRendererNetworkingTests : JsDomRendererTestBase, IClassFixture
 
             return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent("<!doctype html><html><body>fallback</body></html>") });
         }
+    }
+
+    /// <summary>404s everything and counts what it was asked for, so "made no request" is asserted rather than assumed.</summary>
+    private sealed class RequestCountingHandler : HttpMessageHandler
+    {
+        private int _requests;
+
+        public int Requests => _requests;
+
+        protected override HttpResponseMessage Send(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            Interlocked.Increment(ref _requests);
+            return new HttpResponseMessage(HttpStatusCode.NotFound);
+        }
+
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+            => Task.FromResult(Send(request, cancellationToken));
     }
 
     private sealed class StreamBodyHandler : HttpMessageHandler

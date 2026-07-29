@@ -20,6 +20,17 @@ Package versions are derived from git tags (`v*`) via MinVer.
   the script error it is, both for scripts and for modules. A misconfigured third-party tag served the site's
   HTML error page under a 200 is the ordinary way this happens, and the V8 backend already behaved this way,
   so it was invisible to the engine differential.
+- Two DOM-prelude gaps that cost a page far more than the API they were missing. Each was named bare during a
+  bundle's init, so the `ReferenceError` escaped to the top of that script and every global it would have gone
+  on to register was lost with it — indistinguishable, from the outside, from a site not carrying the vendor:
+  - **`Storage`** is now a global constructor. The `localStorage`/`sessionStorage` instances were always
+    installed; a bundle that tests storage by identity (`x instanceof Storage`) or patches `Storage.prototype`
+    to observe writes names the type, which was not there.
+  - **`fetch`** is present in the base prelude as an inert stub, rejecting with a `TypeError` the way a browser
+    rejects a request the network refused — a path the caller already handles, unlike an absent global. A
+    module shim resolving an import map calls it during init. `EnableFetch` still governs whether a request is
+    actually made: with the shim on, `installNetwork` replaces the stub with the functional `fetch`, exactly as
+    it already did for the inert `XMLHttpRequest`.
 
 ## [3.6.3] - 2026-07-29
 

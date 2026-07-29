@@ -99,6 +99,40 @@ public class JsDomRendererStorageAndPlatformApiTests : JsDomRendererTestBase, IC
         Assert.Contains("href=\"/sess\"", rendered);
     }
 
+    // Storage is also a global constructor: a bundle that tests storage by identity rather than by presence
+    // (`x instanceof Storage`) or patches Storage.prototype to observe writes names it bare, so its absence was
+    // a ReferenceError during init — and the anchor below, like every global that script would have registered,
+    // was lost with it. The instances were always installed; only the type was missing.
+    [Theory]
+    [InlineData(JsEngine.Jint)]
+    [InlineData(JsEngine.V8)]
+    public async Task JsMode_StorageConstructorIsAGlobal(JsEngine engine)
+    {
+        if (engine == JsEngine.V8)
+            Assert.SkipUnless(V8Support.IsAvailable, V8Support.UnavailableReason);
+
+        const string html = """
+            <html><body><div id="t"></div>
+            <script>
+            var reads = 0;
+            var original = Storage.prototype.getItem;
+            Storage.prototype.getItem = function (key) { reads++; return original.call(this, key); };
+            localStorage.setItem('a', '/typed');
+            var ok = localStorage instanceof Storage && sessionStorage instanceof Storage &&
+                     localStorage.getItem('a') === '/typed' && reads === 1;
+            var a = document.createElement('a'); a.setAttribute('href', ok ? '/typed' : '/fail'); a.textContent = 's';
+            document.getElementById('t').appendChild(a);
+            </script>
+            </body></html>
+            """;
+
+        var renderer = CreateJsRenderer(engine);
+        var result = await renderer.RenderAsync(Encoding.UTF8.GetBytes(html), "http://localhost:5000/", new HttpClient(), CancellationToken.None);
+        var rendered = Encoding.UTF8.GetString(result);
+
+        Assert.Contains("href=\"/typed\"", rendered);
+    }
+
     // performance: now() is a non-negative number and timeOrigin is numeric.
     [Theory]
     [InlineData(JsEngine.Jint)]

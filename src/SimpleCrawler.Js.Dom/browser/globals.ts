@@ -31,8 +31,9 @@ import { AbortController } from "../network/types/AbortController";
 import { AbortSignal } from "../network/types/AbortSignal";
 import { XMLHttpRequestEventTarget } from "../network/XMLHttpRequestEventTarget";
 import { XMLHttpRequestStub } from "../network/XMLHttpRequestStub";
+import { fetchStub } from "../network/fetchStub";
 import { MessageChannel, MessagePort } from "./MessageChannel";
-import { createStorage } from "./Storage";
+import { Storage, createStorage } from "./Storage";
 import { performance } from "./Performance";
 import { installViewport } from "./viewport";
 import { IntersectionObserver } from "./IntersectionObserver";
@@ -181,6 +182,7 @@ export function installDOM(global: any): void {
     // in the functional one when the fetch shim is enabled (both extend the same-bundle event-target base).
     global.XMLHttpRequestEventTarget = global.XMLHttpRequestEventTarget || XMLHttpRequestEventTarget;
     global.XMLHttpRequest = global.XMLHttpRequest || XMLHttpRequestStub;
+    global.fetch = global.fetch || fetchStub;
     global.MessageChannel = global.MessageChannel || MessageChannel;
     global.MessagePort = global.MessagePort || MessagePort;
     // window.postMessage is called bare (unguarded) by SDKs handing a MessageChannel port to a peer — a
@@ -202,6 +204,10 @@ export function installDOM(global: any): void {
         });
     });
     global.performance = global.performance || performance;
+    // The instances were always here; the type was not. A bundle that tests storage by identity rather than by
+    // presence — `x instanceof Storage`, or patching `Storage.prototype` to observe writes — names the
+    // constructor bare, so its absence is a ReferenceError during init.
+    global.Storage = global.Storage || Storage;
     global.localStorage = createStorage();
     global.sessionStorage = createStorage();
     installTimerGlobals(global);
