@@ -8,6 +8,21 @@ Package versions are derived from git tags (`v*`) via MinVer.
 
 ## [Unreleased]
 
+## [3.6.1] - 2026-07-29
+
+### Added
+
+- `navigator.appVersion` and `navigator.plugins` to the DOM prelude. The quirksmode-descended browser sniffer
+  that chat and consent widgets still ship reads
+  `searchVersion(navigator.userAgent) || searchVersion(navigator.appVersion)`, and each arm indexes the string
+  it is handed. The fallback arm always runs against this prelude — `navigator.userAgent` carries no version
+  for the first arm to find — so the missing property was `undefined.indexOf(…)`, a `TypeError` that aborted
+  the entire chunk carrying it and took every global it defines with it. The same init then walks
+  `navigator.plugins` by index, equally unguarded, so shimming only the first moved the throw rather than
+  removing it. `appVersion` repeats `userAgent` (a sniffer matching one and not the other would be reading two
+  different browsers) and `plugins` is empty, which is the truthful answer: this render loads no plugins.
+  Measured against a live site whose chat widget's common chunk aborted on exactly this.
+
 ## [3.6.0] - 2026-07-28
 
 ### Changed
@@ -391,7 +406,8 @@ Public proxy types are removed and renamed (see _Removed_ and _Changed_), a brea
 
 - Initial release.
 
-[Unreleased]: https://github.com/svenrog/SimpleCrawler/compare/v3.6.0...HEAD
+[Unreleased]: https://github.com/svenrog/SimpleCrawler/compare/v3.6.1...HEAD
+[3.6.1]: https://github.com/svenrog/SimpleCrawler/releases/tag/v3.6.1
 [3.6.0]: https://github.com/svenrog/SimpleCrawler/releases/tag/v3.6.0
 [3.5.2]: https://github.com/svenrog/SimpleCrawler/releases/tag/v3.5.2
 [3.5.1]: https://github.com/svenrog/SimpleCrawler/releases/tag/v3.5.1
