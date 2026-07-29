@@ -3062,6 +3062,11 @@
   XMLHttpRequestStub.LOADING = 3;
   XMLHttpRequestStub.DONE = 4;
 
+  // network/fetchStub.ts
+  function fetchStub() {
+    return Promise.reject(new TypeError("Failed to fetch"));
+  }
+
   // browser/MessageChannel.ts
   var MessagePort = class {
     constructor() {
@@ -3628,6 +3633,7 @@
     global.AbortSignal = global.AbortSignal || AbortSignal;
     global.XMLHttpRequestEventTarget = global.XMLHttpRequestEventTarget || XMLHttpRequestEventTarget;
     global.XMLHttpRequest = global.XMLHttpRequest || XMLHttpRequestStub;
+    global.fetch = global.fetch || fetchStub;
     global.MessageChannel = global.MessageChannel || MessageChannel;
     global.MessagePort = global.MessagePort || MessagePort;
     global.postMessage = global.postMessage || ((message, targetOrigin, transfer) => {
@@ -3644,6 +3650,7 @@
       });
     });
     global.performance = global.performance || performance;
+    global.Storage = global.Storage || Storage;
     global.localStorage = createStorage();
     global.sessionStorage = createStorage();
     installTimerGlobals(global);

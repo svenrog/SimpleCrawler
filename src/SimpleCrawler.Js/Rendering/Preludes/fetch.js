@@ -388,7 +388,7 @@
     global.Response = global.Response || Response;
     global.Request = global.Request || Request;
     global.FormData = global.FormData || FormData;
-    global.fetch = global.fetch || fetch;
+    global.fetch = fetch;
     global.XMLHttpRequest = XMLHttpRequest;
     global.XMLHttpRequestEventTarget = XMLHttpRequestEventTarget;
   }

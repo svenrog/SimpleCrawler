@@ -235,7 +235,7 @@ public sealed class JsRenderer
         return pageUri;
     }
 
-    private static async Task<(IReadOnlyList<RegularScript> Regular, IReadOnlyList<ModuleScript> Modules)> CollectScriptsFromJsAsync(IJsEngine engine, Uri baseUri, string pageUrl, HttpClient client, SourceCache sources, CancellationToken cancellationToken)
+    private async Task<(IReadOnlyList<RegularScript> Regular, IReadOnlyList<ModuleScript> Modules)> CollectScriptsFromJsAsync(IJsEngine engine, Uri baseUri, string pageUrl, HttpClient client, SourceCache sources, CancellationToken cancellationToken)
     {
         var regular = new List<RegularScript>();
         var modules = new List<ModuleScript>();
@@ -579,13 +579,38 @@ public sealed class JsRenderer
         return true;
     }
 
-    private static async Task<string?> FetchSourceAsync(HttpClient client, SourceCache sources, Uri absolute, CancellationToken cancellationToken)
+    /// <summary>
+    /// A script's source, or <c>null</c> when it cannot be had — for which the caller fires the node's error
+    /// event, as a browser does. Nothing about one script's source is allowed to reach the top of the render:
+    /// a bundle appends a script from a <c>blob:</c> URL it built (a module shim rewriting imports does), which
+    /// <see cref="HttpClient"/> answers with a raw <see cref="NotSupportedException"/>, and a fetch that faults
+    /// or times out is ordinary against a live page. Same reasoning and same shape as
+    /// <c>HttpModuleFetcher.Download</c>, which the module half of this already had.
+    /// </summary>
+    private async Task<string?> FetchSourceAsync(HttpClient client, SourceCache sources, Uri absolute, CancellationToken cancellationToken)
     {
         if (sources.TryGet(absolute, out var cached))
             return cached;
 
-        using var response = await client.GetAsync(absolute, cancellationToken);
-        var source = response.IsSuccessStatus() ? await response.Content.ReadAsStringAsync(cancellationToken) : null;
-        return sources.Store(absolute, source);
+        if (absolute.Scheme != Uri.UriSchemeHttp && absolute.Scheme != Uri.UriSchemeHttps)
+        {
+            _logger.LogWarning("Script source '{url}' is not fetchable over HTTP.", absolute);
+            return sources.Store(absolute, null);
+        }
+
+        try
+        {
+            using var response = await client.GetAsync(absolute, cancellationToken);
+            var source = response.IsSuccessStatus() ? await response.Content.ReadAsStringAsync(cancellationToken) : null;
+            return sources.Store(absolute, source);
+        }
+        // Guarded on the caller's token rather than on the exception type: a per-request timeout arrives as a
+        // cancellation that is not the crawl stopping, and losing the whole render to one slow chunk is the
+        // failure this exists to prevent.
+        catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
+        {
+            _logger.LogWarning("Script fetch error for '{url}': {message}", absolute, ex.Message);
+            return sources.Store(absolute, null);
+        }
     }
 }

@@ -18,10 +18,11 @@ export function installNetwork(global: any): void {
     global.Response = global.Response || Response;
     global.Request = global.Request || Request;
     global.FormData = global.FormData || FormData;
-    global.fetch = global.fetch || fetch;
-    // Override the base prelude's inert stub: with the fetch shim enabled, XHR issues real requests through
-    // __http. Assigned unconditionally (not `||`) so the functional pair wins over the stub, and paired so
-    // both come from this bundle — Zone.js patches the event-target prototype the functional XHR extends.
+    // Override the base prelude's inert stubs: with the fetch shim enabled, both fetch and XHR issue real
+    // requests through __http. Assigned unconditionally (not `||`) so the functional ones win over the stubs
+    // the base prelude always installs, and the XHR pair together so both come from this bundle — Zone.js
+    // patches the event-target prototype the functional XHR extends.
+    global.fetch = fetch;
     global.XMLHttpRequest = XMLHttpRequest;
     global.XMLHttpRequestEventTarget = XMLHttpRequestEventTarget;
 }

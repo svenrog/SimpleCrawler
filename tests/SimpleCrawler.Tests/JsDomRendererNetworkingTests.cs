@@ -312,6 +312,89 @@ public class JsDomRendererNetworkingTests : JsDomRendererTestBase, IClassFixture
         Assert.Contains("href=\"/ok\"", rendered);
     }
 
+    // Same reason as the XHR stub, one step further out: a module shim resolving an import map calls fetch bare
+    // during init, so with the shim off its absence was a ReferenceError that took the rest of that script —
+    // and every global it would have registered — with it. The stub rejects the way a browser rejects a
+    // refused request, which is a path the caller already handles, and still issues no request.
+    [Theory]
+    [InlineData(JsEngine.Jint)]
+    [InlineData(JsEngine.V8)]
+    public async Task JsMode_Fetch_IsInertStubWithoutFetchShim(JsEngine engine)
+    {
+        if (engine == JsEngine.V8)
+            Assert.SkipUnless(V8Support.IsAvailable, V8Support.UnavailableReason);
+
+        const string html = """
+            <!doctype html><html><head></head><body>
+            <script>
+            fetch('https://example.test/config.json').then(function () {
+              var r = document.createElement('a'); r.setAttribute('href', '/resolved'); document.body.appendChild(r);
+            }, function (err) {
+              var c = document.createElement('a');
+              c.setAttribute('href', err instanceof TypeError ? '/rejected' : '/err');
+              document.body.appendChild(c);
+            });
+            var l = document.createElement('a'); l.setAttribute('href', '/after'); document.body.appendChild(l);
+            </script>
+            </body></html>
+            """;
+
+        var host = new RequestCountingHandler();
+        using var client = new HttpClient(host);
+        var renderer = CreateJsRenderer(engine, new JsRenderOptions { EnableFetch = false });
+        var result = await renderer.RenderAsync(Encoding.UTF8.GetBytes(html), "http://localhost:5000/", client, CancellationToken.None);
+        var rendered = Encoding.UTF8.GetString(result);
+
+        // The trailing anchor proves the bare call didn't abort the script; the rejection proves the page's own
+        // error path ran instead.
+        Assert.Contains("href=\"/after\"", rendered);
+        Assert.Contains("href=\"/rejected\"", rendered);
+        Assert.DoesNotContain("href=\"/resolved\"", rendered);
+        Assert.Equal(0, host.Requests);
+    }
+
+    // A script the host cannot fetch fires the node's error event and costs nothing else. Neither case reaches
+    // HttpClient usefully: a blob: URL a bundle built (a module shim rewriting imports appends one) is answered
+    // with NotSupportedException, a faulting request with HttpRequestException — raw host exceptions that are
+    // not the per-script failure the render isolates, so each aborted the whole page. The module half of the
+    // loader always handled both; the script half did not.
+    [Theory]
+    [InlineData(JsEngine.Jint)]
+    [InlineData(JsEngine.V8)]
+    public async Task JsMode_AnUnfetchableScript_FiresErrorAndKeepsThePage(JsEngine engine)
+    {
+        if (engine == JsEngine.V8)
+            Assert.SkipUnless(V8Support.IsAvailable, V8Support.UnavailableReason);
+
+        const string html = """
+            <!doctype html><html><head></head><body>
+            <script>
+            function mark(href) { var a = document.createElement('a'); a.setAttribute('href', href); document.body.appendChild(a); }
+            var blob = document.createElement('script');
+            blob.src = 'blob:d6f1b0c2-1111-2222-3333-444455556666';
+            blob.onerror = function () { mark('/blob-errored'); };
+            document.head.appendChild(blob);
+            var boom = document.createElement('script');
+            boom.src = '/boom.js';
+            boom.onerror = function () { mark('/fetch-errored'); };
+            document.head.appendChild(boom);
+            </script>
+            <script>mark('/after');</script>
+            </body></html>
+            """;
+
+        using var client = new HttpClient(new FaultingHandler());
+        // A blob: URL carries no host, so the cross-origin rule would drop it before anything fetched it; the
+        // render that exists to observe what a page installs is the one that reaches this.
+        var renderer = CreateJsRenderer(engine, new JsRenderOptions { ExecuteCrossOriginScripts = true });
+        var result = await renderer.RenderAsync(Encoding.UTF8.GetBytes(html), "http://localhost:5000/", client, CancellationToken.None);
+        var rendered = Encoding.UTF8.GetString(result);
+
+        Assert.Contains("href=\"/blob-errored\"", rendered);
+        Assert.Contains("href=\"/fetch-errored\"", rendered);
+        Assert.Contains("href=\"/after\"", rendered);
+    }
+
     // EnableStreams installs a WHATWG Streams shim: a standalone ReadableStream can be driven to completion
     // through getReader().read(), with chunks decoded back to text via TextDecoder. Read promises settle on
     // the same drain that runs the rest of the render, so an anchor injected only after the stream ends still
@@ -554,6 +637,33 @@ public class JsDomRendererNetworkingTests : JsDomRendererTestBase, IClassFixture
 
             return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent("<!doctype html><html><body>fallback</body></html>") });
         }
+    }
+
+    /// <summary>Faults every request, the way a live host that stops answering does.</summary>
+    private sealed class FaultingHandler : HttpMessageHandler
+    {
+        protected override HttpResponseMessage Send(HttpRequestMessage request, CancellationToken cancellationToken)
+            => throw new HttpRequestException("connection refused");
+
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+            => throw new HttpRequestException("connection refused");
+    }
+
+    /// <summary>404s everything and counts what it was asked for, so "made no request" is asserted rather than assumed.</summary>
+    private sealed class RequestCountingHandler : HttpMessageHandler
+    {
+        private int _requests;
+
+        public int Requests => _requests;
+
+        protected override HttpResponseMessage Send(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            Interlocked.Increment(ref _requests);
+            return new HttpResponseMessage(HttpStatusCode.NotFound);
+        }
+
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+            => Task.FromResult(Send(request, cancellationToken));
     }
 
     private sealed class StreamBodyHandler : HttpMessageHandler
