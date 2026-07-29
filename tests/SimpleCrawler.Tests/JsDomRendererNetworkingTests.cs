@@ -353,6 +353,48 @@ public class JsDomRendererNetworkingTests : JsDomRendererTestBase, IClassFixture
         Assert.Equal(0, host.Requests);
     }
 
+    // A script the host cannot fetch fires the node's error event and costs nothing else. Neither case reaches
+    // HttpClient usefully: a blob: URL a bundle built (a module shim rewriting imports appends one) is answered
+    // with NotSupportedException, a faulting request with HttpRequestException — raw host exceptions that are
+    // not the per-script failure the render isolates, so each aborted the whole page. The module half of the
+    // loader always handled both; the script half did not.
+    [Theory]
+    [InlineData(JsEngine.Jint)]
+    [InlineData(JsEngine.V8)]
+    public async Task JsMode_AnUnfetchableScript_FiresErrorAndKeepsThePage(JsEngine engine)
+    {
+        if (engine == JsEngine.V8)
+            Assert.SkipUnless(V8Support.IsAvailable, V8Support.UnavailableReason);
+
+        const string html = """
+            <!doctype html><html><head></head><body>
+            <script>
+            function mark(href) { var a = document.createElement('a'); a.setAttribute('href', href); document.body.appendChild(a); }
+            var blob = document.createElement('script');
+            blob.src = 'blob:d6f1b0c2-1111-2222-3333-444455556666';
+            blob.onerror = function () { mark('/blob-errored'); };
+            document.head.appendChild(blob);
+            var boom = document.createElement('script');
+            boom.src = '/boom.js';
+            boom.onerror = function () { mark('/fetch-errored'); };
+            document.head.appendChild(boom);
+            </script>
+            <script>mark('/after');</script>
+            </body></html>
+            """;
+
+        using var client = new HttpClient(new FaultingHandler());
+        // A blob: URL carries no host, so the cross-origin rule would drop it before anything fetched it; the
+        // render that exists to observe what a page installs is the one that reaches this.
+        var renderer = CreateJsRenderer(engine, new JsRenderOptions { ExecuteCrossOriginScripts = true });
+        var result = await renderer.RenderAsync(Encoding.UTF8.GetBytes(html), "http://localhost:5000/", client, CancellationToken.None);
+        var rendered = Encoding.UTF8.GetString(result);
+
+        Assert.Contains("href=\"/blob-errored\"", rendered);
+        Assert.Contains("href=\"/fetch-errored\"", rendered);
+        Assert.Contains("href=\"/after\"", rendered);
+    }
+
     // EnableStreams installs a WHATWG Streams shim: a standalone ReadableStream can be driven to completion
     // through getReader().read(), with chunks decoded back to text via TextDecoder. Read promises settle on
     // the same drain that runs the rest of the render, so an anchor injected only after the stream ends still
@@ -595,6 +637,16 @@ public class JsDomRendererNetworkingTests : JsDomRendererTestBase, IClassFixture
 
             return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent("<!doctype html><html><body>fallback</body></html>") });
         }
+    }
+
+    /// <summary>Faults every request, the way a live host that stops answering does.</summary>
+    private sealed class FaultingHandler : HttpMessageHandler
+    {
+        protected override HttpResponseMessage Send(HttpRequestMessage request, CancellationToken cancellationToken)
+            => throw new HttpRequestException("connection refused");
+
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+            => throw new HttpRequestException("connection refused");
     }
 
     /// <summary>404s everything and counts what it was asked for, so "made no request" is asserted rather than assumed.</summary>
