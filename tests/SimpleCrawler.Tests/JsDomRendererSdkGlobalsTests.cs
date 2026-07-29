@@ -237,6 +237,42 @@ public class JsDomRendererSdkGlobalsTests : JsDomRendererTestBase, IClassFixture
         Assert.Contains("data-l=\"PING-1\"", rendered);
     }
 
+    // The quirksmode-descended browser sniffer chat and consent widgets still ship: it indexes
+    // navigator.appVersion whenever userAgent yielded no version (always, here) and walks navigator.plugins by
+    // index, both unguarded. A missing one is a TypeError that aborts the chunk carrying it — observed taking
+    // a live chat widget's common chunk with it — so the shim owes those reads an answer.
+    [Theory]
+    [InlineData(JsEngine.Jint)]
+    [InlineData(JsEngine.V8)]
+    public async Task JsMode_NavigatorSniff_AppVersionAndPluginsAreReadable(JsEngine engine)
+    {
+        if (engine == JsEngine.V8)
+            Assert.SkipUnless(V8Support.IsAvailable, V8Support.UnavailableReason);
+
+        const string html = """
+            <html><body><div id="t"></div>
+            <script>
+            var t = document.getElementById('t');
+            function searchVersion(s, key) { var i = s.indexOf(key); if (i !== -1) return parseFloat(s.substring(i + key.length + 1)); }
+            try {
+              var version = searchVersion(navigator.userAgent, 'Chrome') || searchVersion(navigator.appVersion, 'Chrome') || 'other';
+              var names = [];
+              for (var i = 0, n = navigator.plugins.length; i < n; i++) { if (navigator.plugins[i].name) names.push(navigator.plugins[i].name); }
+              t.setAttribute('data-sniff', version + '-' + names.length);
+            } catch (err) { t.setAttribute('data-threw', '1'); }
+            </script>
+            </body></html>
+            """;
+
+        using var client = new HttpClient();
+        var renderer = CreateJsRenderer(engine);
+        var result = await renderer.RenderAsync(Encoding.UTF8.GetBytes(html), "http://localhost:5000/", client, CancellationToken.None);
+        var rendered = Encoding.UTF8.GetString(result);
+
+        Assert.DoesNotContain("data-threw=\"1\"", rendered);
+        Assert.Contains("data-sniff=\"other-0\"", rendered);
+    }
+
     private sealed class CapturingLogger : ILogger
     {
         public List<(LogLevel Level, string Message)> Entries { get; } = [];
