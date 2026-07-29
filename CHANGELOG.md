@@ -8,6 +8,26 @@ Package versions are derived from git tags (`v*`) via MinVer.
 
 ## [Unreleased]
 
+## [3.6.3] - 2026-07-29
+
+### Fixed
+
+- A page whose script recurses without end no longer takes the process down on the Jint backend. Interpreted
+  JS runs on the CLR stack, so runaway recursion in page code was a `StackOverflowException` — which .NET
+  gives a host no way to catch, so the crawl died mid-run and every page already rendered went with it.
+  `MaxExecutionStackCount` makes the engine probe the stack it actually has left, continue on a fresh one
+  while the count is under the limit, and raise a JS `RangeError` at it — the same `Maximum call stack size
+  exceeded` a browser raises, which the page's own `try` can see and which costs the script that ran away
+  rather than the render. The limit is 2000 frames: deeper than page code legitimately nests, and far short of
+  the point where continuing on fresh stacks becomes the slowest thing in the render (at V8's own 13955 the
+  two sites that prompted this took 31 s and 35 s instead of 6 s and 10 s, for identical output).
+
+  Two nearby levers are deliberately unused. `// declined: LimitRecursion` counts one function's own
+  repetitions, and live runaways cycle through several functions, reaching the stack's end with no counter
+  near its limit — measured against both sites, it changed nothing. `// declined: LimitMemory` measures
+  cumulative allocation on the thread that started the script rather than live heap, so a long render trips it
+  on garbage already collected, and it stops checking once an async continuation resumes elsewhere.
+
 ## [3.6.2] - 2026-07-29
 
 ### Fixed
@@ -421,7 +441,8 @@ Public proxy types are removed and renamed (see _Removed_ and _Changed_), a brea
 
 - Initial release.
 
-[Unreleased]: https://github.com/svenrog/SimpleCrawler/compare/v3.6.2...HEAD
+[Unreleased]: https://github.com/svenrog/SimpleCrawler/compare/v3.6.3...HEAD
+[3.6.3]: https://github.com/svenrog/SimpleCrawler/releases/tag/v3.6.3
 [3.6.2]: https://github.com/svenrog/SimpleCrawler/releases/tag/v3.6.2
 [3.6.1]: https://github.com/svenrog/SimpleCrawler/releases/tag/v3.6.1
 [3.6.0]: https://github.com/svenrog/SimpleCrawler/releases/tag/v3.6.0

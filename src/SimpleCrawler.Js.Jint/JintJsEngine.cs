@@ -9,6 +9,26 @@ namespace SimpleCrawler.Js.Jint;
 
 internal sealed class JintJsEngine : IJsEngine, IDisposable
 {
+    /// <summary>
+    /// How deep the call stack may go before the engine stops it, at V8's own limit so a page that recurses
+    /// meets the same ceiling here as in the browser it was written for. Jint interprets JS on the CLR stack,
+    /// so without this runaway recursion in page code is a <see cref="StackOverflowException"/> — which .NET
+    /// does not let a host catch: the process dies mid-crawl, taking every page already rendered with it.
+    /// <para>
+    /// Set, this makes Jint probe the stack it actually has left, continue on a fresh one while the count is
+    /// under the limit, and raise a JS <c>RangeError</c> at it — so the page's own <c>try</c> sees what it
+    /// would see in a browser. Sizing a thread's stack instead only moves the cliff, and moves it by however
+    /// much stack the platform honours.
+    /// </para>
+    /// <c>// declined: LimitRecursion</c> — it counts one function's own repetitions, and live runaways cycle
+    /// through several functions, reaching the stack's end with no counter near its limit. Measured against
+    /// the two sites that crashed: it changed nothing.
+    /// <c>// declined: LimitMemory</c> — it measures <em>cumulative</em> allocation on the thread that started
+    /// the script, not live heap, so a long render trips it on garbage it has already collected, and it
+    /// silently stops checking once an async continuation resumes elsewhere.
+    /// </summary>
+    private const int _maxExecutionStackCount = 2000;
+
     private readonly Engine _engine;
     private readonly JintModuleCache _moduleCache;
     private readonly JintScriptCache _scriptCache;
@@ -28,6 +48,8 @@ internal sealed class JintJsEngine : IJsEngine, IDisposable
             options
                 .EnableModules(loader)
                 .CatchClrExceptions();
+
+            options.Constraints.MaxExecutionStackCount = _maxExecutionStackCount;
 
             // Preserves correctness after 4.11 change https://github.com/sebastienros/jint/issues/2560
             // https://github.com/sebastienros/jint/pull/2562
