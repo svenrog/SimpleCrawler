@@ -105,7 +105,7 @@ public sealed class JsRenderer
         var pageUri = new Uri(pageUrl);
         var html = _utf8NoBom.GetString(shell);
 
-        var fetcher = new HttpModuleFetcher(client, _sources, cancellationToken);
+        var fetcher = new HttpModuleFetcher(client, _sources, _logger, cancellationToken);
 
         var createTime = RenderProfiler.Start();
         var baseEngine = _engineFactory.Create(fetcher, pageUri);
@@ -601,8 +601,13 @@ public sealed class JsRenderer
         try
         {
             using var response = await client.GetAsync(absolute, cancellationToken);
-            var source = response.IsSuccessStatus() ? await response.Content.ReadAsStringAsync(cancellationToken) : null;
-            return sources.Store(absolute, source);
+            if (!response.IsSuccessStatus())
+            {
+                _logger.LogWarning("Script source '{url}' was refused with status {status}.", absolute, (int)response.StatusCode);
+                return sources.Store(absolute, null);
+            }
+
+            return sources.Store(absolute, await response.Content.ReadAsStringAsync(cancellationToken));
         }
         // Guarded on the caller's token rather than on the exception type: a per-request timeout arrives as a
         // cancellation that is not the crawl stopping, and losing the whole render to one slow chunk is the
