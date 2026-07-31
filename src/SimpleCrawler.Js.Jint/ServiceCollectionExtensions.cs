@@ -17,7 +17,7 @@ public static class ServiceCollectionExtensions
     /// </summary>
     public static IServiceCollection AddJintJsEngine(this IServiceCollection services, JintEngineOptions? engineOptions = null)
     {
-        services.AddSingleton(Options.Create(engineOptions ?? new JintEngineOptions()));
+        services.AddSeededOptions(engineOptions);
         services.AddSingleton<IJsEngineFactory, JintJsEngineFactory>();
 
         return services;
@@ -36,7 +36,7 @@ public static class ServiceCollectionExtensions
     public static IServiceCollection AddJintCrawler(this IServiceCollection services, CrawlerOptions options, JsRenderOptions renderOptions, JintEngineOptions engineOptions, Action<IServiceProvider, HttpClient>? config = null)
     {
         services.AddJsCore(options, renderOptions, config);
-        services.AddSingleton(Options.Create(engineOptions));
+        services.AddSeededOptions(engineOptions);
         services.AddKeyedSingleton<IJsEngineFactory, JintJsEngineFactory>(DefaultJintCrawler.EngineKey);
         services.AddCrawlerHttpClient<DefaultJintCrawler>(config);
         services.AddTransient<ICrawler>(provider => provider.GetRequiredService<DefaultJintCrawler>());

@@ -24,6 +24,30 @@ public static class ServiceCollectionExtensions
         return services;
     }
 
+    /// <summary>
+    /// Registers <typeparamref name="TOptions"/> so a caller's own <c>Configure</c> composes with the
+    /// <paramref name="seed"/> an <c>AddXyzEngine</c>/<c>AddXyzCrawler</c> overload was handed, or with the
+    /// defaults when it was handed none. See <see cref="SeededOptionsFactory{TOptions}"/> for why the seed
+    /// is not registered as the options value.
+    /// </summary>
+    public static IServiceCollection AddSeededOptions<TOptions>(this IServiceCollection services, TOptions? seed)
+        where TOptions : class
+    {
+        services.AddOptions<TOptions>();
+        if (seed is null)
+        {
+            return services;
+        }
+
+        services.AddSingleton<IOptionsFactory<TOptions>>(provider => new SeededOptionsFactory<TOptions>(
+            seed,
+            provider.GetServices<IConfigureOptions<TOptions>>(),
+            provider.GetServices<IPostConfigureOptions<TOptions>>(),
+            provider.GetServices<IValidateOptions<TOptions>>()));
+
+        return services;
+    }
+
     public static IHttpClientBuilder AddCrawlerHttpClient<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] TClient>(this IServiceCollection services, Action<IServiceProvider, HttpClient>? config)
         where TClient : class
     {
