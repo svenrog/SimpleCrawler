@@ -9,6 +9,12 @@ using System.Globalization;
 
 namespace SimpleCrawler.Js.V8;
 
+/// <summary>
+/// The native engine. V8 exposes no per-statement constraint hook, so the two limits that stop a page —
+/// <see cref="V8EngineOptions.PageTimeout"/> and the caller's token — are both enforced from another thread
+/// through <c>ScriptEngine.Interrupt</c>, and both arrive as the one <see cref="ScriptInterruptedException"/>
+/// that carries no reason for which it was.
+/// </summary>
 internal sealed class V8JsEngine : IJsEngine, IDisposable
 {
     private const int _moduleEvaluationTimeoutMs = 30000;
@@ -37,8 +43,17 @@ internal sealed class V8JsEngine : IJsEngine, IDisposable
     private readonly V8ScriptEngine _engine;
     private readonly V8ModuleLoader _loader;
     private readonly V8StackTraceFormatter _stackTraceFormatter = new(_stackTraceContextRadius);
+    private readonly TimeSpan _pageTimeout;
+    private readonly CancellationToken _cancellationToken;
+    private readonly CancellationTokenSource? _budgetSource;
+    private readonly CancellationTokenRegistration _budgetRegistration;
 
-    public V8JsEngine(IModuleFetcher fetcher, Uri baseUri, V8RuntimePool pool)
+    public V8JsEngine(
+        IModuleFetcher fetcher,
+        Uri baseUri,
+        V8RuntimePool pool,
+        V8EngineOptions engineOptions,
+        CancellationToken cancellationToken)
     {
         // A fresh context on a pooled isolate, not a fresh isolate: the context's globals are isolated
         // (so per-page state is clean) while the isolate's heap and compilation cache carry over.
@@ -54,7 +69,32 @@ internal sealed class V8JsEngine : IJsEngine, IDisposable
         // resolve an import() to a file:// URI, and this keeps that path from ever reaching the disk.
         _engine.DocumentSettings.AccessFlags = DocumentAccessFlags.EnableWebLoading;
         _engine.DocumentSettings.Loader = _loader;
+
+        _pageTimeout = engineOptions.PageTimeout;
+        _cancellationToken = cancellationToken;
+
+        // V8 runs the page on the calling thread and exposes no per-statement hook, so a limit can only reach
+        // it from another thread: one source trips on either and Interrupt stops whatever is executing. That
+        // is also why both arrive as the same exception, and why Stopped has to work out which fired.
+        if (_pageTimeout > TimeSpan.Zero || cancellationToken.CanBeCanceled)
+        {
+            _budgetSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            if (_pageTimeout > TimeSpan.Zero)
+                _budgetSource.CancelAfter(_pageTimeout);
+
+            _budgetRegistration = _budgetSource.Token.Register(
+                static state => ((V8ScriptEngine)state!).Interrupt(), _engine);
+        }
     }
+
+    /// <summary>
+    /// Which framework exception a <see cref="ScriptInterruptedException"/> stands for. The interrupt carries
+    /// no reason, so the caller's own token is what tells a cancellation from a spent ceiling.
+    /// </summary>
+    private Exception Stopped(ScriptInterruptedException inner) => _cancellationToken.IsCancellationRequested
+        ? new OperationCanceledException("Script execution was canceled.", inner, _cancellationToken)
+        : new TimeoutException(
+            $"Script execution exceeded the {_pageTimeout.TotalSeconds:0.###}s page timeout.", inner);
 
     /// <summary>
     /// Every V8 page runs on a fresh context (isolated globals) even though the isolate is pooled, so the DOM
@@ -81,6 +121,12 @@ internal sealed class V8JsEngine : IJsEngine, IDisposable
         try
         {
             _engine.Execute(new DocumentInfo(documentName), script);
+        }
+        // Ahead of ScriptEngineException, which it derives from: caught there it would be wrapped as a
+        // JsException and read as one script's own failure, leaving the budget to stop nothing.
+        catch (ScriptInterruptedException ex)
+        {
+            throw Stopped(ex);
         }
         catch (ScriptEngineException ex)
         {
@@ -114,6 +160,14 @@ internal sealed class V8JsEngine : IJsEngine, IDisposable
             var task = (Task<object>)JavaScriptExtensions.ToTask(promise);
             task.Wait(_moduleEvaluationTimeoutMs);
         }
+        catch (ScriptInterruptedException ex)
+        {
+            throw Stopped(ex);
+        }
+        catch (AggregateException ex) when (ex.InnerException is ScriptInterruptedException inner)
+        {
+            throw Stopped(inner);
+        }
         catch (ScriptEngineException ex)
         {
             throw new JsException(ex.Message, _stackTraceFormatter.Format(ex.Message, ex.ErrorDetails), ex);
@@ -126,7 +180,16 @@ internal sealed class V8JsEngine : IJsEngine, IDisposable
 
     public T Evaluate<T>(string expression)
     {
-        var value = _engine.Evaluate(expression);
+        object? value;
+        try
+        {
+            value = _engine.Evaluate(expression);
+        }
+        catch (ScriptInterruptedException ex)
+        {
+            throw Stopped(ex);
+        }
+
         if (value is T typed)
             return typed;
 
@@ -135,16 +198,32 @@ internal sealed class V8JsEngine : IJsEngine, IDisposable
 
     public void CallGlobal(string name, params object?[] args)
     {
-        _engine.Invoke(name, args!);
+        try
+        {
+            _engine.Invoke(name, args!);
+        }
+        catch (ScriptInterruptedException ex)
+        {
+            throw Stopped(ex);
+        }
     }
 
     public void RunMicrotasks()
     {
-        _engine.Evaluate("0");
+        try
+        {
+            _engine.Evaluate("0");
+        }
+        catch (ScriptInterruptedException ex)
+        {
+            throw Stopped(ex);
+        }
     }
 
     public void Dispose()
     {
+        _budgetRegistration.Dispose();
+        _budgetSource?.Dispose();
         _engine.Dispose();
         _pool.Return(_lease);
     }

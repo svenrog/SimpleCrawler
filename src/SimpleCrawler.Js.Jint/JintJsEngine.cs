@@ -7,6 +7,12 @@ using System.Globalization;
 
 namespace SimpleCrawler.Js.Jint;
 
+/// <summary>
+/// The managed engine. Jint checks its constraints between statements, so both of the limits that stop a
+/// page are native here and it tells them apart itself:
+/// <see cref="JintEngineOptions.ScriptTimeout"/> raises <see cref="TimeoutException"/>, the caller's token
+/// raises <c>ExecutionCanceledException</c>.
+/// </summary>
 internal sealed class JintJsEngine : IJsEngine, IDisposable
 {
     /// <summary>
@@ -32,11 +38,19 @@ internal sealed class JintJsEngine : IJsEngine, IDisposable
     private readonly Engine _engine;
     private readonly JintModuleCache _moduleCache;
     private readonly JintScriptCache _scriptCache;
+    private readonly CancellationToken _cancellationToken;
 
-    public JintJsEngine(JintModuleCache moduleCache, JintScriptCache scriptCache, IModuleFetcher fetcher, Uri baseUri)
+    public JintJsEngine(
+        JintModuleCache moduleCache,
+        JintScriptCache scriptCache,
+        IModuleFetcher fetcher,
+        Uri baseUri,
+        JintEngineOptions engineOptions,
+        CancellationToken cancellationToken)
     {
         _moduleCache = moduleCache;
         _scriptCache = scriptCache;
+        _cancellationToken = cancellationToken;
 
         var loader = new JintModuleLoader(moduleCache, fetcher, baseUri);
         _engine = new Engine(options =>
@@ -51,10 +65,53 @@ internal sealed class JintJsEngine : IJsEngine, IDisposable
 
             options.Constraints.MaxExecutionStackCount = _maxExecutionStackCount;
 
+            // Both are checked between statements, which is the only place synchronous page JS can be
+            // interrupted, and both are needed beside the depth guard above: it bounds recursion, not time.
+            if (engineOptions.ScriptTimeout > TimeSpan.Zero)
+                options.TimeoutInterval(engineOptions.ScriptTimeout);
+
+            if (cancellationToken.CanBeCanceled)
+                options.CancellationToken(cancellationToken);
+
             // Preserves correctness after 4.11 change https://github.com/sebastienros/jint/issues/2560
             // https://github.com/sebastienros/jint/pull/2562
             options.RetainFunctionSourceText = true;
         });
+    }
+
+    /// <summary>
+    /// Runs <paramref name="execute"/>, restating a cancelled execution as <see cref="OperationCanceledException"/>.
+    /// The timeout needs no such translation — Jint already raises <see cref="TimeoutException"/>.
+    /// <para>
+    /// <see cref="ExecutionCanceledException"/> derives from <c>JintException</c>, not from
+    /// <see cref="OperationCanceledException"/>, so a caller's blanket "any exception means this render
+    /// failed" handler swallows it and the operation carries on as though only the page had gone wrong —
+    /// leaving the cancellation to reach nothing.
+    /// </para>
+    /// </summary>
+    private void Bounded(Action execute)
+    {
+        try
+        {
+            execute();
+        }
+        catch (ExecutionCanceledException ex)
+        {
+            throw new OperationCanceledException("Script execution was canceled.", ex, _cancellationToken);
+        }
+    }
+
+    /// <inheritdoc cref="Bounded(Action)" />
+    private T Bounded<T>(Func<T> execute)
+    {
+        try
+        {
+            return execute();
+        }
+        catch (ExecutionCanceledException ex)
+        {
+            throw new OperationCanceledException("Script execution was canceled.", ex, _cancellationToken);
+        }
     }
 
     /// <summary>
@@ -79,7 +136,7 @@ internal sealed class JintJsEngine : IJsEngine, IDisposable
         _engine.SetValue(name, (Func<object?, object?, object?, object?, object?>)((a, b, c, d) => function(a, b, c, d)));
     }
 
-    public void Execute(string script)
+    public void Execute(string script) => Bounded(() =>
     {
         try
         {
@@ -89,7 +146,7 @@ internal sealed class JintJsEngine : IJsEngine, IDisposable
         {
             throw new JsException(ex.Message, ex.JavaScriptStackTrace, ex);
         }
-    }
+    });
 
     /// <summary>
     /// Runs an external script from its cached parsed form.
@@ -101,7 +158,7 @@ internal sealed class JintJsEngine : IJsEngine, IDisposable
     /// isolation around this call, costing the page every script after it — and a <c>src</c> answered with an
     /// error page instead of JavaScript is an ordinary thing for a live third-party tag to do.
     /// </remarks>
-    public void ExecuteCached(string cacheKey, string script)
+    public void ExecuteCached(string cacheKey, string script) => Bounded(() =>
     {
         try
         {
@@ -116,10 +173,10 @@ internal sealed class JintJsEngine : IJsEngine, IDisposable
         {
             throw new JsException(ex.Message, ex.InnerException?.Message, ex);
         }
-    }
+    });
 
     /// <inheritdoc cref="ExecuteCached" />
-    public void EvaluateModule(string specifier, string source, bool cache)
+    public void EvaluateModule(string specifier, string source, bool cache) => Bounded(() =>
     {
         try
         {
@@ -137,26 +194,20 @@ internal sealed class JintJsEngine : IJsEngine, IDisposable
         {
             throw new JsException(ex.Message, ex.InnerException?.Message, ex);
         }
-    }
+    });
 
-    public T Evaluate<T>(string expression)
+    public T Evaluate<T>(string expression) => Bounded(() =>
     {
         var value = _engine.Evaluate(expression).ToObject();
         if (value is T typed)
             return typed;
 
         return (T)Convert.ChangeType(value!, typeof(T), CultureInfo.InvariantCulture);
-    }
+    });
 
-    public void CallGlobal(string name, params object?[] args)
-    {
-        _engine.Invoke(name, args!);
-    }
+    public void CallGlobal(string name, params object?[] args) => Bounded(() => { _engine.Invoke(name, args!); });
 
-    public void RunMicrotasks()
-    {
-        _engine.Evaluate("0");
-    }
+    public void RunMicrotasks() => Bounded(() => { _engine.Evaluate("0"); });
 
     public void Dispose()
     {

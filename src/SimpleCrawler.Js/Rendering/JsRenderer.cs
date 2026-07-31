@@ -108,7 +108,7 @@ public sealed class JsRenderer
         var fetcher = new HttpModuleFetcher(client, _sources, _logger, cancellationToken);
 
         var createTime = RenderProfiler.Start();
-        var baseEngine = _engineFactory.Create(fetcher, pageUri);
+        var baseEngine = _engineFactory.Create(fetcher, pageUri, cancellationToken);
         using var disposableEngine = baseEngine as IDisposable;
 
         RenderProfiler.Stop("phase.engineCreate", createTime);
