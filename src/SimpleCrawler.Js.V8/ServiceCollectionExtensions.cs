@@ -21,7 +21,7 @@ public static class ServiceCollectionExtensions
     /// </summary>
     public static IServiceCollection AddV8JsEngine(this IServiceCollection services, V8EngineOptions? engineOptions = null)
     {
-        services.AddSingleton(Options.Create(engineOptions ?? new V8EngineOptions()));
+        services.AddSeededOptions(engineOptions);
         services.AddSingleton<IJsEngineFactory, V8JsEngineFactory>();
 
         return services;
@@ -40,11 +40,12 @@ public static class ServiceCollectionExtensions
     public static IServiceCollection AddV8Crawler(this IServiceCollection services, CrawlerOptions options, JsRenderOptions renderOptions, V8EngineOptions engineOptions, Action<IServiceProvider, HttpClient>? config = null)
     {
         services.AddJsCore(options, renderOptions, config);
-        services.AddSingleton(Options.Create(engineOptions));
+        services.AddSeededOptions(engineOptions);
         services.AddKeyedSingleton<IJsEngineFactory, V8JsEngineFactory>(DefaultV8Crawler.EngineKey);
         services.AddCrawlerHttpClient<DefaultV8Crawler>(config);
         services.AddTransient<ICrawler>(provider => provider.GetRequiredService<DefaultV8Crawler>());
 
         return services;
     }
+
 }
