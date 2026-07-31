@@ -8,6 +8,48 @@ Package versions are derived from git tags (`v*`) via MinVer.
 
 ## [Unreleased]
 
+## [4.0.0] - 2026-07-31
+
+### Added
+
+- Every JS engine now carries a wall-clock ceiling on how long page scripts may run, on the engine's own
+  options and named for what that engine can measure it over: `JintEngineOptions.ScriptTimeout` bounds each
+  execution call, since Jint checks its constraints between statements and restarts the timer whenever the
+  engine is re-entered; `V8EngineOptions.PageTimeout` bounds the page, since V8 exposes no such hook and is
+  interrupted from another thread. Both default to 30 seconds and raise `TimeoutException`; `TimeSpan.Zero`
+  removes the ceiling. One shared setting would have had to be read as whichever the registered engine
+  happened to mean, so there are two names rather than one.
+- `SeededOptionsFactory<TOptions>` and `AddSeededOptions<TOptions>`, which is how an `AddXyzJsEngine(options)`
+  overload now registers the instance it was handed.
+
+### Changed
+
+- **Breaking:** `IJsEngineFactory.Create` takes the caller's `CancellationToken`. Page scripts run
+  synchronously on the calling thread, so a token observed only at the renderer's `await` points reaches a
+  running page never — an engine has to be handed it and stop itself. Breaking for custom `IJsEngineFactory`
+  implementers; a consumer that only resolves a factory and passes it to `JsRenderer` is unaffected.
+- `AddJintJsEngine` takes an optional `JintEngineOptions`, matching `AddV8JsEngine`. Source-compatible; a
+  caller compiled against 3.x needs a rebuild.
+- A cancelled render is reported as `OperationCanceledException` by every engine rather than in that engine's
+  own vocabulary. Jint's `ExecutionCanceledException` derives from its own base and V8's
+  `ScriptInterruptedException` from `ScriptEngineException`, so either escaping untranslated is swallowed by
+  a caller's "any exception means this render failed" handler — leaving the run to carry on with the
+  cancellation having reached nothing.
+
+### Fixed
+
+- A page that never returns no longer runs until the process does. A live page hit two gaps at once: a
+  function iterating with `for-of` and calling itself, adding about seven frames a minute while doing
+  exponentially more work per level. It pegged a core indefinitely at a depth `MaxExecutionStackCount` would
+  have taken hours to reach — that guard bounds recursion, not time — and nothing could ask it to stop, since
+  no cancellation reached the engine. Either limit now ends it.
+- An options instance passed to `AddJintJsEngine`/`AddV8JsEngine`/`AddV8Crawler` no longer blocks the caller's
+  own `services.Configure<T>(…)`. It was registered as a closed `IOptions<T>`, which wins over the open
+  generic, so a later `Configure` bound to nothing: the settings never arrived, the defaults stayed, and
+  nothing said so. The instance now seeds `OptionsFactory<T>.CreateInstance`, so every registered `Configure`
+  runs over it — a setting made that way wins, and one the caller never touched keeps the value it was given.
+  On 3.x this silently affected `MaxHeapSizeMb`, `MaxUsesPerRuntime` and `HeapSampleInterval`.
+
 ## [3.6.4] - 2026-07-29
 
 ### Fixed
@@ -471,7 +513,9 @@ Public proxy types are removed and renamed (see _Removed_ and _Changed_), a brea
 
 - Initial release.
 
-[Unreleased]: https://github.com/svenrog/SimpleCrawler/compare/v3.6.3...HEAD
+[Unreleased]: https://github.com/svenrog/SimpleCrawler/compare/v4.0.0...HEAD
+[4.0.0]: https://github.com/svenrog/SimpleCrawler/releases/tag/v4.0.0
+[3.6.4]: https://github.com/svenrog/SimpleCrawler/releases/tag/v3.6.4
 [3.6.3]: https://github.com/svenrog/SimpleCrawler/releases/tag/v3.6.3
 [3.6.2]: https://github.com/svenrog/SimpleCrawler/releases/tag/v3.6.2
 [3.6.1]: https://github.com/svenrog/SimpleCrawler/releases/tag/v3.6.1
