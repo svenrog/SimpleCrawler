@@ -38,15 +38,15 @@ function collectScripts(): ScriptDescriptor[] {
         for (const c of n.childNodes) {
             if (c.nodeType !== NodeType.Element) continue;
             if (c.localName === "script") {
-                const type = c.getAttribute("type") || "";
+                const type = c.getAttributeInternal("type") || "";
                 if (type && type !== "text/javascript" && type !== "module" && type !== "application/javascript") {
                     walk(c);
                     continue;
                 }
                 out.push({
                     module: type === "module",
-                    external: !!c.getAttribute("src"),
-                    src: c.getAttribute("src") || "",
+                    external: !!c.getAttributeInternal("src"),
+                    src: c.getAttributeInternal("src") || "",
                     text: c.textContent,
                 });
             }
@@ -68,7 +68,7 @@ function getBaseHref(): string {
         for (const c of n.childNodes) {
             if (c.nodeType !== NodeType.Element) continue;
             if (c.localName === "base") {
-                const href = c.getAttribute("href");
+                const href = c.getAttributeInternal("href");
                 if (href) { found = href; return true; }
             }
             if (walk(c)) return true;
@@ -100,12 +100,12 @@ function collectLinks(): {
             if (c.nodeType !== NodeType.Element) continue;
             const tag = c.localName;
             if (tag === "a") {
-                anchors.push(c.getAttribute("href"));
+                anchors.push(c.getAttributeInternal("href"));
             } else if (canonical == null && tag === "link") {
-                const rel = (c.getAttribute("rel") || "").toLowerCase().split(/\s+/);
-                if (rel.indexOf("canonical") >= 0) canonical = c.getAttribute("href");
+                const rel = (c.getAttributeInternal("rel") || "").toLowerCase().split(/\s+/);
+                if (rel.indexOf("canonical") >= 0) canonical = c.getAttributeInternal("href");
             } else if (robots == null && tag === "meta") {
-                if ((c.getAttribute("name") || "").toLowerCase() === "robots") robots = c.getAttribute("content");
+                if ((c.getAttributeInternal("name") || "").toLowerCase() === "robots") robots = c.getAttributeInternal("content");
             }
             walk(c);
         }

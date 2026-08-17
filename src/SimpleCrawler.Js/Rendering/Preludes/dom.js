@@ -221,7 +221,7 @@
         if (a.nodeName !== b.nodeName || a.namespaceURI !== b.namespaceURI) return false;
         const names = a.getAttributeNames();
         if (names.length !== b.getAttributeNames().length) return false;
-        for (const name of names) if (a.getAttribute(name) !== b.getAttribute(name)) return false;
+        for (const name of names) if (a.getAttributeInternal(name) !== b.getAttributeInternal(name)) return false;
       } else if (this.nodeType === 3 /* Text */ || this.nodeType === 8 /* Comment */) {
         if (a.nodeValue !== b.nodeValue) return false;
       }
@@ -427,7 +427,7 @@
       const c = tok[0];
       if (tok === "*") continue;
       if (c === "#") {
-        if (el.getAttribute("id") !== tok.slice(1)) return false;
+        if (el.getAttributeInternal("id") !== tok.slice(1)) return false;
       } else if (c === ".") {
         if (!hasClass(el, tok.slice(1))) return false;
       } else if (c === "[") {
@@ -439,7 +439,7 @@
     return matched > 0;
   }
   function hasClass(el, name) {
-    const cls = el.getAttribute("class");
+    const cls = el.getAttributeInternal("class");
     if (!cls) return false;
     return cls.split(/\s+/).indexOf(name) >= 0;
   }
@@ -451,7 +451,7 @@
     const op = m[2];
     if (!op) return true;
     const expected = m[3] ?? "";
-    const actual = el.getAttribute(name) ?? "";
+    const actual = el.getAttributeInternal(name) ?? "";
     switch (op) {
       case "=":
         return actual === expected;
@@ -510,7 +510,7 @@
     const tag = el.localName;
     let s = "<" + tag;
     for (const k of el.getAttributeNames()) {
-      s += " " + k + '="' + escapeAttr(el.getAttribute(k)) + '"';
+      s += " " + k + '="' + escapeAttr(el.getAttributeInternal(k)) + '"';
     }
     if (!el.hasAttribute("style")) {
       const css = el.style?.cssText;
@@ -574,7 +574,7 @@
   function registerResource(node) {
     const tag = node.localName;
     if (tag !== "script" && tag !== "link") return;
-    if (tag === "script" && !node.getAttribute("src")) return;
+    if (tag === "script" && !node.getAttributeInternal("src")) return;
     if (_seen.has(node)) return;
     _seen.add(node);
     const id = ++_counter;
@@ -587,8 +587,8 @@
     return JSON.stringify(batch.map((r) => ({
       id: r.id,
       tag: r.node.localName,
-      src: r.node.getAttribute("src") || "",
-      type: r.node.getAttribute("type") || ""
+      src: r.node.getAttributeInternal("src") || "",
+      type: r.node.getAttributeInternal("type") || ""
     })));
   }
   function pendingResourceCount() {
@@ -625,13 +625,13 @@
       this._attribute = attribute;
     }
     _read() {
-      const value = this._owner.getAttribute(this._attribute);
+      const value = this._owner.getAttributeInternal(this._attribute);
       return (value || "").split(/\s+/).filter(Boolean);
     }
     // Through setAttribute, not the attribute map underneath it: a custom element observing "class" is
     // notified of a classList write exactly as a browser notifies it, which the old direct write skipped.
     _write(tokens) {
-      this._owner.setAttribute(this._attribute, tokens.join(" "));
+      this._owner.setAttributeInternal(this._attribute, tokens.join(" "));
     }
     add(...names) {
       const tokens = this._read();
@@ -678,7 +678,7 @@
       return this._read().join(" ");
     }
     set value(v) {
-      this._owner.setAttribute(this._attribute, v == null ? "" : String(v));
+      this._owner.setAttributeInternal(this._attribute, v == null ? "" : String(v));
     }
     keys() {
       return this._read().keys();
@@ -901,17 +901,31 @@
       this.style = createStyleDeclaration();
       hideOwnFields(this);
     }
-    setAttribute(name, value) {
+    // The attribute steps a browser runs inside the platform, where page code cannot reach them. Every
+    // reflected IDL property (el.src, el.href, …) goes through these rather than through the public methods
+    // below: a consent blocker that wraps Element.prototype.setAttribute and, inside its wrapper, assigns the
+    // property it is guarding re-enters its own wrapper otherwise, and that recursion spends the whole stack
+    // before the page has run. A browser is immune because its setter never calls the method.
+    setAttributeInternal(name, value) {
       this.attrs.set(name, value == null ? "" : String(value));
     }
-    setAttributeNS(_ns, name, value) {
-      this.setAttribute(name, value);
-    }
-    getAttribute(name) {
+    getAttributeInternal(name) {
       return this.attrs.has(name) ? this.attrs.get(name) : null;
     }
-    removeAttribute(name) {
+    removeAttributeInternal(name) {
       this.attrs.delete(name);
+    }
+    setAttribute(name, value) {
+      this.setAttributeInternal(name, value);
+    }
+    setAttributeNS(_ns, name, value) {
+      this.setAttributeInternal(name, value);
+    }
+    getAttribute(name) {
+      return this.getAttributeInternal(name);
+    }
+    removeAttribute(name) {
+      this.removeAttributeInternal(name);
     }
     removeAttributeNS(_ns, name) {
       this.attrs.delete(name);
@@ -1292,6 +1306,36 @@
     getAnimations() {
       return [];
     }
+    // The three adjacent-insertion methods, which a widget uses in place of innerHTML precisely because it
+    // must not disturb the siblings already there. Called bare, so absence is a TypeError that costs the
+    // whole script rather than one insertion. An unknown position is a no-op here, where a browser throws:
+    // the render has nothing to gain from ending a script over a misspelt argument.
+    insertAdjacentElement(position, element) {
+      this.insertAdjacent(position, [element]);
+      return element;
+    }
+    insertAdjacentText(position, text) {
+      this.insertAdjacent(position, [new Text(text == null ? "" : String(text))]);
+    }
+    insertAdjacentHTML(position, html) {
+      const parse = parserRef.parseFragment;
+      this.insertAdjacent(position, parse ? parse(html == null ? "" : String(html)) : []);
+    }
+    insertAdjacent(position, nodes) {
+      const where = String(position).toLowerCase();
+      const parent = this.parentNode;
+      if (where === "beforeend") {
+        for (const node of nodes) this.appendChild(node);
+      } else if (where === "afterbegin") {
+        const first = this.childNodes[0] || null;
+        for (const node of nodes) this.insertBefore(node, first);
+      } else if (where === "beforebegin" && parent) {
+        for (const node of nodes) parent.insertBefore(node, this);
+      } else if (where === "afterend" && parent) {
+        const next = this.nextSibling;
+        for (const node of nodes) parent.insertBefore(node, next);
+      }
+    }
   };
 
   // dom/DocumentFragment.ts
@@ -1469,13 +1513,15 @@
     }
     attributeChangedCallback(_name, _oldValue, _newValue) {
     }
-    setAttribute(name, value) {
+    // Overrides the internal steps rather than the public method, so an observed attribute reports its change
+    // however it was set — through setAttribute, or through the reflected property that bypasses it.
+    setAttributeInternal(name, value) {
       const observed = this.constructor.observedAttributes;
       const tracked = Array.isArray(observed) && observed.indexOf(name) >= 0;
-      const old = tracked ? this.getAttribute(name) : null;
-      super.setAttribute(name, value);
+      const old = tracked ? this.getAttributeInternal(name) : null;
+      super.setAttributeInternal(name, value);
       if (tracked && typeof this.attributeChangedCallback === "function") {
-        this.attributeChangedCallback(name, old, this.getAttribute(name));
+        this.attributeChangedCallback(name, old, this.getAttributeInternal(name));
       }
     }
   };
@@ -1638,7 +1684,7 @@
       super("a");
     }
     get href() {
-      const raw = this.getAttribute("href");
+      const raw = this.getAttributeInternal("href");
       if (raw == null) return "";
       try {
         return new URL(raw).href;
@@ -1647,10 +1693,10 @@
       }
     }
     set href(value) {
-      this.setAttribute("href", value == null ? "" : String(value));
+      this.setAttributeInternal("href", value == null ? "" : String(value));
     }
     resolved() {
-      const raw = this.getAttribute("href");
+      const raw = this.getAttributeInternal("href");
       if (!raw) return null;
       try {
         return new URL(raw);
@@ -1690,7 +1736,7 @@
       super("script");
     }
     get src() {
-      const raw = this.getAttribute("src");
+      const raw = this.getAttributeInternal("src");
       if (raw == null) return "";
       try {
         return new URL(raw).href;
@@ -1699,13 +1745,13 @@
       }
     }
     set src(value) {
-      this.setAttribute("src", value == null ? "" : String(value));
+      this.setAttributeInternal("src", value == null ? "" : String(value));
     }
     get type() {
-      return this.getAttribute("type") || "";
+      return this.getAttributeInternal("type") || "";
     }
     set type(value) {
-      this.setAttribute("type", value == null ? "" : String(value));
+      this.setAttributeInternal("type", value == null ? "" : String(value));
     }
   };
 
@@ -1715,16 +1761,16 @@
       super("link");
     }
     get href() {
-      return this.getAttribute("href") || "";
+      return this.getAttributeInternal("href") || "";
     }
     set href(value) {
-      this.setAttribute("href", value == null ? "" : String(value));
+      this.setAttributeInternal("href", value == null ? "" : String(value));
     }
     get rel() {
-      return this.getAttribute("rel") || "";
+      return this.getAttributeInternal("rel") || "";
     }
     set rel(value) {
-      this.setAttribute("rel", value == null ? "" : String(value));
+      this.setAttributeInternal("rel", value == null ? "" : String(value));
     }
   };
 
@@ -1744,11 +1790,11 @@
       super("option");
     }
     get value() {
-      const v = this.getAttribute("value");
+      const v = this.getAttributeInternal("value");
       return v != null ? v : this.textContent;
     }
     set value(v) {
-      this.setAttribute("value", v == null ? "" : String(v));
+      this.setAttributeInternal("value", v == null ? "" : String(v));
     }
   };
 
@@ -1758,16 +1804,16 @@
       super("img");
     }
     get alt() {
-      return this.getAttribute("alt") || "";
+      return this.getAttributeInternal("alt") || "";
     }
     set alt(value) {
-      this.setAttribute("alt", value == null ? "" : String(value));
+      this.setAttributeInternal("alt", value == null ? "" : String(value));
     }
     get src() {
-      return this.getAttribute("src") || "";
+      return this.getAttributeInternal("src") || "";
     }
     set src(value) {
-      this.setAttribute("src", value == null ? "" : String(value));
+      this.setAttributeInternal("src", value == null ? "" : String(value));
     }
   };
 
@@ -1777,10 +1823,10 @@
       super("iframe");
     }
     get src() {
-      return this.getAttribute("src") || "";
+      return this.getAttributeInternal("src") || "";
     }
     set src(value) {
-      this.setAttribute("src", value == null ? "" : String(value));
+      this.setAttributeInternal("src", value == null ? "" : String(value));
     }
     get contentWindow() {
       let win = this._contentWindow;
@@ -1815,17 +1861,17 @@
       return true;
     }
     get src() {
-      return this.getAttribute("src") || "";
+      return this.getAttributeInternal("src") || "";
     }
     set src(value) {
-      this.setAttribute("src", value == null ? "" : String(value));
+      this.setAttributeInternal("src", value == null ? "" : String(value));
     }
     get muted() {
       return this.hasAttribute("muted");
     }
     set muted(value) {
-      if (value) this.setAttribute("muted", "");
-      else this.removeAttribute("muted");
+      if (value) this.setAttributeInternal("muted", "");
+      else this.removeAttributeInternal("muted");
     }
     load() {
     }
@@ -1845,10 +1891,10 @@
       super("video");
     }
     get poster() {
-      return this.getAttribute("poster") || "";
+      return this.getAttributeInternal("poster") || "";
     }
     set poster(value) {
-      this.setAttribute("poster", value == null ? "" : String(value));
+      this.setAttributeInternal("poster", value == null ? "" : String(value));
     }
   };
 
@@ -1869,17 +1915,17 @@
       return this.hasAttribute("open");
     }
     set open(value) {
-      if (value) this.setAttribute("open", "");
-      else this.removeAttribute("open");
+      if (value) this.setAttributeInternal("open", "");
+      else this.removeAttributeInternal("open");
     }
     show() {
-      this.setAttribute("open", "");
+      this.setAttributeInternal("open", "");
     }
     showModal() {
-      this.setAttribute("open", "");
+      this.setAttributeInternal("open", "");
     }
     close(returnValue) {
-      this.removeAttribute("open");
+      this.removeAttributeInternal("open");
       if (returnValue !== void 0) this.returnValue = String(returnValue);
     }
   };
@@ -2133,18 +2179,18 @@
       super("canvas");
     }
     get width() {
-      const v = parseInt(this.getAttribute("width") || "", 10);
+      const v = parseInt(this.getAttributeInternal("width") || "", 10);
       return isNaN(v) ? 300 : v;
     }
     set width(value) {
-      this.setAttribute("width", String(value == null ? 0 : value));
+      this.setAttributeInternal("width", String(value == null ? 0 : value));
     }
     get height() {
-      const v = parseInt(this.getAttribute("height") || "", 10);
+      const v = parseInt(this.getAttributeInternal("height") || "", 10);
       return isNaN(v) ? 150 : v;
     }
     set height(value) {
-      this.setAttribute("height", String(value == null ? 0 : value));
+      this.setAttributeInternal("height", String(value == null ? 0 : value));
     }
     getContext(type, attributes) {
       if (type === "2d") return createContext2D(this);
@@ -2165,22 +2211,22 @@
       super("meta");
     }
     get content() {
-      return this.getAttribute("content") || "";
+      return this.getAttributeInternal("content") || "";
     }
     set content(value) {
-      this.setAttribute("content", value == null ? "" : String(value));
+      this.setAttributeInternal("content", value == null ? "" : String(value));
     }
     get name() {
-      return this.getAttribute("name") || "";
+      return this.getAttributeInternal("name") || "";
     }
     set name(value) {
-      this.setAttribute("name", value == null ? "" : String(value));
+      this.setAttributeInternal("name", value == null ? "" : String(value));
     }
     get httpEquiv() {
-      return this.getAttribute("http-equiv") || "";
+      return this.getAttributeInternal("http-equiv") || "";
     }
     set httpEquiv(value) {
-      this.setAttribute("http-equiv", value == null ? "" : String(value));
+      this.setAttributeInternal("http-equiv", value == null ? "" : String(value));
     }
   };
 
@@ -2391,7 +2437,7 @@
               j = vEnd;
             }
           }
-          el.setAttribute(an, val);
+          el.setAttributeInternal(an, val);
         }
         i = j;
         if (structural) continue;
@@ -2778,7 +2824,7 @@
     // the page URL, else the page URL itself. Node.baseURI delegates here for every node in the tree.
     get baseURI() {
       const base = this.querySelector("base");
-      const href = base ? base.getAttribute("href") : null;
+      const href = base ? base.getAttributeInternal("href") : null;
       return href ? resolveUrl(href, this.URL) : this.URL;
     }
     // Bundles read document.referrer as a string (analytics, `referrer.split('/')[2] !== location.host`);
@@ -2862,7 +2908,7 @@
     close() {
     }
     getElementById(id) {
-      return walkFind(this.documentElement, (e) => e.getAttribute("id") === id);
+      return walkFind(this.documentElement, (e) => e.getAttributeInternal("id") === id);
     }
     // The root element is in scope for the document's own getElementsBy* — unlike an element's, which search
     // strictly below themselves. A browser answers document.getElementsByTagName("html") with the root, and
@@ -2887,7 +2933,7 @@
       return out;
     }
     getElementsByName(name) {
-      const matches2 = (e) => e.getAttribute("name") === name;
+      const matches2 = (e) => e.getAttributeInternal("name") === name;
       const out = [];
       if (this.documentElement) {
         if (matches2(this.documentElement)) out.push(this.documentElement);
@@ -2915,6 +2961,19 @@
       return {
         hasFeature: () => true,
         createDocumentType: (name, publicId, systemId) => new DocumentType(name, publicId ?? "", systemId ?? ""),
+        // The XML sibling of createHTMLDocument, reached the same way: an SVG or feed helper calls it
+        // during init with no feature test, so its absence costs that helper's whole script. The document
+        // it answers with is an ordinary one carrying the named root element — namespaces are not modelled.
+        createDocument: (_ns, qualifiedName, doctype) => {
+          const d = new _Document();
+          if (doctype) d.appendChild(doctype);
+          if (qualifiedName) {
+            const root = d.createElement(String(qualifiedName));
+            d.appendChild(root);
+            d.documentElement = root;
+          }
+          return d;
+        },
         createHTMLDocument: (title) => {
           const d = new _Document();
           const html = d.createElement("html");
@@ -4093,6 +4152,48 @@
     return out;
   }
 
+  // css/CSS.ts
+  function escape(value) {
+    const input = String(value);
+    const out = [];
+    const first = input.charCodeAt(0);
+    for (let i = 0; i < input.length; i++) {
+      const code = input.charCodeAt(i);
+      if (code === 0) {
+        out.push("\uFFFD");
+        continue;
+      }
+      if (code >= 1 && code <= 31 || code === 127 || i === 0 && code >= 48 && code <= 57 || i === 1 && code >= 48 && code <= 57 && first === 45) {
+        out.push("\\" + code.toString(16) + " ");
+        continue;
+      }
+      if (i === 0 && code === 45 && input.length === 1) {
+        out.push("\\" + input.charAt(i));
+        continue;
+      }
+      if (code >= 128 || code === 45 || code === 95 || code >= 48 && code <= 57 || code >= 65 && code <= 90 || code >= 97 && code <= 122) {
+        out.push(input.charAt(i));
+        continue;
+      }
+      out.push("\\" + input.charAt(i));
+    }
+    return out.join("");
+  }
+  function supports(conditionOrProperty, value) {
+    if (value === void 0) return String(conditionOrProperty).trim().length > 0;
+    return String(conditionOrProperty).trim().length > 0 && String(value).trim().length > 0;
+  }
+  var CSS = {
+    escape,
+    supports,
+    // Houdini's custom-property registration. A page registers at init and reads nothing back, so recording
+    // nothing is enough for init to survive; the render has no cascade for a registration to reach.
+    registerProperty() {
+    }
+    // declined: CSS.px and the rest of the numeric factories (Typed OM), CSS.highlights. Neither was observed
+    // on a target, and both return live objects whose arithmetic a caller would then trust.
+  };
+
   // browser/scroll.ts
   function installScrollApi(global) {
     global.scrollTo = () => {
@@ -4146,6 +4247,7 @@
     global.top = global;
     global.parent = global;
     if (!("length" in global)) global.length = 0;
+    Object.defineProperty(global, Symbol.toStringTag, { value: "Window", configurable: true });
     global.navigator = navigator;
     global.location = createLocation();
     global.history = createHistory();
@@ -4182,6 +4284,7 @@
       reportSwallowed("reportError", error);
     });
     global.getComputedStyle = () => createStyleDeclaration();
+    global.CSS = global.CSS || CSS;
     global.getSelection = () => ({
       rangeCount: 0,
       type: "None",
@@ -4560,15 +4663,15 @@
       for (const c of n.childNodes) {
         if (c.nodeType !== 1 /* Element */) continue;
         if (c.localName === "script") {
-          const type = c.getAttribute("type") || "";
+          const type = c.getAttributeInternal("type") || "";
           if (type && type !== "text/javascript" && type !== "module" && type !== "application/javascript") {
             walk(c);
             continue;
           }
           out.push({
             module: type === "module",
-            external: !!c.getAttribute("src"),
-            src: c.getAttribute("src") || "",
+            external: !!c.getAttributeInternal("src"),
+            src: c.getAttributeInternal("src") || "",
             text: c.textContent
           });
         }
@@ -4585,7 +4688,7 @@
       for (const c of n.childNodes) {
         if (c.nodeType !== 1 /* Element */) continue;
         if (c.localName === "base") {
-          const href = c.getAttribute("href");
+          const href = c.getAttributeInternal("href");
           if (href) {
             found = href;
             return true;
@@ -4608,12 +4711,12 @@
         if (c.nodeType !== 1 /* Element */) continue;
         const tag = c.localName;
         if (tag === "a") {
-          anchors.push(c.getAttribute("href"));
+          anchors.push(c.getAttributeInternal("href"));
         } else if (canonical == null && tag === "link") {
-          const rel = (c.getAttribute("rel") || "").toLowerCase().split(/\s+/);
-          if (rel.indexOf("canonical") >= 0) canonical = c.getAttribute("href");
+          const rel = (c.getAttributeInternal("rel") || "").toLowerCase().split(/\s+/);
+          if (rel.indexOf("canonical") >= 0) canonical = c.getAttributeInternal("href");
         } else if (robots == null && tag === "meta") {
-          if ((c.getAttribute("name") || "").toLowerCase() === "robots") robots = c.getAttribute("content");
+          if ((c.getAttributeInternal("name") || "").toLowerCase() === "robots") robots = c.getAttributeInternal("content");
         }
         walk(c);
       }

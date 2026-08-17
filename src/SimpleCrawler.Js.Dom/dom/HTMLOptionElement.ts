@@ -8,11 +8,11 @@ export class HTMLOptionElement extends HTMLElement {
     }
 
     get value(): string {
-        const v = this.getAttribute("value");
+        const v = this.getAttributeInternal("value");
         return v != null ? v : this.textContent;
     }
 
     set value(v: unknown) {
-        this.setAttribute("value", v == null ? "" : String(v));
+        this.setAttributeInternal("value", v == null ? "" : String(v));
     }
 }

@@ -63,13 +63,15 @@ export class HTMLElement extends Element {
 
     attributeChangedCallback(_name: string, _oldValue: string | null, _newValue: string | null): void { }
 
-    setAttribute(name: string, value: unknown): void {
+    // Overrides the internal steps rather than the public method, so an observed attribute reports its change
+    // however it was set — through setAttribute, or through the reflected property that bypasses it.
+    setAttributeInternal(name: string, value: unknown): void {
         const observed = (this.constructor as any).observedAttributes;
         const tracked = Array.isArray(observed) && observed.indexOf(name) >= 0;
-        const old = tracked ? this.getAttribute(name) : null;
-        super.setAttribute(name, value);
+        const old = tracked ? this.getAttributeInternal(name) : null;
+        super.setAttributeInternal(name, value);
         if (tracked && typeof this.attributeChangedCallback === "function") {
-            this.attributeChangedCallback(name, old, this.getAttribute(name));
+            this.attributeChangedCallback(name, old, this.getAttributeInternal(name));
         }
     }
 }

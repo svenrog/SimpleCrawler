@@ -10,11 +10,11 @@ export class HTMLIFrameElement extends HTMLElement {
     }
 
     get src(): string {
-        return this.getAttribute("src") || "";
+        return this.getAttributeInternal("src") || "";
     }
 
     set src(value: unknown) {
-        this.setAttribute("src", value == null ? "" : String(value));
+        this.setAttributeInternal("src", value == null ? "" : String(value));
     }
 
     get contentWindow(): any {

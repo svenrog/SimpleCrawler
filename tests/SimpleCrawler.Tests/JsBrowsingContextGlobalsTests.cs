@@ -50,6 +50,16 @@ public class JsBrowsingContextGlobalsTests : IClassFixture<JsRendererFixture>
           window.__windowIsFunction = typeof Window === 'function';
           window.__windowIsInstance = window instanceof Window;
           window.__documentIsInstance = document instanceof Window;
+          window.__brand = Object.prototype.toString.call(window);
+          // jQuery's isPlainObject, in the shape 3.x ships it.
+          window.__windowIsPlain = (function (obj) {
+            var proto, Ctor, hasOwn = Object.prototype.hasOwnProperty, fnToString = hasOwn.toString;
+            if (!obj || Object.prototype.toString.call(obj) !== '[object Object]') return false;
+            proto = Object.getPrototypeOf(obj);
+            if (!proto) return true;
+            Ctor = hasOwn.call(proto, 'constructor') && proto.constructor;
+            return typeof Ctor === 'function' && fnToString.call(Ctor) === fnToString.call(Object);
+          })(window);
         </script>
         </body></html>
         """;
@@ -67,7 +77,9 @@ public class JsBrowsingContextGlobalsTests : IClassFixture<JsRendererFixture>
               stubInstalled: !!window.__stubInstalled,
               windowIsFunction: window.__windowIsFunction,
               windowIsInstance: window.__windowIsInstance,
-              documentIsInstance: window.__documentIsInstance
+              documentIsInstance: window.__documentIsInstance,
+              brand: window.__brand,
+              windowIsPlain: window.__windowIsPlain
             })
             """),
     ]);
@@ -135,5 +147,23 @@ public class JsBrowsingContextGlobalsTests : IClassFixture<JsRendererFixture>
         Assert.True(ctx.GetProperty("windowIsFunction").GetBoolean());
         Assert.True(ctx.GetProperty("windowIsInstance").GetBoolean());
         Assert.False(ctx.GetProperty("documentIsInstance").GetBoolean());
+    }
+
+    // The brand a library reads before it decides what the global *is*. An engine global answers
+    // "[object Object]" on its own, which jQuery reads as a plain object — and jQuery UI deep-clones a plain
+    // option value, so an ordinary `of: window` default sent widget.extend into window.window/self/top/parent
+    // and spent the whole stack there, ending the page's scripts before the page had run.
+    [Theory]
+    [InlineData(JsEngine.Jint)]
+    [InlineData(JsEngine.V8)]
+    public async Task TheGlobal_IsBrandedAsAWindowRatherThanAPlainObject(JsEngine engine)
+    {
+        if (engine == JsEngine.V8)
+            Assert.SkipUnless(V8Support.IsAvailable, V8Support.UnavailableReason);
+
+        var ctx = await CollectAsync(engine);
+
+        Assert.Equal("[object Window]", ctx.GetProperty("brand").GetString());
+        Assert.False(ctx.GetProperty("windowIsPlain").GetBoolean());
     }
 }

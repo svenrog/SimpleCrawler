@@ -45,20 +45,37 @@ export class Element extends Node implements Animatable {
         hideOwnFields(this);
     }
 
-    setAttribute(name: string, value: unknown): void {
+    // The attribute steps a browser runs inside the platform, where page code cannot reach them. Every
+    // reflected IDL property (el.src, el.href, …) goes through these rather than through the public methods
+    // below: a consent blocker that wraps Element.prototype.setAttribute and, inside its wrapper, assigns the
+    // property it is guarding re-enters its own wrapper otherwise, and that recursion spends the whole stack
+    // before the page has run. A browser is immune because its setter never calls the method.
+    setAttributeInternal(name: string, value: unknown): void {
         this.attrs.set(name, value == null ? "" : String(value));
     }
 
-    setAttributeNS(_ns: string | null, name: string, value: unknown): void {
-        this.setAttribute(name, value);
-    }
-
-    getAttribute(name: string): string | null {
+    getAttributeInternal(name: string): string | null {
         return this.attrs.has(name) ? this.attrs.get(name)! : null;
     }
 
-    removeAttribute(name: string): void {
+    removeAttributeInternal(name: string): void {
         this.attrs.delete(name);
+    }
+
+    setAttribute(name: string, value: unknown): void {
+        this.setAttributeInternal(name, value);
+    }
+
+    setAttributeNS(_ns: string | null, name: string, value: unknown): void {
+        this.setAttributeInternal(name, value);
+    }
+
+    getAttribute(name: string): string | null {
+        return this.getAttributeInternal(name);
+    }
+
+    removeAttribute(name: string): void {
+        this.removeAttributeInternal(name);
     }
 
     removeAttributeNS(_ns: string | null, name: string): void {
@@ -475,5 +492,40 @@ export class Element extends Node implements Animatable {
 
     getAnimations(): Animation[] {
         return [];
+    }
+
+    // The three adjacent-insertion methods, which a widget uses in place of innerHTML precisely because it
+    // must not disturb the siblings already there. Called bare, so absence is a TypeError that costs the
+    // whole script rather than one insertion. An unknown position is a no-op here, where a browser throws:
+    // the render has nothing to gain from ending a script over a misspelt argument.
+    insertAdjacentElement(position: string, element: Node): Node | null {
+        this.insertAdjacent(position, [element]);
+        return element;
+    }
+
+    insertAdjacentText(position: string, text: unknown): void {
+        this.insertAdjacent(position, [new Text(text == null ? "" : String(text))]);
+    }
+
+    insertAdjacentHTML(position: string, html: unknown): void {
+        const parse = parserRef.parseFragment;
+        this.insertAdjacent(position, parse ? parse(html == null ? "" : String(html)) : []);
+    }
+
+    private insertAdjacent(position: string, nodes: Node[]): void {
+        const where = String(position).toLowerCase();
+        const parent = this.parentNode;
+
+        if (where === "beforeend") {
+            for (const node of nodes) this.appendChild(node);
+        } else if (where === "afterbegin") {
+            const first = this.childNodes[0] || null;
+            for (const node of nodes) this.insertBefore(node, first);
+        } else if (where === "beforebegin" && parent) {
+            for (const node of nodes) parent.insertBefore(node, this);
+        } else if (where === "afterend" && parent) {
+            const next = this.nextSibling;
+            for (const node of nodes) parent.insertBefore(node, next);
+        }
     }
 }

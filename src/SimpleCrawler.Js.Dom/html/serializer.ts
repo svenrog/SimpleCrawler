@@ -22,7 +22,7 @@ export function serializeNode(node: Node): string {
     const tag: string = el.localName;
     let s = "<" + tag;
     for (const k of el.getAttributeNames()) {
-        s += " " + k + '="' + escapeAttr(el.getAttribute(k)) + '"';
+        s += " " + k + '="' + escapeAttr(el.getAttributeInternal(k)) + '"';
     }
     if (!el.hasAttribute("style")) {
         const css = el.style?.cssText;

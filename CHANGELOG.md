@@ -23,6 +23,13 @@ Entries before 4.0.0 are condensed to what changed; the reasoning behind each is
   `Window` and `File` constructors.
 - `JsPageTimeoutException`, a `TimeoutException` named for the scope it bounds: a ceiling over the whole page
   has to end the render, while one over a single execution call must not.
+- The `CSS` namespace object (`CSS.escape`, `CSS.supports`, `CSS.registerProperty`), `insertAdjacentHTML`
+  with its element and text siblings, and `document.implementation.createDocument` — each named bare by a
+  bundle that never feature-tests it, so each was a certain error inside somebody's init.
+- `import.meta.url` on the Jint backend, answered with the module's own URL. Jint implements the syntax and
+  delegates the properties to its host, so it read back `undefined`, and a loader doing
+  `new URL(import.meta.url)` to find where its own chunks live threw before fetching any of them. The V8
+  backend answers `undefined` here too (measured on ClearScript 7.5.1) and is not addressed by this.
 
 ### Changed
 
@@ -47,6 +54,17 @@ Entries before 4.0.0 are condensed to what changed; the reasoning behind each is
   entry, so its imports resolve. The initial markup was already split by type; the runtime path never was.
 - Two inline `<script type="module">` blocks on one page both run. They shared a specifier — the page URL —
   which Jint refuses outright (taking both) and V8 answers from its module cache (running the first twice).
+- The global is branded as a `Window` (`Object.prototype.toString.call(window)`), which an engine global does
+  not do for itself. jQuery reads that brand as "a plain object", and jQuery UI deep-clones a plain option
+  value — so the ordinary `of: window` default sent `widget.extend` through `window.window`/`self`/`top`/
+  `parent` and spent the entire call stack there. It presented as `Maximum call stack size exceeded` on six
+  surveyed sites, none of which had recursion of its own.
+- A reflected property (`el.src`, `el.href`, …) writes the content attribute through the DOM's internal
+  steps instead of calling the page-visible `setAttribute`. A consent or script-blocking tool wraps
+  `Element.prototype.setAttribute` and assigns the guarded property inside its wrapper; the property setter
+  called the method straight back, and the recursion spent the stack before the page ran. A browser is immune
+  because its setters never call the method. Every internal read and write in the DOM — the parser, the
+  serializer, selector matching, `classList`, resource registration — now takes the same internal path.
 - `document.getElementsByTagName`/`getElementsByClassName`/`getElementsByName` include the root element,
   which they searched strictly below. jQuery resolves a tag-only `$("html")` through the first of those, so
   a CMS bundle reading `$("html").attr("lang")` at init got undefined and threw. An *element's* own search

@@ -44,21 +44,21 @@ export class HTMLCanvasElement extends HTMLElement {
     }
 
     get width(): number {
-        const v = parseInt(this.getAttribute("width") || "", 10);
+        const v = parseInt(this.getAttributeInternal("width") || "", 10);
         return isNaN(v) ? 300 : v;
     }
 
     set width(value: unknown) {
-        this.setAttribute("width", String(value == null ? 0 : value));
+        this.setAttributeInternal("width", String(value == null ? 0 : value));
     }
 
     get height(): number {
-        const v = parseInt(this.getAttribute("height") || "", 10);
+        const v = parseInt(this.getAttributeInternal("height") || "", 10);
         return isNaN(v) ? 150 : v;
     }
 
     set height(value: unknown) {
-        this.setAttribute("height", String(value == null ? 0 : value));
+        this.setAttributeInternal("height", String(value == null ? 0 : value));
     }
 
     getContext(type: string, attributes?: any): any {

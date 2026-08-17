@@ -16,19 +16,19 @@ export class HTMLDialogElement extends HTMLElement {
     }
 
     set open(value: unknown) {
-        if (value) this.setAttribute("open", ""); else this.removeAttribute("open");
+        if (value) this.setAttributeInternal("open", ""); else this.removeAttributeInternal("open");
     }
 
     show(): void {
-        this.setAttribute("open", "");
+        this.setAttributeInternal("open", "");
     }
 
     showModal(): void {
-        this.setAttribute("open", "");
+        this.setAttributeInternal("open", "");
     }
 
     close(returnValue?: unknown): void {
-        this.removeAttribute("open");
+        this.removeAttributeInternal("open");
         if (returnValue !== undefined) this.returnValue = String(returnValue);
     }
 }

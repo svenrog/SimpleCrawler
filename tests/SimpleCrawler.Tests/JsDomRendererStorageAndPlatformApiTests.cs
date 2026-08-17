@@ -315,4 +315,34 @@ public class JsDomRendererStorageAndPlatformApiTests : JsDomRendererTestBase, IC
 
         Assert.Contains("href=\"/idb/value-42\"", rendered);
     }
+
+    // The CSS namespace object, read off the global bare — a module that did so died on the ReferenceError,
+    // taking the entry point with it. escape() has to serialize an identifier a selector can be built from,
+    // and a feature probe answers as the current browser this render presents itself as.
+    [Theory]
+    [InlineData(JsEngine.Jint)]
+    [InlineData(JsEngine.V8)]
+    public async Task JsMode_CssNamespace_EscapesAnIdentifierAndAnswersAFeatureProbe(JsEngine engine)
+    {
+        if (engine == JsEngine.V8)
+            Assert.SkipUnless(V8Support.IsAvailable, V8Support.UnavailableReason);
+
+        const string html = """
+            <html><body><div id="t"></div>
+            <script>
+            var escaped = CSS.escape('a.b');
+            var probed = CSS.supports('display', 'grid') && CSS.supports('(display: grid)') && !CSS.supports('');
+            var a = document.createElement('a');
+            a.setAttribute('href', '/css/' + escaped + '/' + probed);
+            document.getElementById('t').appendChild(a);
+            </script>
+            </body></html>
+            """;
+
+        var renderer = CreateJsRenderer(engine);
+        var result = await renderer.RenderAsync(Encoding.UTF8.GetBytes(html), "http://localhost:5000/", new HttpClient(), CancellationToken.None);
+        var rendered = Encoding.UTF8.GetString(result);
+
+        Assert.Contains("href=\"/css/a\\.b/true\"", rendered);
+    }
 }

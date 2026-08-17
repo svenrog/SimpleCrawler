@@ -58,6 +58,7 @@ import { FileList } from "./FileList";
 import { btoa, atob } from "./base64";
 import { documentRef } from "../dom/documentRef";
 import { createStyleDeclaration } from "../css/CSSStyleDeclaration";
+import { CSS } from "../css/CSS";
 import { installScrollApi } from "./scroll";
 import { markPrototypeNative } from "./native";
 import { EventListenerMap, EventTarget, addListener, removeListener, fireEvent } from "../dom/eventTarget";
@@ -80,6 +81,12 @@ export function installDOM(global: any): void {
     global.top = global;
     global.parent = global;
     if (!("length" in global)) global.length = 0;
+    // A browser brands the global as Window, and the brand is what keeps it out of a deep clone: jQuery's
+    // isPlainObject asks Object.prototype.toString first, and an engine whose global answers "[object Object]"
+    // has it clone the window instead of copying the reference. window.window/self/top/parent/frames make that
+    // recursion endless, so a widget option carrying `of: window` — an ordinary jQuery UI default — spends the
+    // whole stack before it reaches anything of the page's. The two engines disagreed here without it.
+    Object.defineProperty(global, Symbol.toStringTag, { value: "Window", configurable: true });
     global.navigator = navigator;
     global.location = createLocation();
     global.history = createHistory();
@@ -110,6 +117,7 @@ export function installDOM(global: any): void {
     // `getComputedStyle(el, ':after').content.replace(...)`, which throws if `.content` is undefined), so a
     // fresh empty declaration — which returns "" for any key and via getPropertyValue — covers both paths.
     global.getComputedStyle = () => createStyleDeclaration();
+    global.CSS = global.CSS || CSS;
     global.getSelection = () => ({
         rangeCount: 0,
         type: "None",

@@ -9,26 +9,26 @@ export class HTMLMetaElement extends HTMLElement {
     }
 
     get content(): string {
-        return this.getAttribute("content") || "";
+        return this.getAttributeInternal("content") || "";
     }
 
     set content(value: unknown) {
-        this.setAttribute("content", value == null ? "" : String(value));
+        this.setAttributeInternal("content", value == null ? "" : String(value));
     }
 
     get name(): string {
-        return this.getAttribute("name") || "";
+        return this.getAttributeInternal("name") || "";
     }
 
     set name(value: unknown) {
-        this.setAttribute("name", value == null ? "" : String(value));
+        this.setAttributeInternal("name", value == null ? "" : String(value));
     }
 
     get httpEquiv(): string {
-        return this.getAttribute("http-equiv") || "";
+        return this.getAttributeInternal("http-equiv") || "";
     }
 
     set httpEquiv(value: unknown) {
-        this.setAttribute("http-equiv", value == null ? "" : String(value));
+        this.setAttributeInternal("http-equiv", value == null ? "" : String(value));
     }
 }

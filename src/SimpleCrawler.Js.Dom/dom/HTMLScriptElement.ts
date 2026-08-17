@@ -18,20 +18,20 @@ export class HTMLScriptElement extends HTMLElement {
     }
 
     get src(): string {
-        const raw = this.getAttribute("src");
+        const raw = this.getAttributeInternal("src");
         if (raw == null) return "";
         try { return new URL(raw).href; } catch { return raw; }
     }
 
     set src(value: unknown) {
-        this.setAttribute("src", value == null ? "" : String(value));
+        this.setAttributeInternal("src", value == null ? "" : String(value));
     }
 
     get type(): string {
-        return this.getAttribute("type") || "";
+        return this.getAttributeInternal("type") || "";
     }
 
     set type(value: unknown) {
-        this.setAttribute("type", value == null ? "" : String(value));
+        this.setAttributeInternal("type", value == null ? "" : String(value));
     }
 }

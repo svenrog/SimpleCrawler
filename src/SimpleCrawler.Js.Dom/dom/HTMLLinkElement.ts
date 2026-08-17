@@ -9,18 +9,18 @@ export class HTMLLinkElement extends HTMLElement {
     }
 
     get href(): string {
-        return this.getAttribute("href") || "";
+        return this.getAttributeInternal("href") || "";
     }
 
     set href(value: unknown) {
-        this.setAttribute("href", value == null ? "" : String(value));
+        this.setAttributeInternal("href", value == null ? "" : String(value));
     }
 
     get rel(): string {
-        return this.getAttribute("rel") || "";
+        return this.getAttributeInternal("rel") || "";
     }
 
     set rel(value: unknown) {
-        this.setAttribute("rel", value == null ? "" : String(value));
+        this.setAttributeInternal("rel", value == null ? "" : String(value));
     }
 }

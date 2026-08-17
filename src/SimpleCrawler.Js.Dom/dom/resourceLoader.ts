@@ -19,7 +19,7 @@ const _seen = new WeakSet<object>();
 export function registerResource(node: any): void {
     const tag = node.localName;
     if (tag !== "script" && tag !== "link") return;
-    if (tag === "script" && !node.getAttribute("src")) return;
+    if (tag === "script" && !node.getAttributeInternal("src")) return;
     if (_seen.has(node)) return;
     _seen.add(node);
     const id = ++_counter;
@@ -35,8 +35,8 @@ export function takeResources(): string {
     return JSON.stringify(batch.map((r) => ({
         id: r.id,
         tag: r.node.localName,
-        src: r.node.getAttribute("src") || "",
-        type: r.node.getAttribute("type") || "",
+        src: r.node.getAttributeInternal("src") || "",
+        type: r.node.getAttributeInternal("type") || "",
     })));
 }
 

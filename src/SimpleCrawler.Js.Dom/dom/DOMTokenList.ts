@@ -16,14 +16,14 @@ export class DOMTokenList {
     }
 
     private _read(): string[] {
-        const value = this._owner.getAttribute(this._attribute);
+        const value = this._owner.getAttributeInternal(this._attribute);
         return (value || "").split(/\s+/).filter(Boolean);
     }
 
     // Through setAttribute, not the attribute map underneath it: a custom element observing "class" is
     // notified of a classList write exactly as a browser notifies it, which the old direct write skipped.
     private _write(tokens: string[]): void {
-        this._owner.setAttribute(this._attribute, tokens.join(" "));
+        this._owner.setAttributeInternal(this._attribute, tokens.join(" "));
     }
 
     add(...names: string[]): void {
@@ -81,7 +81,7 @@ export class DOMTokenList {
     }
 
     set value(v: unknown) {
-        this._owner.setAttribute(this._attribute, v == null ? "" : String(v));
+        this._owner.setAttributeInternal(this._attribute, v == null ? "" : String(v));
     }
 
     keys(): any {

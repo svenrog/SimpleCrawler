@@ -63,7 +63,7 @@ function matchesCompound(el: any, compound: string): boolean {
         const c = tok[0];
         if (tok === "*") continue;
         if (c === "#") {
-            if (el.getAttribute("id") !== tok.slice(1)) return false;
+            if (el.getAttributeInternal("id") !== tok.slice(1)) return false;
         } else if (c === ".") {
             if (!hasClass(el, tok.slice(1))) return false;
         } else if (c === "[") {
@@ -76,7 +76,7 @@ function matchesCompound(el: any, compound: string): boolean {
 }
 
 function hasClass(el: any, name: string): boolean {
-    const cls = el.getAttribute("class");
+    const cls = el.getAttributeInternal("class");
     if (!cls) return false;
     return cls.split(/\s+/).indexOf(name) >= 0;
 }
@@ -92,7 +92,7 @@ function matchesAttr(el: any, token: string): boolean {
     if (!op) return true;
 
     const expected = m[3] ?? "";
-    const actual = el.getAttribute(name) ?? "";
+    const actual = el.getAttributeInternal(name) ?? "";
     switch (op) {
         case "=": return actual === expected;
         case "~=": return actual.split(/\s+/).indexOf(expected) >= 0;

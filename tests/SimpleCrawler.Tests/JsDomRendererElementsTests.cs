@@ -655,4 +655,111 @@ public class JsDomRendererElementsTests : JsDomRendererTestBase, IClassFixture<J
 
         Assert.Contains("href=\"/named-t-expando-false-absent-true\"", rendered);
     }
+
+    // A reflected property must not reach the page's own setAttribute. Consent and script-blocking tools wrap
+    // Element.prototype.setAttribute and, for a guarded attribute, assign the matching property inside the
+    // wrapper — which re-enters the wrapper as soon as the property setter calls the method back, and the
+    // recursion spends the stack (reported as "Maximum call stack size exceeded") before the page has run at
+    // all. A browser is immune: its setter writes the content attribute where the wrapper cannot see it.
+    [Theory]
+    [InlineData(JsEngine.Jint)]
+    [InlineData(JsEngine.V8)]
+    public async Task JsMode_AReflectedPropertyDoesNotReEnterAPatchedSetAttribute(JsEngine engine)
+    {
+        if (engine == JsEngine.V8)
+            Assert.SkipUnless(V8Support.IsAvailable, V8Support.UnavailableReason);
+
+        const string html = """
+            <html><body><div id="t"></div>
+            <script>
+            var original = Element.prototype.setAttribute;
+            Element.prototype.setAttribute = function (name, value) {
+                if (name === 'src') { this.src = value; return; }
+                original.call(this, name, value);
+            };
+            var script = document.createElement('script');
+            script.setAttribute('src', '/blocked.js');
+            Element.prototype.setAttribute = original;
+            var a = document.createElement('a');
+            a.setAttribute('href', '/src-' + script.getAttribute('src'));
+            document.getElementById('t').appendChild(a);
+            </script>
+            </body></html>
+            """;
+
+        var renderer = CreateJsRenderer(engine);
+        var result = await renderer.RenderAsync(Encoding.UTF8.GetBytes(html), "http://localhost:5000/", new HttpClient(), CancellationToken.None);
+        var rendered = Encoding.UTF8.GetString(result);
+
+        Assert.Contains("href=\"/src-/blocked.js\"", rendered);
+    }
+
+    // insertAdjacentHTML, which a widget reaches for exactly when it must not disturb the siblings already
+    // there. All four positions, because a bundle picks the one its layout needs and a missing case is a
+    // silently dropped insertion rather than an error — and the anchors it inserts are what a crawl collects.
+    [Theory]
+    [InlineData(JsEngine.Jint)]
+    [InlineData(JsEngine.V8)]
+    public async Task JsMode_InsertAdjacentHtml_PlacesMarkupAtEveryPosition(JsEngine engine)
+    {
+        if (engine == JsEngine.V8)
+            Assert.SkipUnless(V8Support.IsAvailable, V8Support.UnavailableReason);
+
+        const string html = """
+            <html><body><div id="t"><span id="anchor">x</span></div>
+            <script>
+            var el = document.getElementById('anchor');
+            el.insertAdjacentHTML('beforebegin', '<a href="/before-begin"></a>');
+            el.insertAdjacentHTML('afterbegin', '<a href="/after-begin"></a>');
+            el.insertAdjacentHTML('beforeend', '<a href="/before-end"></a>');
+            el.insertAdjacentHTML('afterend', '<a href="/after-end"></a>');
+            el.insertAdjacentText('beforeend', 'text-ran');
+            var made = document.createElement('a');
+            made.setAttribute('href', '/adjacent-element');
+            el.insertAdjacentElement('afterend', made);
+            </script>
+            </body></html>
+            """;
+
+        var renderer = CreateJsRenderer(engine);
+        var result = await renderer.RenderAsync(Encoding.UTF8.GetBytes(html), "http://localhost:5000/", new HttpClient(), CancellationToken.None);
+        var rendered = Encoding.UTF8.GetString(result);
+
+        // The order pins where each landed: the two outer ones bracket the span, the two inner ones sit
+        // inside it around its own text.
+        var body = rendered[rendered.IndexOf("<div id=\"t\"", StringComparison.Ordinal)..];
+        Assert.Matches(
+            "before-begin.*after-begin.*x.*before-end.*text-ran.*adjacent-element.*after-end",
+            body.Replace("\n", string.Empty, StringComparison.Ordinal));
+    }
+
+    // document.implementation.createDocument, the XML sibling of createHTMLDocument that an SVG or feed
+    // helper calls during init with no feature test — absent, it costs that helper's whole script.
+    [Theory]
+    [InlineData(JsEngine.Jint)]
+    [InlineData(JsEngine.V8)]
+    public async Task JsMode_CreateDocument_AnswersWithTheNamedRoot(JsEngine engine)
+    {
+        if (engine == JsEngine.V8)
+            Assert.SkipUnless(V8Support.IsAvailable, V8Support.UnavailableReason);
+
+        const string html = """
+            <html><body><div id="t"></div>
+            <script>
+            var xml = document.implementation.createDocument('http://www.w3.org/2000/svg', 'svg', null);
+            var root = xml.documentElement;
+            root.setAttribute('data-made', '1');
+            var a = document.createElement('a');
+            a.setAttribute('href', '/xml-' + root.tagName.toLowerCase() + '-' + root.getAttribute('data-made'));
+            document.getElementById('t').appendChild(a);
+            </script>
+            </body></html>
+            """;
+
+        var renderer = CreateJsRenderer(engine);
+        var result = await renderer.RenderAsync(Encoding.UTF8.GetBytes(html), "http://localhost:5000/", new HttpClient(), CancellationToken.None);
+        var rendered = Encoding.UTF8.GetString(result);
+
+        Assert.Contains("href=\"/xml-svg-1\"", rendered);
+    }
 }

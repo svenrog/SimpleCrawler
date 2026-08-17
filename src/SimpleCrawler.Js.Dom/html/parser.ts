@@ -109,7 +109,7 @@ export function parseHTML(doc: Document, input: unknown): Element {
                         j = vEnd;
                     }
                 }
-                el.setAttribute(an, val);
+                el.setAttributeInternal(an, val);
             }
 
             i = j;

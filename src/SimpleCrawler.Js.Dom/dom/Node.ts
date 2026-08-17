@@ -135,7 +135,7 @@ export abstract class Node extends EventTarget {
             if (a.nodeName !== b.nodeName || a.namespaceURI !== b.namespaceURI) return false;
             const names = a.getAttributeNames();
             if (names.length !== b.getAttributeNames().length) return false;
-            for (const name of names) if (a.getAttribute(name) !== b.getAttribute(name)) return false;
+            for (const name of names) if (a.getAttributeInternal(name) !== b.getAttributeInternal(name)) return false;
         } else if (this.nodeType === NodeType.Text || this.nodeType === NodeType.Comment) {
             if (a.nodeValue !== b.nodeValue) return false;
         }

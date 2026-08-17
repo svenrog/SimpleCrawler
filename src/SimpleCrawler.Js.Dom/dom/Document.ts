@@ -61,7 +61,7 @@ export class Document extends Node {
     // the page URL, else the page URL itself. Node.baseURI delegates here for every node in the tree.
     get baseURI(): string {
         const base = this.querySelector("base");
-        const href = base ? base.getAttribute("href") : null;
+        const href = base ? base.getAttributeInternal("href") : null;
         return href ? resolveUrl(href, this.URL) : this.URL;
     }
 
@@ -162,7 +162,7 @@ export class Document extends Node {
     close(): void { }
 
     getElementById(id: string): Element | null {
-        return walkFind(this.documentElement, (e) => (e as any).getAttribute("id") === id) as Element | null;
+        return walkFind(this.documentElement, (e) => (e as any).getAttributeInternal("id") === id) as Element | null;
     }
 
     // The root element is in scope for the document's own getElementsBy* — unlike an element's, which search
@@ -190,7 +190,7 @@ export class Document extends Node {
     }
 
     getElementsByName(name: string): Element[] {
-        const matches = (e: any): boolean => e.getAttribute("name") === name;
+        const matches = (e: any): boolean => e.getAttributeInternal("name") === name;
         const out: Node[] = [];
         if (this.documentElement) {
             if (matches(this.documentElement)) out.push(this.documentElement);
@@ -223,6 +223,19 @@ export class Document extends Node {
             hasFeature: () => true,
             createDocumentType: (name: string, publicId?: string, systemId?: string) =>
                 new DocumentType(name, publicId ?? "", systemId ?? ""),
+            // The XML sibling of createHTMLDocument, reached the same way: an SVG or feed helper calls it
+            // during init with no feature test, so its absence costs that helper's whole script. The document
+            // it answers with is an ordinary one carrying the named root element — namespaces are not modelled.
+            createDocument: (_ns: string | null, qualifiedName?: string, doctype?: any) => {
+                const d = new Document();
+                if (doctype) d.appendChild(doctype);
+                if (qualifiedName) {
+                    const root = d.createElement(String(qualifiedName));
+                    d.appendChild(root);
+                    d.documentElement = root;
+                }
+                return d;
+            },
             createHTMLDocument: (title?: string) => {
                 const d = new Document();
                 const html = d.createElement("html");
