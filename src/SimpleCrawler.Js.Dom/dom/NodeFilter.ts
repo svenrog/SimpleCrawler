@@ -20,8 +20,9 @@ export const NodeFilter = {
     SHOW_NOTATION: 0x800,
 };
 
-// whatToShow is a bitmask over (nodeType - 1); a filter may be the callback itself or an object carrying
-// acceptNode, and a filter that throws must not escape into the caller's traversal.
+// whatToShow is a bitmask over (nodeType - 1), and a filter is either the callback itself or an object
+// carrying acceptNode. A filter that throws is deliberately not caught: the exception surfaces from the
+// caller's own nextNode() call, which is where a browser puts it and where the page's try/catch is.
 export function accepts(node: any, whatToShow: number, filter: any): number {
     if (((1 << (node.nodeType - 1)) & whatToShow) === 0) return NodeFilter.FILTER_SKIP;
     if (!filter) return NodeFilter.FILTER_ACCEPT;

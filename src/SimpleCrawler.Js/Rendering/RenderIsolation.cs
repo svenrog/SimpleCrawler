@@ -9,6 +9,8 @@ namespace SimpleCrawler.Js.Rendering;
 /// <list type="bullet">
 /// <item><see cref="OperationCanceledException"/> and <see cref="JsPageTimeoutException"/> propagate — the
 /// first is the caller stopping the run, the second a ceiling that bounds the page itself.</item>
+/// <item><see cref="OutOfMemoryException"/> propagates too, and for a plainer reason: nothing is isolated
+/// from it. Continuing would only reach the next allocation.</item>
 /// <item>Everything else — a <see cref="JsException"/> from page code, a per-script
 /// <see cref="TimeoutException"/>, a raw CLR exception from host code the engine ran — is logged as a
 /// warning and the render continues with the failure's declared fallback.</item>
@@ -61,6 +63,10 @@ internal sealed class RenderIsolation
             throw;
         }
         catch (JsPageTimeoutException)
+        {
+            throw;
+        }
+        catch (OutOfMemoryException)
         {
             throw;
         }

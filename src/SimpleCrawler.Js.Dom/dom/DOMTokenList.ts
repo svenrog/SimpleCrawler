@@ -20,6 +20,8 @@ export class DOMTokenList {
         return (value || "").split(/\s+/).filter(Boolean);
     }
 
+    // Through setAttribute, not the attribute map underneath it: a custom element observing "class" is
+    // notified of a classList write exactly as a browser notifies it, which the old direct write skipped.
     private _write(tokens: string[]): void {
         this._owner.setAttribute(this._attribute, tokens.join(" "));
     }

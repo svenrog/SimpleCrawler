@@ -628,6 +628,8 @@
       const value = this._owner.getAttribute(this._attribute);
       return (value || "").split(/\s+/).filter(Boolean);
     }
+    // Through setAttribute, not the attribute map underneath it: a custom element observing "class" is
+    // notified of a classList write exactly as a browser notifies it, which the old direct write skipped.
     _write(tokens) {
       this._owner.setAttribute(this._attribute, tokens.join(" "));
     }

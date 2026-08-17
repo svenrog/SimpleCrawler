@@ -1,7 +1,6 @@
 using Microsoft.Extensions.Logging;
 using SimpleCrawler.Core.Extensions;
 using SimpleCrawler.Js.Abstractions;
-using SimpleCrawler.Js.Errors;
 using SimpleCrawler.Core.Collectors;
 using SimpleCrawler.Core.Helpers;
 using SimpleCrawler.Js.Models;
@@ -162,17 +161,28 @@ public sealed class JsRenderer
         }
         RenderProfiler.Stop("phase.parse", parseTime);
 
-        var documentBaseUri = ResolveDocumentBase(engine, isolation, pageUri);
+        // Everything from here reads the parsed document, so it travels together: the context is what the
+        // steps below take instead of six parameters each.
+        var context = new RenderingContext
+        {
+            Engine = engine,
+            Isolation = isolation,
+            PageUrl = pageUrl,
+            PageUri = pageUri,
+            DocumentBaseUri = ResolveDocumentBase(engine, isolation, pageUri),
+            Client = client,
+            CancellationToken = cancellationToken,
+        };
 
         var collectTime = RenderProfiler.Start();
-        var (regularScripts, moduleEntries) = await CollectScriptsFromJsAsync(engine, isolation, documentBaseUri, pageUrl, client, _sources, cancellationToken);
+        var (regularScripts, moduleEntries) = await CollectScriptsFromJsAsync(context);
         RenderProfiler.Stop("phase.collect", collectTime);
 
         // The markup had a <script> tag but the parser surfaced nothing executable (e.g. JSON), so nothing
         // ran: finalize against the parsed-only tree.
         if (regularScripts.Count == 0 && moduleEntries.Count == 0)
         {
-            return Finalize(engine, isolation, finalize, abortValue, totalTime);
+            return Finalize(context, finalize, abortValue, totalTime);
         }
 
         // Snapshot the parsed-but-unscripted tree so a streaming/hydration bundle that tears down the
@@ -197,19 +207,19 @@ public sealed class JsRenderer
         var bundleExecutionTime = RenderProfiler.Start();
         foreach (var script in regularScripts)
         {
-            RunRegularJs(engine, isolation, script);
+            RunRegularJs(context, script);
         }
 
         foreach (var module in moduleEntries)
         {
-            RunModule(engine, isolation, module);
+            RunModule(context, module);
         }
         RenderProfiler.Stop("phase.bundleExec", bundleExecutionTime);
 
         isolation.Run("DOMContentLoaded dispatch", () => engine.CallGlobal("__crawlerFireDomContentLoaded"));
 
         var drainTime = RenderProfiler.Start();
-        await DrainJsAsync(engine, isolation, documentBaseUri, pageUri, client, cancellationToken);
+        await DrainJsAsync(context);
         RenderProfiler.Stop("phase.drain", drainTime);
 
         if (_options.EnableStreams)
@@ -219,22 +229,22 @@ public sealed class JsRenderer
                 _logger.LogDebug("JS render regressed below the server-rendered shell on '{url}'; restored baseline ({anchors} anchors).", pageUrl, restored);
         }
 
-        return Finalize(engine, isolation, finalize, abortValue, totalTime);
+        return Finalize(context, finalize, abortValue, totalTime);
     }
 
     /// <summary>
     /// The last crossing, and the one with the most to lose: a throw while reading the settled tree would
     /// discard a render that already ran, so it degrades to <paramref name="abortValue"/> like any other.
     /// </summary>
-    private static T Finalize<T>(IJsEngine engine, RenderIsolation isolation, Func<IJsEngine, T> finalize, T abortValue, long totalTime)
+    private static T Finalize<T>(RenderingContext context, Func<IJsEngine, T> finalize, T abortValue, long totalTime)
     {
         var finalizeTime = RenderProfiler.Start();
-        var result = isolation.Run("Render finalize", () => finalize(engine), abortValue);
+        var result = context.Isolation.Run("Render finalize", () => finalize(context.Engine), abortValue);
         RenderProfiler.Stop("phase.finalize", finalizeTime);
         RenderProfiler.Stop("phase.total", totalTime);
 
         if (DomProfiler.Enabled)
-            DomProfiler.Add(isolation.Run("DOM profile dump", () => engine.Evaluate<string>("__crawlerDomProfileDump()"), string.Empty));
+            DomProfiler.Add(context.Isolation.Run("DOM profile dump", () => context.Engine.Evaluate<string>("__crawlerDomProfileDump()"), string.Empty));
 
         return result;
     }
@@ -253,12 +263,12 @@ public sealed class JsRenderer
         return pageUri;
     }
 
-    private async Task<(IReadOnlyList<RegularScript> Regular, IReadOnlyList<ModuleScript> Modules)> CollectScriptsFromJsAsync(IJsEngine engine, RenderIsolation isolation, Uri baseUri, string pageUrl, HttpClient client, SourceCache sources, CancellationToken cancellationToken)
+    private async Task<(IReadOnlyList<RegularScript> Regular, IReadOnlyList<ModuleScript> Modules)> CollectScriptsFromJsAsync(RenderingContext context)
     {
         var regular = new List<RegularScript>();
         var modules = new List<ModuleScript>();
 
-        var json = isolation.Run("Script collection", () => engine.Evaluate<string>("__crawlerCollectScripts()"), string.Empty);
+        var json = context.Isolation.Run("Script collection", () => context.Engine.Evaluate<string>("__crawlerCollectScripts()"), string.Empty);
         if (string.IsNullOrEmpty(json))
             return (regular, modules);
 
@@ -272,10 +282,10 @@ public sealed class JsRenderer
 
             if (external)
             {
-                if (!Uri.TryCreate(baseUri, src, out var absolute))
+                if (!Uri.TryCreate(context.DocumentBaseUri, src, out var absolute))
                     continue;
 
-                var source = await FetchSourceAsync(client, sources, absolute, cancellationToken);
+                var source = await FetchSourceAsync(context, absolute);
                 if (source is null)
                     continue;
 
@@ -290,9 +300,9 @@ public sealed class JsRenderer
                     continue;
 
                 if (isModule)
-                    modules.Add(new ModuleScript(InlineModuleSpecifier(pageUrl, modules.Count), text, External: false));
+                    modules.Add(new ModuleScript(InlineModuleSpecifier(context.PageUrl, modules.Count), text, External: false));
                 else
-                    regular.Add(new RegularScript(text, pageUrl, string.Empty, External: false));
+                    regular.Add(new RegularScript(text, context.PageUrl, string.Empty, External: false));
             }
         }
 
@@ -308,22 +318,22 @@ public sealed class JsRenderer
     private static string InlineModuleSpecifier(string pageUrl, int ordinal)
         => $"{pageUrl}#inline-{ordinal}";
 
-    private static void RunRegularJs(IJsEngine engine, RenderIsolation isolation, RegularScript script)
+    private static void RunRegularJs(RenderingContext context, RegularScript script)
     {
-        SetCurrentScript(engine, isolation, script.External ? script.RawSrc : "");
+        SetCurrentScript(context, script.External ? script.RawSrc : "");
         try
         {
-            isolation.Run("Bundle execution", () =>
+            context.Isolation.Run("Bundle execution", () =>
             {
                 if (script.External)
-                    engine.ExecuteCached(script.Src, script.Source);
+                    context.Engine.ExecuteCached(script.Src, script.Source);
                 else
-                    engine.Execute(script.Source);
+                    context.Engine.Execute(script.Source);
             });
         }
         finally
         {
-            SetCurrentScript(engine, isolation, null);
+            SetCurrentScript(context, null);
         }
     }
 
@@ -339,20 +349,22 @@ public sealed class JsRenderer
     /// HTMLScriptElement.src).
     /// </para>
     /// </summary>
-    private static void SetCurrentScript(IJsEngine engine, RenderIsolation isolation, string? src)
-        => isolation.Run("currentScript update", () => engine.CallGlobal("__crawlerSetCurrentScript", src));
+    private static void SetCurrentScript(RenderingContext context, string? src)
+        => context.Isolation.Run("currentScript update", () => context.Engine.CallGlobal("__crawlerSetCurrentScript", src));
 
-    private async Task DrainJsAsync(IJsEngine engine, RenderIsolation isolation, Uri baseUri, Uri pageUri, HttpClient client, CancellationToken cancellationToken)
+    private async Task DrainJsAsync(RenderingContext context)
     {
         // Settle after a few idle turns: __crawlerPending reports the queue depth before __crawlerPump runs
         // it, so a turn with no pending work counts as idle. Runtime-appended <script src>/<link> chunks are
         // loaded at the top of each turn — before the timer pump — so a code-split route's chunk is installed
         // and its load event fired before webpack's chunk-load timeout callback runs.
+        var engine = context.Engine;
+        var isolation = context.Isolation;
         var iterations = 0;
         var idle = 0;
         while (iterations++ < _options.MaxTaskDrainIterations && idle < _idleTurnsBeforeSettled)
         {
-            var loadedResource = await DrainResourcesAsync(engine, isolation, baseUri, pageUri, client, cancellationToken);
+            var loadedResource = await DrainResourcesAsync(context);
 
             // A turn that could not be read is a turn with nothing left to run: every fallback here settles
             // the loop rather than spinning it against an engine that is answering with exceptions.
@@ -366,9 +378,9 @@ public sealed class JsRenderer
         }
     }
 
-    private async Task<bool> DrainResourcesAsync(IJsEngine engine, RenderIsolation isolation, Uri baseUri, Uri pageUri, HttpClient client, CancellationToken cancellationToken)
+    private async Task<bool> DrainResourcesAsync(RenderingContext context)
     {
-        var json = isolation.Run("Resource queue take", () => engine.Evaluate<string>("__crawlerTakeResources()"), string.Empty);
+        var json = context.Isolation.Run("Resource queue take", () => context.Engine.Evaluate<string>("__crawlerTakeResources()"), string.Empty);
         if (string.IsNullOrEmpty(json))
             return false;
 
@@ -376,12 +388,18 @@ public sealed class JsRenderer
         var loaded = false;
         foreach (var entry in doc.RootElement.EnumerateArray())
         {
-            var id = entry.GetProperty("id").GetInt32();
-            var tag = entry.TryGetProperty("tag", out var tagProp) ? tagProp.GetString() : null;
-            var src = entry.TryGetProperty("src", out var srcProp) ? srcProp.GetString() : null;
-            var type = entry.TryGetProperty("type", out var typeProp) ? typeProp.GetString() : null;
+            // The queue is this host's own payload, so a malformed entry is not a page failure to report —
+            // but an entry with no handle can neither be loaded nor answered, so it is skipped rather than
+            // thrown over.
+            if (!entry.TryGetProperty("id", out var idProp) || !idProp.TryGetInt32(out var id))
+                continue;
 
-            await LoadResourceAsync(engine, isolation, id, tag, src, type, baseUri, pageUri, client, cancellationToken);
+            await LoadResourceAsync(context, new PendingResource(
+                id,
+                entry.TryGetProperty("tag", out var tagProp) ? tagProp.GetString() : null,
+                entry.TryGetProperty("src", out var srcProp) ? srcProp.GetString() : null,
+                entry.TryGetProperty("type", out var typeProp) ? typeProp.GetString() : null));
+
             loaded = true;
         }
 
@@ -396,62 +414,60 @@ public sealed class JsRenderer
     /// links, and nothing awaits their load, which is the right trade for a crawl but the wrong one when the
     /// render exists to observe what the page installs. Every other case fires the node's load (or error)
     /// event to settle the awaiting import().
-    /// <para>
-    /// <paramref name="type"/> is the node's <c>type</c> attribute, and splits the same two entries the
-    /// initial markup is already split into: <c>module</c> goes to the module loader so its imports resolve,
-    /// anything else to the classic-script entry.
-    /// </para>
     /// </summary>
-    private async Task LoadResourceAsync(IJsEngine engine, RenderIsolation isolation, int id, string? tag, string? src, string? type, Uri baseUri, Uri pageUri, HttpClient client, CancellationToken cancellationToken)
+    private async Task LoadResourceAsync(RenderingContext context, PendingResource resource)
     {
-        if (!string.Equals(tag, "script", StringComparison.Ordinal))
+        if (!string.Equals(resource.Tag, "script", StringComparison.Ordinal))
         {
-            FireResourceEvent(engine, isolation, id, "load");
+            FireResourceEvent(context, resource, "load");
             return;
         }
 
-        if (string.IsNullOrEmpty(src) || !Uri.TryCreate(baseUri, src, out var absolute))
+        if (string.IsNullOrEmpty(resource.Src) || !Uri.TryCreate(context.DocumentBaseUri, resource.Src, out var absolute))
         {
-            FireResourceEvent(engine, isolation, id, "error");
+            FireResourceEvent(context, resource, "error");
             return;
         }
 
         if (!_options.ExecuteCrossOriginScripts
-            && !string.Equals(absolute.Host, pageUri.Host, StringComparison.OrdinalIgnoreCase))
+            && !string.Equals(absolute.Host, context.PageUri.Host, StringComparison.OrdinalIgnoreCase))
             return;
 
-        var source = await FetchSourceAsync(client, _sources, absolute, cancellationToken);
+        var source = await FetchSourceAsync(context, absolute);
         if (source is null)
         {
-            FireResourceEvent(engine, isolation, id, "error");
+            FireResourceEvent(context, resource, "error");
             return;
         }
 
-        // A module never becomes document.currentScript, in a browser or here, so only the classic path
-        // brackets its execution with one.
-        if (string.Equals(type, "module", StringComparison.OrdinalIgnoreCase))
-        {
-            RunModule(engine, isolation, new ModuleScript(absolute.AbsoluteUri, source, External: true));
-            FireResourceEvent(engine, isolation, id, "load");
-            return;
-        }
+        var ran = RunAppendedScript(context, resource, absolute, source);
+        FireResourceEvent(context, resource, ran ? "load" : "error");
+    }
 
-        SetCurrentScript(engine, isolation, src);
-        bool executed;
+    /// <summary>
+    /// The same split the initial markup already gets, on the runtime path: the node's <c>type</c> decides
+    /// whether its source runs as a module — so its imports resolve through the loader — or as a classic
+    /// script. Only the classic half brackets the execution with a <c>document.currentScript</c>, because a
+    /// module never becomes one, in a browser or here.
+    /// </summary>
+    private static bool RunAppendedScript(RenderingContext context, PendingResource resource, Uri absolute, string source)
+    {
+        if (string.Equals(resource.Type, "module", StringComparison.OrdinalIgnoreCase))
+            return RunModule(context, new ModuleScript(absolute.AbsoluteUri, source, External: true));
+
+        SetCurrentScript(context, resource.Src);
         try
         {
-            executed = isolation.Run("Chunk execution", () => engine.ExecuteCached(absolute.AbsoluteUri, source));
+            return context.Isolation.Run("Chunk execution", () => context.Engine.ExecuteCached(absolute.AbsoluteUri, source));
         }
         finally
         {
-            SetCurrentScript(engine, isolation, null);
+            SetCurrentScript(context, null);
         }
-
-        FireResourceEvent(engine, isolation, id, executed ? "load" : "error");
     }
 
-    private static void FireResourceEvent(IJsEngine engine, RenderIsolation isolation, int id, string type)
-        => isolation.Run("Resource event dispatch", () => engine.CallGlobal("__crawlerFireResourceEvent", id, type));
+    private static void FireResourceEvent(RenderingContext context, PendingResource resource, string type)
+        => context.Isolation.Run("Resource event dispatch", () => context.Engine.CallGlobal("__crawlerFireResourceEvent", resource.Id, type));
 
     private JsExtract CollectLinks(IJsEngine engine)
     {
@@ -568,8 +584,12 @@ public sealed class JsRenderer
         };
     }
 
-    private static void RunModule(IJsEngine engine, RenderIsolation isolation, ModuleScript module)
-        => isolation.Run("Module execution", () => engine.EvaluateModule(module.Specifier, module.Source, module.External));
+    /// <summary>
+    /// Whether the module ran. A module that threw registered nothing, so the appended-script path reports it
+    /// to the page as the classic path reports a chunk that threw — an error event, not a load.
+    /// </summary>
+    private static bool RunModule(RenderingContext context, ModuleScript module)
+        => context.Isolation.Run("Module execution", () => context.Engine.EvaluateModule(module.Specifier, module.Source, module.External));
 
     private static bool ContainsScriptTag(ReadOnlySpan<byte> html)
     {
@@ -612,35 +632,35 @@ public sealed class JsRenderer
     /// or times out is ordinary against a live page. Same reasoning and same shape as
     /// <c>HttpModuleFetcher.Download</c>, which the module half of this already had.
     /// </summary>
-    private async Task<string?> FetchSourceAsync(HttpClient client, SourceCache sources, Uri absolute, CancellationToken cancellationToken)
+    private async Task<string?> FetchSourceAsync(RenderingContext context, Uri absolute)
     {
-        if (sources.TryGet(absolute, out var cached))
+        if (_sources.TryGet(absolute, out var cached))
             return cached;
 
         if (absolute.Scheme != Uri.UriSchemeHttp && absolute.Scheme != Uri.UriSchemeHttps)
         {
             _logger.LogWarning("Script source '{url}' is not fetchable over HTTP.", absolute);
-            return sources.Store(absolute, null);
+            return _sources.Store(absolute, null);
         }
 
         try
         {
-            using var response = await client.GetAsync(absolute, cancellationToken);
+            using var response = await context.Client.GetAsync(absolute, context.CancellationToken);
             if (!response.IsSuccessStatus())
             {
                 _logger.LogWarning("Script source '{url}' was refused with status {status}.", absolute, (int)response.StatusCode);
-                return sources.Store(absolute, null);
+                return _sources.Store(absolute, null);
             }
 
-            return sources.Store(absolute, await response.Content.ReadAsStringAsync(cancellationToken));
+            return _sources.Store(absolute, await response.Content.ReadAsStringAsync(context.CancellationToken));
         }
         // Guarded on the caller's token rather than on the exception type: a per-request timeout arrives as a
         // cancellation that is not the crawl stopping, and losing the whole render to one slow chunk is the
         // failure this exists to prevent.
-        catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
+        catch (Exception ex) when (!context.CancellationToken.IsCancellationRequested)
         {
             _logger.LogWarning("Script fetch error for '{url}': {message}", absolute, ex.Message);
-            return sources.Store(absolute, null);
+            return _sources.Store(absolute, null);
         }
     }
 }
