@@ -384,10 +384,10 @@
     global.__http = global.__http || {
       request: (url, method, headersJson, body) => JSON.parse(__httpRequest(url, method, headersJson, body))
     };
-    global.Headers = global.Headers || Headers;
-    global.Response = global.Response || Response;
-    global.Request = global.Request || Request;
-    global.FormData = global.FormData || FormData;
+    global.Headers = Headers;
+    global.Response = Response;
+    global.Request = Request;
+    global.FormData = FormData;
     global.fetch = fetch;
     global.XMLHttpRequest = XMLHttpRequest;
     global.XMLHttpRequestEventTarget = XMLHttpRequestEventTarget;

@@ -10,6 +10,42 @@ Entries before 4.0.0 are condensed to what changed; the reasoning behind each is
 
 ## [Unreleased]
 
+### Added
+
+- The DOM prelude gained the browser APIs a survey of production pages found it missing, each one an
+  exception inside a real bundle's init rather than a missed lookup: `document.URL`/`documentURI` and
+  `Node.baseURI`; `performance.timing` with its `navigation` counterpart from
+  `getEntriesByType("navigation")`; `document.createTreeWalker`/`createNodeIterator` and the `NodeFilter`
+  constants they are called with; `document.write`/`writeln` (appending, never the browser's post-load
+  document-clearing behaviour) with `open`/`close` beside them; `Text.splitText`; and the `DOMTokenList`,
+  `Window` and `File` constructors.
+- `JsPageTimeoutException`, a `TimeoutException` named for the scope it bounds: a ceiling over the whole page
+  has to end the render, while one over a single execution call must not.
+
+### Changed
+
+- `FormData`, `Headers`, `Request` and `Response` moved out from behind `EnableFetch` into the base prelude.
+  They construct and hold data and issue nothing; a caller declines the fetch shim to keep the page's
+  requests off the network, not to lose four constructors a form widget builds its payload in. Only
+  `fetch`/`XMLHttpRequest`/`__http` remain gated, and the shim still reinstalls its own copies so a fetched
+  response and the global a page tests it against stay the same class.
+- `classList` returns a real `DOMTokenList` instance, one per element, instead of a fresh object literal per
+  read — so identity tests and `DOMTokenList.prototype` patches both work. The token operations are unchanged.
+
+### Fixed
+
+- One isolation policy at every crossing into the JS engine, stated once instead of per call site:
+  cancellation and a page-scoped ceiling propagate, everything else is a counted warning and the render
+  continues. A raw CLR exception — most often Jint's per-script `TimeoutException`, but equally anything host
+  code the engine called threw — used to escape from any of a dozen unprotected crossings (the preludes, the
+  location/viewport setup, the script collection, the drain loop, and the finalize that reads the settled
+  tree) and discard a render that had already run. A page is still abandoned once it has spent several script
+  ceilings, which is what bounds the total.
+- A `<script type="module">` appended at runtime runs through the module loader instead of the classic-script
+  entry, so its imports resolve. The initial markup was already split by type; the runtime path never was.
+- Two inline `<script type="module">` blocks on one page both run. They shared a specifier — the page URL —
+  which Jint refuses outright (taking both) and V8 answers from its module cache (running the first twice).
+
 ## [4.0.0] - 2026-07-31
 
 ### Added

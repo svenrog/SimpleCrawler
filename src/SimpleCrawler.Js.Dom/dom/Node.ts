@@ -18,6 +18,14 @@ export abstract class Node extends EventTarget {
         return documentRef.current;
     }
 
+    // Every node answers the document's base URL; Document overrides this with the computation. Bundles
+    // resolve their own asset URLs against `node.baseURI` (a web component reading it off itself), where
+    // undefined is a throw inside the component's constructor rather than a missed lookup.
+    get baseURI(): string {
+        const doc = this.ownerDocument;
+        return doc ? doc.baseURI : "";
+    }
+
     appendChild(child: Node): Node {
         return this.insertBefore(child, null);
     }

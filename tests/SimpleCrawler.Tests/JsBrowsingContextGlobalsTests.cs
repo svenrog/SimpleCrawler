@@ -47,6 +47,9 @@ public class JsBrowsingContextGlobalsTests : IClassFixture<JsRendererFixture>
             window.__probeThrew = true;
           }
           window.__stubInstalled = true;
+          window.__windowIsFunction = typeof Window === 'function';
+          window.__windowIsInstance = window instanceof Window;
+          window.__documentIsInstance = document instanceof Window;
         </script>
         </body></html>
         """;
@@ -61,7 +64,10 @@ public class JsBrowsingContextGlobalsTests : IClassFixture<JsRendererFixture>
               length: window.__length,
               locator: window.__locator,
               probeThrew: window.__probeThrew,
-              stubInstalled: !!window.__stubInstalled
+              stubInstalled: !!window.__stubInstalled,
+              windowIsFunction: window.__windowIsFunction,
+              windowIsInstance: window.__windowIsInstance,
+              documentIsInstance: window.__documentIsInstance
             })
             """),
     ]);
@@ -110,5 +116,24 @@ public class JsBrowsingContextGlobalsTests : IClassFixture<JsRendererFixture>
         Assert.False(ctx.GetProperty("probeThrew").GetBoolean());
         Assert.False(ctx.GetProperty("locator").GetBoolean());
         Assert.True(ctx.GetProperty("stubInstalled").GetBoolean());
+    }
+
+    // The window's own interface object. The realm's global belongs to the engine, so it cannot be a real
+    // instance of anything the prelude declares — but `x instanceof Window` is answerable exactly in a
+    // context with no frames, and naming the constructor bare (a `typeof Window` guard, a prototype patch)
+    // is a ReferenceError that costs whatever script does it.
+    [Theory]
+    [InlineData(JsEngine.Jint)]
+    [InlineData(JsEngine.V8)]
+    public async Task TheWindowInterfaceObject_IdentifiesTheGlobalAndNothingElse(JsEngine engine)
+    {
+        if (engine == JsEngine.V8)
+            Assert.SkipUnless(V8Support.IsAvailable, V8Support.UnavailableReason);
+
+        var ctx = await CollectAsync(engine);
+
+        Assert.True(ctx.GetProperty("windowIsFunction").GetBoolean());
+        Assert.True(ctx.GetProperty("windowIsInstance").GetBoolean());
+        Assert.False(ctx.GetProperty("documentIsInstance").GetBoolean());
     }
 }

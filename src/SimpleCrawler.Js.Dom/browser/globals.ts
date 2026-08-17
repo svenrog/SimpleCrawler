@@ -41,6 +41,16 @@ import { IntersectionObserverEntry } from "./IntersectionObserverEntry";
 import { PerformanceObserver } from "./PerformanceObserver";
 import { Worker } from "./Worker";
 import { Blob } from "./Blob";
+import { File } from "./File";
+import { Window } from "./Window";
+import { DOMTokenList } from "../dom/DOMTokenList";
+import { NodeFilter } from "../dom/NodeFilter";
+import { TreeWalker } from "../dom/TreeWalker";
+import { NodeIterator } from "../dom/NodeIterator";
+import { FormData } from "../network/types/FormData";
+import { Headers } from "../network/types/Headers";
+import { Request } from "../network/types/Request";
+import { Response } from "../network/types/Response";
 import { DOMException } from "./DOMException";
 import { DOMParser } from "./DOMParser";
 import { XMLSerializer } from "./XMLSerializer";
@@ -137,6 +147,16 @@ export function installDOM(global: any): void {
     // (functions, cycles) aren't supported, matching nothing real but never reached by our targets.
     global.structuredClone = global.structuredClone || ((value: any) => value == null ? value : JSON.parse(JSON.stringify(value)));
     global.Blob = Blob;
+    global.File = global.File || File;
+    // The inert half of the fetch API. FormData/Headers/Request/Response construct and hold data; they issue
+    // nothing, so they belong here rather than behind EnableFetch, which a caller declines to keep the page's
+    // beacons off the network — not to lose four constructors a form widget builds its payload in. The fetch
+    // prelude reinstalls its own copies when it runs, so a Response it hands back stays instanceof-comparable
+    // with the global the page reads.
+    global.FormData = global.FormData || FormData;
+    global.Headers = global.Headers || Headers;
+    global.Request = global.Request || Request;
+    global.Response = global.Response || Response;
     global.DOMException = global.DOMException || DOMException;
     global.DOMParser = global.DOMParser || DOMParser;
     global.XMLSerializer = global.XMLSerializer || XMLSerializer;
@@ -153,6 +173,11 @@ export function installDOM(global: any): void {
     global.NodeList = NodeList;
     global.Element = Element;
     global.CharacterData = CharacterData;
+    global.DOMTokenList = DOMTokenList;
+    global.NodeFilter = NodeFilter;
+    global.TreeWalker = TreeWalker;
+    global.NodeIterator = NodeIterator;
+    global.Window = global.Window || Window;
     global.Document = Document;
     global.DocumentType = DocumentType;
     global.Text = Text;

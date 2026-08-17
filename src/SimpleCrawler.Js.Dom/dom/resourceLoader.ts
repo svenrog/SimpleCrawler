@@ -30,7 +30,14 @@ export function registerResource(node: any): void {
 export function takeResources(): string {
     if (!_pending.length) return "";
     const batch = _pending.splice(0, _pending.length);
-    return JSON.stringify(batch.map((r) => ({ id: r.id, tag: r.node.localName, src: r.node.getAttribute("src") || "" })));
+    // type carries the script's own type attribute: an appended type="module" has to reach the host's module
+    // loader rather than its classic-script entry, or its imports never resolve and its exports never run.
+    return JSON.stringify(batch.map((r) => ({
+        id: r.id,
+        tag: r.node.localName,
+        src: r.node.getAttribute("src") || "",
+        type: r.node.getAttribute("type") || "",
+    })));
 }
 
 export function pendingResourceCount(): number {

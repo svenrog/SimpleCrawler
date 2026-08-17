@@ -7,6 +7,7 @@ import { querySelectorAll, matchesSelector } from "../selector/querySelector";
 import { serializeChildren, serializeNode } from "../html/serializer";
 import { parserRef } from "../html/parserRef";
 import { registerResource } from "./resourceLoader";
+import { DOMTokenList, classListFor } from "./DOMTokenList";
 import { viewportWidth, viewportHeight } from "../browser/viewport";
 import { Animatable } from "./Animatable";
 import { Animation } from "./Animation";
@@ -364,40 +365,8 @@ export class Element extends Node implements Animatable {
         this.attrs.set("lang", String(v));
     }
 
-    get classList(): any {
-        const read = (): string[] => (this.attrs.get("class") || "").split(/\s+/).filter(Boolean);
-        const write = (tokens: string[]): void => { this.attrs.set("class", tokens.join(" ")); };
-        return {
-            add: (...names: string[]): void => {
-                const t = read();
-                for (const n of names) if (t.indexOf(n) < 0) t.push(n);
-                write(t);
-            },
-            remove: (...names: string[]): void => {
-                write(read().filter((x) => names.indexOf(x) < 0));
-            },
-            toggle: (name: string, force?: boolean): boolean => {
-                const has = read().indexOf(name) >= 0;
-                const next = force === undefined ? !has : force;
-                if (next && !has) write([...read(), name]);
-                else if (!next && has) write(read().filter((x) => x !== name));
-                return next;
-            },
-            replace: (oldName: string, newName: string): boolean => {
-                const t = read();
-                const i = t.indexOf(oldName);
-                if (i < 0) return false;
-                t[i] = newName;
-                write(t);
-                return true;
-            },
-            contains: (name: string): boolean => read().indexOf(name) >= 0,
-            item: (i: number): string | null => read()[i] ?? null,
-            forEach: (cb: (value: string, index: number) => void): void => read().forEach(cb),
-            get length(): number { return read().length; },
-            get value(): string { return read().join(" "); },
-            toString: (): string => read().join(" "),
-        };
+    get classList(): DOMTokenList {
+        return classListFor(this);
     }
 
     get children(): Element[] {

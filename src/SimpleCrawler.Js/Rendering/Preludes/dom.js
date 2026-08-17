@@ -122,6 +122,13 @@
     get ownerDocument() {
       return documentRef.current;
     }
+    // Every node answers the document's base URL; Document overrides this with the computation. Bundles
+    // resolve their own asset URLs against `node.baseURI` (a web component reading it off itself), where
+    // undefined is a throw inside the component's constructor rather than a missed lookup.
+    get baseURI() {
+      const doc2 = this.ownerDocument;
+      return doc2 ? doc2.baseURI : "";
+    }
     appendChild(child) {
       return this.insertBefore(child, null);
     }
@@ -295,6 +302,16 @@
     }
     set textContent(v) {
       this.data = v == null ? "" : String(v);
+    }
+    // Splits at `offset`, keeping the head and returning the tail as the next sibling. Hydration walks a
+    // server-rendered text run and splits it where the client tree expects a boundary; without this the
+    // reconciler throws mid-commit and the subtree it was mounting is lost.
+    splitText(offset) {
+      const at = Math.max(0, Math.min(Number(offset) || 0, this.data.length));
+      const tail = new _Text(this.data.slice(at));
+      this.data = this.data.slice(0, at);
+      if (this.parentNode) this.parentNode.insertBefore(tail, this.nextSibling);
+      return tail;
     }
     _shallowClone() {
       return new _Text(this.data);
@@ -567,7 +584,12 @@
   function takeResources() {
     if (!_pending.length) return "";
     const batch = _pending.splice(0, _pending.length);
-    return JSON.stringify(batch.map((r) => ({ id: r.id, tag: r.node.localName, src: r.node.getAttribute("src") || "" })));
+    return JSON.stringify(batch.map((r) => ({
+      id: r.id,
+      tag: r.node.localName,
+      src: r.node.getAttribute("src") || "",
+      type: r.node.getAttribute("type") || ""
+    })));
   }
   function pendingResourceCount() {
     return _pending.length;
@@ -593,6 +615,92 @@
         reportSwallowed("resource " + type + " dispatch", e);
       }
     }
+  }
+
+  // dom/DOMTokenList.ts
+  var _lists = /* @__PURE__ */ new WeakMap();
+  var DOMTokenList = class {
+    constructor(owner, attribute) {
+      this._owner = owner;
+      this._attribute = attribute;
+    }
+    _read() {
+      const value = this._owner.getAttribute(this._attribute);
+      return (value || "").split(/\s+/).filter(Boolean);
+    }
+    _write(tokens) {
+      this._owner.setAttribute(this._attribute, tokens.join(" "));
+    }
+    add(...names) {
+      const tokens = this._read();
+      for (const name of names) if (tokens.indexOf(name) < 0) tokens.push(name);
+      this._write(tokens);
+    }
+    remove(...names) {
+      this._write(this._read().filter((x) => names.indexOf(x) < 0));
+    }
+    toggle(name, force) {
+      const has = this._read().indexOf(name) >= 0;
+      const next = force === void 0 ? !has : force;
+      if (next && !has) this._write([...this._read(), name]);
+      else if (!next && has) this._write(this._read().filter((x) => x !== name));
+      return next;
+    }
+    replace(oldName, newName) {
+      const tokens = this._read();
+      const at = tokens.indexOf(oldName);
+      if (at < 0) return false;
+      tokens[at] = newName;
+      this._write(tokens);
+      return true;
+    }
+    contains(name) {
+      return this._read().indexOf(name) >= 0;
+    }
+    item(index) {
+      return this._read()[index] ?? null;
+    }
+    forEach(callback) {
+      const tokens = this._read();
+      for (let i = 0; i < tokens.length; i++) callback(tokens[i], i, this);
+    }
+    // Every token list is a live class attribute here, and no conditional-feature attribute (rel, sandbox)
+    // is modelled, so nothing is supported — the spec answer for a list with no defined token set.
+    supports(_token) {
+      return false;
+    }
+    get length() {
+      return this._read().length;
+    }
+    get value() {
+      return this._read().join(" ");
+    }
+    set value(v) {
+      this._owner.setAttribute(this._attribute, v == null ? "" : String(v));
+    }
+    keys() {
+      return this._read().keys();
+    }
+    values() {
+      return this._read().values();
+    }
+    entries() {
+      return this._read().entries();
+    }
+    [Symbol.iterator]() {
+      return this._read()[Symbol.iterator]();
+    }
+    toString() {
+      return this._read().join(" ");
+    }
+  };
+  function classListFor(owner) {
+    let list = _lists.get(owner);
+    if (!list) {
+      list = new DOMTokenList(owner, "class");
+      _lists.set(owner, list);
+    }
+    return list;
   }
 
   // browser/viewport.ts
@@ -1086,45 +1194,7 @@
       this.attrs.set("lang", String(v));
     }
     get classList() {
-      const read = () => (this.attrs.get("class") || "").split(/\s+/).filter(Boolean);
-      const write = (tokens) => {
-        this.attrs.set("class", tokens.join(" "));
-      };
-      return {
-        add: (...names) => {
-          const t = read();
-          for (const n of names) if (t.indexOf(n) < 0) t.push(n);
-          write(t);
-        },
-        remove: (...names) => {
-          write(read().filter((x) => names.indexOf(x) < 0));
-        },
-        toggle: (name, force) => {
-          const has = read().indexOf(name) >= 0;
-          const next = force === void 0 ? !has : force;
-          if (next && !has) write([...read(), name]);
-          else if (!next && has) write(read().filter((x) => x !== name));
-          return next;
-        },
-        replace: (oldName, newName) => {
-          const t = read();
-          const i = t.indexOf(oldName);
-          if (i < 0) return false;
-          t[i] = newName;
-          write(t);
-          return true;
-        },
-        contains: (name) => read().indexOf(name) >= 0,
-        item: (i) => read()[i] ?? null,
-        forEach: (cb) => read().forEach(cb),
-        get length() {
-          return read().length;
-        },
-        get value() {
-          return read().join(" ");
-        },
-        toString: () => read().join(" ")
-      };
+      return classListFor(this);
     }
     get children() {
       return this.childNodes.filter((n) => n.nodeType === 1 /* Element */);
@@ -2473,6 +2543,200 @@
     }
   };
 
+  // dom/NodeFilter.ts
+  var NodeFilter = {
+    FILTER_ACCEPT: 1,
+    FILTER_REJECT: 2,
+    FILTER_SKIP: 3,
+    SHOW_ALL: 4294967295,
+    SHOW_ELEMENT: 1,
+    SHOW_ATTRIBUTE: 2,
+    SHOW_TEXT: 4,
+    SHOW_CDATA_SECTION: 8,
+    SHOW_ENTITY_REFERENCE: 16,
+    SHOW_ENTITY: 32,
+    SHOW_PROCESSING_INSTRUCTION: 64,
+    SHOW_COMMENT: 128,
+    SHOW_DOCUMENT: 256,
+    SHOW_DOCUMENT_TYPE: 512,
+    SHOW_DOCUMENT_FRAGMENT: 1024,
+    SHOW_NOTATION: 2048
+  };
+  function accepts(node, whatToShow, filter) {
+    if ((1 << node.nodeType - 1 & whatToShow) === 0) return NodeFilter.FILTER_SKIP;
+    if (!filter) return NodeFilter.FILTER_ACCEPT;
+    const accept = typeof filter === "function" ? filter : filter.acceptNode;
+    if (typeof accept !== "function") return NodeFilter.FILTER_ACCEPT;
+    const verdict = accept.call(filter, node);
+    return verdict === NodeFilter.FILTER_REJECT || verdict === NodeFilter.FILTER_SKIP ? verdict : NodeFilter.FILTER_ACCEPT;
+  }
+  function nextInOrder(node, root, skipChildren) {
+    if (!skipChildren && node.childNodes.length) return node.childNodes[0];
+    let current = node;
+    while (current && current !== root) {
+      const sibling = current.nextSibling;
+      if (sibling) return sibling;
+      current = current.parentNode;
+    }
+    return null;
+  }
+  function previousInOrder(node, root) {
+    if (node === root) return null;
+    let previous = node.previousSibling;
+    if (!previous) return node.parentNode;
+    while (previous.childNodes.length) previous = previous.childNodes[previous.childNodes.length - 1];
+    return previous;
+  }
+
+  // dom/TreeWalker.ts
+  var TreeWalker = class {
+    constructor(root, whatToShow, filter) {
+      this.root = root;
+      this.whatToShow = whatToShow === void 0 ? NodeFilter.SHOW_ALL : whatToShow >>> 0;
+      this.filter = filter || null;
+      this.currentNode = root;
+    }
+    _accepts(node) {
+      return accepts(node, this.whatToShow, this.filter);
+    }
+    parentNode() {
+      let node = this.currentNode;
+      while (node && node !== this.root) {
+        node = node.parentNode;
+        if (node && this._accepts(node) === NodeFilter.FILTER_ACCEPT) {
+          this.currentNode = node;
+          return node;
+        }
+      }
+      return null;
+    }
+    firstChild() {
+      return this._child(true);
+    }
+    lastChild() {
+      return this._child(false);
+    }
+    nextSibling() {
+      return this._sibling(true);
+    }
+    previousSibling() {
+      return this._sibling(false);
+    }
+    nextNode() {
+      let node = this.currentNode;
+      let verdict = NodeFilter.FILTER_ACCEPT;
+      while (true) {
+        node = nextInOrder(node, this.root, verdict === NodeFilter.FILTER_REJECT);
+        if (!node) return null;
+        verdict = this._accepts(node);
+        if (verdict === NodeFilter.FILTER_ACCEPT) {
+          this.currentNode = node;
+          return node;
+        }
+      }
+    }
+    previousNode() {
+      let node = this.currentNode;
+      while (true) {
+        node = previousInOrder(node, this.root);
+        if (!node || node === this.root) return null;
+        if (this._accepts(node) === NodeFilter.FILTER_ACCEPT) {
+          this.currentNode = node;
+          return node;
+        }
+      }
+    }
+    // A SKIP verdict looks through the node to its own children; a REJECT verdict abandons the subtree.
+    _child(forward) {
+      const kids = this.currentNode.childNodes;
+      for (let i = 0; i < kids.length; i++) {
+        const node = kids[forward ? i : kids.length - 1 - i];
+        const verdict = this._accepts(node);
+        if (verdict === NodeFilter.FILTER_ACCEPT) {
+          this.currentNode = node;
+          return node;
+        }
+        if (verdict === NodeFilter.FILTER_SKIP) {
+          const saved = this.currentNode;
+          this.currentNode = node;
+          const descendant = this._child(forward);
+          if (descendant) return descendant;
+          this.currentNode = saved;
+        }
+      }
+      return null;
+    }
+    _sibling(forward) {
+      let node = this.currentNode;
+      while (node && node !== this.root) {
+        let sibling = forward ? node.nextSibling : node.previousSibling;
+        while (sibling) {
+          const verdict = this._accepts(sibling);
+          if (verdict === NodeFilter.FILTER_ACCEPT) {
+            this.currentNode = sibling;
+            return sibling;
+          }
+          if (verdict === NodeFilter.FILTER_SKIP && sibling.childNodes.length) {
+            const saved = this.currentNode;
+            this.currentNode = sibling;
+            const descendant = this._child(forward);
+            if (descendant) return descendant;
+            this.currentNode = saved;
+          }
+          sibling = forward ? sibling.nextSibling : sibling.previousSibling;
+        }
+        node = node.parentNode;
+      }
+      return null;
+    }
+  };
+
+  // dom/NodeIterator.ts
+  var NodeIterator = class {
+    constructor(root, whatToShow, filter) {
+      this.root = root;
+      this.whatToShow = whatToShow === void 0 ? NodeFilter.SHOW_ALL : whatToShow >>> 0;
+      this.filter = filter || null;
+      this.referenceNode = root;
+      this.pointerBeforeReferenceNode = true;
+    }
+    nextNode() {
+      let node = this.referenceNode;
+      let before = this.pointerBeforeReferenceNode;
+      while (true) {
+        if (before) before = false;
+        else {
+          node = nextInOrder(node, this.root, false);
+          if (!node) return null;
+        }
+        if (accepts(node, this.whatToShow, this.filter) === NodeFilter.FILTER_ACCEPT) {
+          this.referenceNode = node;
+          this.pointerBeforeReferenceNode = false;
+          return node;
+        }
+      }
+    }
+    previousNode() {
+      let node = this.referenceNode;
+      let before = this.pointerBeforeReferenceNode;
+      while (true) {
+        if (!before) before = true;
+        else {
+          node = previousInOrder(node, this.root);
+          if (!node) return null;
+        }
+        if (accepts(node, this.whatToShow, this.filter) === NodeFilter.FILTER_ACCEPT) {
+          this.referenceNode = node;
+          this.pointerBeforeReferenceNode = true;
+          return node;
+        }
+      }
+    }
+    // Detaching a NodeIterator has been a no-op since DOM4; callers written against the old API still call it.
+    detach() {
+    }
+  };
+
   // dom/Document.ts
   var Document = class _Document extends Node {
     constructor(defaultView) {
@@ -2497,6 +2761,23 @@
     // loader) read document.location.protocol/href, which threw on undefined when only window.location existed.
     get location() {
       return this.defaultView ? this.defaultView.location : null;
+    }
+    // The page's own address, read as a string by consent/analytics code that never touches location
+    // (`document.URL.indexOf(...)`, `new URL(document.documentURI)`). Both alias location.href here: this
+    // render performs no navigation, so there is no history entry for them to diverge over.
+    get URL() {
+      const loc = this.location;
+      return loc && loc.href ? String(loc.href) : "";
+    }
+    get documentURI() {
+      return this.URL;
+    }
+    // The base against which the document's relative URLs resolve: the first <base href>, resolved against
+    // the page URL, else the page URL itself. Node.baseURI delegates here for every node in the tree.
+    get baseURI() {
+      const base = this.querySelector("base");
+      const href = base ? base.getAttribute("href") : null;
+      return href ? resolveUrl(href, this.URL) : this.URL;
     }
     // Bundles read document.referrer as a string (analytics, `referrer.split('/')[2] !== location.host`);
     // a single-pass render has no navigation history, so it's always the empty string.
@@ -2549,6 +2830,34 @@
     }
     createRange() {
       return new Range();
+    }
+    createTreeWalker(root, whatToShow, filter) {
+      return new TreeWalker(root, whatToShow, filter);
+    }
+    createNodeIterator(root, whatToShow, filter) {
+      return new NodeIterator(root, whatToShow, filter);
+    }
+    // Nothing here is written during parsing — the host parses the whole shell before any script runs — so a
+    // write lands at the end of the body, which is where a trailing loader script's own write would have gone.
+    // A written <script src> is a real appended resource: the drain loop fetches and runs it like any other.
+    // Deliberately not the browser's post-load behaviour, which implicitly calls document.open() and wipes the
+    // page: a bundle that writes after load would take the whole render's content with it.
+    write(...parts) {
+      const target = this.body || this.documentElement;
+      const parse = parserRef.parseFragment;
+      if (!target || !parse) return;
+      const html = parts.map((p) => p == null ? "" : String(p)).join("");
+      for (const node of parse(html)) target.appendChild(node);
+    }
+    writeln(...parts) {
+      this.write(parts.map((p) => p == null ? "" : String(p)).join("") + "\n");
+    }
+    // A single-pass render has no parser to suspend and no stream to reopen; the pair exists so a loader that
+    // brackets its write() with them doesn't throw on the way in or out.
+    open() {
+      return this;
+    }
+    close() {
     }
     getElementById(id) {
       return walkFind(this.documentElement, (e) => e.getAttribute("id") === id);
@@ -3143,9 +3452,73 @@
   var _hostPerf = globalThis.Performance;
   var _hostNow = _hostPerf && typeof _hostPerf.now === "function" ? () => _hostPerf.now() : null;
   var startTime = _hostNow ? _hostNow() : Date.now();
+  var _epochStart = Date.now();
+  var PerformanceTiming = class {
+    constructor() {
+      this.navigationStart = _epochStart;
+      this.unloadEventStart = 0;
+      this.unloadEventEnd = 0;
+      this.redirectStart = 0;
+      this.redirectEnd = 0;
+      this.fetchStart = _epochStart;
+      this.domainLookupStart = _epochStart;
+      this.domainLookupEnd = _epochStart;
+      this.connectStart = _epochStart;
+      this.connectEnd = _epochStart;
+      this.secureConnectionStart = 0;
+      this.requestStart = _epochStart;
+      this.responseStart = _epochStart;
+      this.responseEnd = _epochStart;
+      this.domLoading = _epochStart;
+      this.domInteractive = _epochStart;
+      this.domContentLoadedEventStart = _epochStart;
+      this.domContentLoadedEventEnd = _epochStart;
+      this.domComplete = _epochStart;
+      this.loadEventStart = _epochStart;
+      this.loadEventEnd = _epochStart;
+    }
+  };
+  var PerformanceNavigationTiming = class {
+    constructor() {
+      this.entryType = "navigation";
+      // Assigned when the entry is handed out, not here: this instance is built while the prelude loads, and
+      // the page URL only arrives afterwards (__crawlerSetLocation).
+      this.name = "";
+      this.initiatorType = "navigation";
+      this.type = "navigate";
+      this.startTime = 0;
+      this.duration = 0;
+      this.fetchStart = 0;
+      this.domainLookupStart = 0;
+      this.domainLookupEnd = 0;
+      this.connectStart = 0;
+      this.connectEnd = 0;
+      this.secureConnectionStart = 0;
+      this.requestStart = 0;
+      this.responseStart = 0;
+      this.responseEnd = 0;
+      this.domInteractive = 0;
+      this.domContentLoadedEventStart = 0;
+      this.domContentLoadedEventEnd = 0;
+      this.domComplete = 0;
+      this.loadEventStart = 0;
+      this.loadEventEnd = 0;
+      this.redirectCount = 0;
+      this.transferSize = 0;
+      this.encodedBodySize = 0;
+      this.decodedBodySize = 0;
+    }
+    toJSON() {
+      return { ...this };
+    }
+  };
   var Performance = class {
     constructor() {
       this.timeOrigin = startTime;
+      this.timing = new PerformanceTiming();
+      // The Level 1 navigation type: 0 is TYPE_NAVIGATE, and no redirect was followed inside the render.
+      this.navigation = { type: 0, redirectCount: 0 };
+      this._navigationEntry = new PerformanceNavigationTiming();
     }
     now() {
       return _hostNow ? _hostNow() - startTime : Date.now() - startTime;
@@ -3160,14 +3533,22 @@
     }
     clearMeasures() {
     }
+    // Only the navigation entry exists: no resource, paint or long-task entry is observable in a render that
+    // fetches through the host and never paints. Every other type answers with the empty list a browser gives
+    // before anything of that type has happened.
     getEntries() {
-      return [];
+      return [this._entry()];
     }
-    getEntriesByName() {
-      return [];
+    getEntriesByName(name) {
+      const entry = this._entry();
+      return entry.name === String(name) ? [entry] : [];
     }
-    getEntriesByType() {
-      return [];
+    getEntriesByType(type) {
+      return String(type) === "navigation" ? [this._entry()] : [];
+    }
+    _entry() {
+      this._navigationEntry.name = String(globalThis.location?.href || "");
+      return this._navigationEntry;
     }
   };
   var performance = new Performance();
@@ -3328,6 +3709,230 @@
       const b = new _Blob([bytes.slice(start, end)]);
       b.type = contentType == null ? "" : String(contentType).toLowerCase();
       return b;
+    }
+  };
+
+  // browser/File.ts
+  var File = class extends Blob {
+    constructor(parts, name, options) {
+      super(parts, options);
+      this.webkitRelativePath = "";
+      this.name = name == null ? "" : String(name);
+      this.lastModified = options && options.lastModified != null ? Number(options.lastModified) : Date.now();
+    }
+  };
+
+  // browser/Window.ts
+  var Window = class {
+    constructor() {
+      throw new TypeError("Illegal constructor");
+    }
+  };
+  Object.defineProperty(Window, Symbol.hasInstance, {
+    value: (value) => value === globalThis
+  });
+
+  // network/types/FormData.ts
+  var FormData = class {
+    constructor() {
+      this._e = [];
+    }
+    append(name, value) {
+      this._e.push([String(name), value]);
+    }
+    delete(name) {
+      const n = String(name);
+      this._e = this._e.filter((p) => p[0] !== n);
+    }
+    get(name) {
+      const n = String(name);
+      for (const p of this._e) if (p[0] === n) return p[1];
+      return null;
+    }
+    getAll(name) {
+      const n = String(name);
+      const out = [];
+      for (const p of this._e) if (p[0] === n) out.push(p[1]);
+      return out;
+    }
+    has(name) {
+      const n = String(name);
+      for (const p of this._e) if (p[0] === n) return true;
+      return false;
+    }
+    set(name, value) {
+      const n = String(name);
+      let added = false;
+      const out = [];
+      for (const p of this._e) {
+        if (p[0] === n) {
+          if (!added) {
+            out.push([n, value]);
+            added = true;
+          }
+        } else out.push(p);
+      }
+      if (!added) out.push([n, value]);
+      this._e = out;
+    }
+    entries() {
+      let i = 0;
+      const d = this._e;
+      return { next() {
+        return i < d.length ? { value: d[i++], done: false } : { value: void 0, done: true };
+      } };
+    }
+    keys() {
+      let i = 0;
+      const d = this._e;
+      return { next() {
+        return i < d.length ? { value: d[i++][0], done: false } : { value: void 0, done: true };
+      } };
+    }
+    values() {
+      let i = 0;
+      const d = this._e;
+      return { next() {
+        return i < d.length ? { value: d[i++][1], done: false } : { value: void 0, done: true };
+      } };
+    }
+    forEach(cb, thisArg) {
+      for (const p of this._e) cb.call(thisArg, p[1], p[0], this);
+    }
+  };
+  FormData.prototype[Symbol.iterator] = FormData.prototype.entries;
+
+  // network/utils.ts
+  function toHeaderObject(h) {
+    const out = {};
+    if (!h) return out;
+    if (typeof h.forEach === "function" && !Array.isArray(h)) {
+      h.forEach((v, k) => {
+        out[k] = v;
+      });
+      return out;
+    }
+    if (Array.isArray(h)) {
+      for (let i = 0; i < h.length; i++) {
+        out[h[i][0]] = h[i][1];
+      }
+      return out;
+    }
+    for (const k in h) {
+      if (Object.prototype.hasOwnProperty.call(h, k)) out[k] = h[k];
+    }
+    return out;
+  }
+
+  // network/types/Headers.ts
+  var Headers = class {
+    constructor(init) {
+      this._m = {};
+      const o = toHeaderObject(init);
+      for (const k in o) {
+        this._m[String(k).toLowerCase()] = String(o[k]);
+      }
+    }
+    get(n) {
+      const v = this._m[String(n).toLowerCase()];
+      return v === void 0 ? null : v;
+    }
+    has(n) {
+      return this._m[String(n).toLowerCase()] !== void 0;
+    }
+    set(n, v) {
+      this._m[String(n).toLowerCase()] = String(v);
+    }
+    append(n, v) {
+      const k = String(n).toLowerCase();
+      this._m[k] = this._m[k] !== void 0 ? this._m[k] + ", " + v : String(v);
+    }
+    delete(n) {
+      delete this._m[String(n).toLowerCase()];
+    }
+    forEach(cb) {
+      for (const k in this._m) {
+        cb(this._m[k], k, this);
+      }
+    }
+    keys() {
+      return Object.keys(this._m);
+    }
+  };
+
+  // network/types/Request.ts
+  var Request = class {
+    constructor(input, init) {
+      init = init || {};
+      if (input && typeof input === "object" && "url" in input) {
+        this.url = input.url;
+        this.method = init.method || input.method || "GET";
+        this.headers = new Headers(init.headers || input.headers);
+        this.body = init.body !== void 0 ? init.body : input.body;
+      } else {
+        this.url = String(input);
+        this.method = init.method || "GET";
+        this.headers = new Headers(init.headers);
+        this.body = init.body;
+      }
+    }
+  };
+
+  // network/types/Response.ts
+  var Response = class _Response {
+    constructor(body, init) {
+      init = init || {};
+      this._bodyText = body == null ? "" : String(body);
+      this._bodyStream = void 0;
+      this.status = init.status === void 0 ? 200 : init.status;
+      this.ok = this.status >= 200 && this.status < 300;
+      this.statusText = init.statusText || "";
+      this.url = "";
+      this.redirected = false;
+      this.type = "default";
+      this.headers = init.headers instanceof Headers ? init.headers : new Headers(init.headers);
+      this.bodyUsed = false;
+    }
+    // Exposes the buffered body as a ReadableStream only when the Streams shim (EnableStreams) is
+    // installed; otherwise null, as in a browser without a stream body. Cached so repeat access returns
+    // the same stream (spec) and reflects bodyUsed once read.
+    get body() {
+      const g = globalThis;
+      if (typeof g.ReadableStream !== "function") return null;
+      if (this._bodyStream === void 0) {
+        const bytes = new TextEncoder().encode(this._bodyText);
+        this._bodyStream = new g.ReadableStream({
+          start: (controller) => {
+            if (bytes.length) controller.enqueue(bytes);
+            controller.close();
+            this.bodyUsed = true;
+          }
+        });
+      }
+      return this._bodyStream;
+    }
+    text() {
+      this.bodyUsed = true;
+      return Promise.resolve(this._bodyText);
+    }
+    json() {
+      try {
+        return Promise.resolve(JSON.parse(this._bodyText || "null"));
+      } catch (e) {
+        return Promise.reject(e);
+      }
+    }
+    arrayBuffer() {
+      this.bodyUsed = true;
+      return Promise.resolve(new TextEncoder().encode(this._bodyText).buffer);
+    }
+    clone() {
+      const c = new _Response(this._bodyText, { status: this.status, statusText: this.statusText, headers: this.headers });
+      c.ok = this.ok;
+      c.url = this.url;
+      c.type = this.type;
+      c.redirected = this.redirected;
+      return c;
     }
   };
 
@@ -3596,6 +4201,11 @@
     global.Worker = global.Worker || Worker;
     global.structuredClone = global.structuredClone || ((value) => value == null ? value : JSON.parse(JSON.stringify(value)));
     global.Blob = Blob;
+    global.File = global.File || File;
+    global.FormData = global.FormData || FormData;
+    global.Headers = global.Headers || Headers;
+    global.Request = global.Request || Request;
+    global.Response = global.Response || Response;
     global.DOMException = global.DOMException || DOMException;
     global.DOMParser = global.DOMParser || DOMParser;
     global.XMLSerializer = global.XMLSerializer || XMLSerializer;
@@ -3612,6 +4222,11 @@
     global.NodeList = NodeList;
     global.Element = Element;
     global.CharacterData = CharacterData;
+    global.DOMTokenList = DOMTokenList;
+    global.NodeFilter = NodeFilter;
+    global.TreeWalker = TreeWalker;
+    global.NodeIterator = NodeIterator;
+    global.Window = global.Window || Window;
     global.Document = Document;
     global.DocumentType = DocumentType;
     global.Text = Text;

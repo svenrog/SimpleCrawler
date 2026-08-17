@@ -93,7 +93,7 @@ internal sealed class V8JsEngine : IJsEngine, IDisposable
     /// </summary>
     private Exception Stopped(ScriptInterruptedException inner) => _cancellationToken.IsCancellationRequested
         ? new OperationCanceledException("Script execution was canceled.", inner, _cancellationToken)
-        : new TimeoutException(
+        : new JsPageTimeoutException(
             $"Script execution exceeded the {_pageTimeout.TotalSeconds:0.###}s page timeout.", inner);
 
     /// <summary>

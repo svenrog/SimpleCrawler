@@ -12,6 +12,10 @@ import { reflectedElementFactories } from "./reflectedElements";
 import { customElements } from "./customElements";
 import { collectByTag, walkFind, hideOwnFields, collectByClass, collectByPredicate } from "./utils";
 import { querySelectorAll } from "../selector/querySelector";
+import { TreeWalker } from "./TreeWalker";
+import { NodeIterator } from "./NodeIterator";
+import { parserRef } from "../html/parserRef";
+import { resolveUrl } from "../url/resolve";
 
 export class Document extends Node {
     documentElement: Element | null = null;
@@ -39,6 +43,26 @@ export class Document extends Node {
     // loader) read document.location.protocol/href, which threw on undefined when only window.location existed.
     get location(): any {
         return this.defaultView ? this.defaultView.location : null;
+    }
+
+    // The page's own address, read as a string by consent/analytics code that never touches location
+    // (`document.URL.indexOf(...)`, `new URL(document.documentURI)`). Both alias location.href here: this
+    // render performs no navigation, so there is no history entry for them to diverge over.
+    get URL(): string {
+        const loc = this.location;
+        return loc && loc.href ? String(loc.href) : "";
+    }
+
+    get documentURI(): string {
+        return this.URL;
+    }
+
+    // The base against which the document's relative URLs resolve: the first <base href>, resolved against
+    // the page URL, else the page URL itself. Node.baseURI delegates here for every node in the tree.
+    get baseURI(): string {
+        const base = this.querySelector("base");
+        const href = base ? base.getAttribute("href") : null;
+        return href ? resolveUrl(href, this.URL) : this.URL;
     }
 
     // Bundles read document.referrer as a string (analytics, `referrer.split('/')[2] !== location.host`);
@@ -102,6 +126,40 @@ export class Document extends Node {
     createRange(): Range {
         return new Range();
     }
+
+    createTreeWalker(root: Node, whatToShow?: number, filter?: any): TreeWalker {
+        return new TreeWalker(root, whatToShow, filter);
+    }
+
+    createNodeIterator(root: Node, whatToShow?: number, filter?: any): NodeIterator {
+        return new NodeIterator(root, whatToShow, filter);
+    }
+
+    // Nothing here is written during parsing — the host parses the whole shell before any script runs — so a
+    // write lands at the end of the body, which is where a trailing loader script's own write would have gone.
+    // A written <script src> is a real appended resource: the drain loop fetches and runs it like any other.
+    // Deliberately not the browser's post-load behaviour, which implicitly calls document.open() and wipes the
+    // page: a bundle that writes after load would take the whole render's content with it.
+    write(...parts: unknown[]): void {
+        const target = this.body || this.documentElement;
+        const parse = parserRef.parseFragment;
+        if (!target || !parse) return;
+
+        const html = parts.map((p) => (p == null ? "" : String(p))).join("");
+        for (const node of parse(html)) target.appendChild(node);
+    }
+
+    writeln(...parts: unknown[]): void {
+        this.write(parts.map((p) => (p == null ? "" : String(p))).join("") + "\n");
+    }
+
+    // A single-pass render has no parser to suspend and no stream to reopen; the pair exists so a loader that
+    // brackets its write() with them doesn't throw on the way in or out.
+    open(): Document {
+        return this;
+    }
+
+    close(): void { }
 
     getElementById(id: string): Element | null {
         return walkFind(this.documentElement, (e) => (e as any).getAttribute("id") === id) as Element | null;

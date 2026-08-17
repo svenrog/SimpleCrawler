@@ -114,61 +114,72 @@ public sealed class JsRenderer
         RenderProfiler.Stop("phase.engineCreate", createTime);
 
         var engine = RenderProfiler.Enabled ? new ProfilingJsEngine(baseEngine) : baseEngine;
+        var isolation = new RenderIsolation(_logger, pageUrl);
         var setupTime = RenderProfiler.Start();
 
+        // The DOM prelude is the one crossing that is not isolated: a page whose document/window never
+        // existed is not a partial render, and reporting it as one would hand the caller a page that failed
+        // for our reasons dressed as a page that ran.
         if (engine.BeginPage())
-            RunPrelude(engine, JsPreludes.Dom);
+        {
+            try
+            {
+                RunPrelude(engine, JsPreludes.Dom);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                _logger.LogError(ex, "The JS DOM prelude failed on '{url}'; nothing could be rendered.", pageUrl);
+                throw;
+            }
+        }
 
-        engine.CallGlobal("__crawlerSetLocation", pageUrl);
-        engine.CallGlobal("__crawlerSetViewport", (int)_options.Viewport.Width, (int)_options.Viewport.Height);
+        isolation.Run("Location setup", () => engine.CallGlobal("__crawlerSetLocation", pageUrl));
+        isolation.Run("Viewport setup", () => engine.CallGlobal("__crawlerSetViewport", (int)_options.Viewport.Width, (int)_options.Viewport.Height));
 
-        ConfigureScriptLogging(engine);
-        ConfigureDiagnostics(engine);
+        ConfigureScriptLogging(engine, isolation);
+        ConfigureDiagnostics(engine, isolation);
         if (_options.EnableWebGl)
-            engine.CallGlobal("__crawlerEnableWebGl");
+            isolation.Run("WebGL setup", () => engine.CallGlobal("__crawlerEnableWebGl"));
 
+        // A shim prelude that fails costs the page its shim, not its render: the base prelude's inert stubs
+        // are still installed underneath each of them.
         if (_options.EnableIndexedDb)
-            RunPrelude(engine, JsPreludes.IndexedDb);
+            isolation.Run("IndexedDB prelude", () => RunPrelude(engine, JsPreludes.IndexedDb));
 
         if (_options.EnableStreams)
-            RunPrelude(engine, JsPreludes.Stream);
+            isolation.Run("Streams prelude", () => RunPrelude(engine, JsPreludes.Stream));
 
         if (DomProfiler.Enabled)
-            engine.CallGlobal("__crawlerEnableDomProfile");
+            isolation.Run("DOM profile setup", () => engine.CallGlobal("__crawlerEnableDomProfile"));
 
         RenderProfiler.Stop("phase.setupGlobals", setupTime);
 
         var parseTime = RenderProfiler.Start();
-        try
+        if (!isolation.Run("JS DOM parse", () => engine.CallGlobal("__crawlerLoadHtml", html)))
         {
-            engine.CallGlobal("__crawlerLoadHtml", html);
-        }
-        catch (JsException ex)
-        {
-            _logger.LogWarning("JS DOM parse error on '{url}': {message}\n{details}", pageUrl, ex.Message, ex.ErrorDetails);
             RenderProfiler.Stop("phase.total", totalTime);
             return abortValue;
         }
         RenderProfiler.Stop("phase.parse", parseTime);
 
-        var documentBaseUri = ResolveDocumentBase(engine, pageUri);
+        var documentBaseUri = ResolveDocumentBase(engine, isolation, pageUri);
 
         var collectTime = RenderProfiler.Start();
-        var (regularScripts, moduleEntries) = await CollectScriptsFromJsAsync(engine, documentBaseUri, pageUrl, client, _sources, cancellationToken);
+        var (regularScripts, moduleEntries) = await CollectScriptsFromJsAsync(engine, isolation, documentBaseUri, pageUrl, client, _sources, cancellationToken);
         RenderProfiler.Stop("phase.collect", collectTime);
 
         // The markup had a <script> tag but the parser surfaced nothing executable (e.g. JSON), so nothing
         // ran: finalize against the parsed-only tree.
         if (regularScripts.Count == 0 && moduleEntries.Count == 0)
         {
-            return Finalize(engine, finalize, totalTime);
+            return Finalize(engine, isolation, finalize, abortValue, totalTime);
         }
 
         // Snapshot the parsed-but-unscripted tree so a streaming/hydration bundle that tears down the
         // server markup without rebuilding it can't leave the render worse off than the shell it started
         // from. Only under EnableStreams, the one path that lets such bundles run.
         if (_options.EnableStreams)
-            engine.CallGlobal("__crawlerCaptureBaseline");
+            isolation.Run("Baseline capture", () => engine.CallGlobal("__crawlerCaptureBaseline"));
 
         if (_options.EnableFetch)
         {
@@ -176,47 +187,54 @@ public sealed class JsRenderer
             // invoke a host object's instance method under NativeAOT. The fetch prelude wraps this in a JS
             // __http shim. See JsHttp.requestJson.
             var http = new JsHttp(client, pageUri, _logger, _fetchCache, cancellationToken);
-            engine.EmbedFunction("__httpRequest", http.requestJson);
-            RunPrelude(engine, JsPreludes.Fetch);
+            isolation.Run("Fetch prelude", () =>
+            {
+                engine.EmbedFunction("__httpRequest", http.requestJson);
+                RunPrelude(engine, JsPreludes.Fetch);
+            });
         }
 
         var bundleExecutionTime = RenderProfiler.Start();
         foreach (var script in regularScripts)
         {
-            RunRegularJs(engine, script, pageUrl);
+            RunRegularJs(engine, isolation, script);
         }
 
         foreach (var module in moduleEntries)
         {
-            RunModule(engine, module, pageUrl);
+            RunModule(engine, isolation, module);
         }
         RenderProfiler.Stop("phase.bundleExec", bundleExecutionTime);
 
-        engine.CallGlobal("__crawlerFireDomContentLoaded");
+        isolation.Run("DOMContentLoaded dispatch", () => engine.CallGlobal("__crawlerFireDomContentLoaded"));
 
         var drainTime = RenderProfiler.Start();
-        await DrainJsAsync(engine, documentBaseUri, pageUri, client, pageUrl, cancellationToken);
+        await DrainJsAsync(engine, isolation, documentBaseUri, pageUri, client, cancellationToken);
         RenderProfiler.Stop("phase.drain", drainTime);
 
         if (_options.EnableStreams)
         {
-            var restored = engine.Evaluate<int>("__crawlerGuardRegression()");
+            var restored = isolation.Run("Regression guard", () => engine.Evaluate<int>("__crawlerGuardRegression()"), -1);
             if (restored >= 0)
                 _logger.LogDebug("JS render regressed below the server-rendered shell on '{url}'; restored baseline ({anchors} anchors).", pageUrl, restored);
         }
 
-        return Finalize(engine, finalize, totalTime);
+        return Finalize(engine, isolation, finalize, abortValue, totalTime);
     }
 
-    private static T Finalize<T>(IJsEngine engine, Func<IJsEngine, T> finalize, long totalTime)
+    /// <summary>
+    /// The last crossing, and the one with the most to lose: a throw while reading the settled tree would
+    /// discard a render that already ran, so it degrades to <paramref name="abortValue"/> like any other.
+    /// </summary>
+    private static T Finalize<T>(IJsEngine engine, RenderIsolation isolation, Func<IJsEngine, T> finalize, T abortValue, long totalTime)
     {
         var finalizeTime = RenderProfiler.Start();
-        var result = finalize(engine);
+        var result = isolation.Run("Render finalize", () => finalize(engine), abortValue);
         RenderProfiler.Stop("phase.finalize", finalizeTime);
         RenderProfiler.Stop("phase.total", totalTime);
 
         if (DomProfiler.Enabled)
-            DomProfiler.Add(engine.Evaluate<string>("__crawlerDomProfileDump()"));
+            DomProfiler.Add(isolation.Run("DOM profile dump", () => engine.Evaluate<string>("__crawlerDomProfileDump()"), string.Empty));
 
         return result;
     }
@@ -226,21 +244,21 @@ public sealed class JsRenderer
     /// not the page URL — matching the browser. Without this, a &lt;base href="/"&gt; page served from a nested
     /// path fetches the site's HTML fallback for every relative &lt;script src&gt;, and the engine aborts on it.
     /// </summary>
-    private static Uri ResolveDocumentBase(IJsEngine engine, Uri pageUri)
+    private static Uri ResolveDocumentBase(IJsEngine engine, RenderIsolation isolation, Uri pageUri)
     {
-        var baseHref = engine.Evaluate<string>("__crawlerGetBaseHref()");
+        var baseHref = isolation.Run("Base href read", () => engine.Evaluate<string>("__crawlerGetBaseHref()"), string.Empty);
         if (!string.IsNullOrEmpty(baseHref) && Uri.TryCreate(pageUri, baseHref, out var baseUri))
             return baseUri;
 
         return pageUri;
     }
 
-    private async Task<(IReadOnlyList<RegularScript> Regular, IReadOnlyList<ModuleScript> Modules)> CollectScriptsFromJsAsync(IJsEngine engine, Uri baseUri, string pageUrl, HttpClient client, SourceCache sources, CancellationToken cancellationToken)
+    private async Task<(IReadOnlyList<RegularScript> Regular, IReadOnlyList<ModuleScript> Modules)> CollectScriptsFromJsAsync(IJsEngine engine, RenderIsolation isolation, Uri baseUri, string pageUrl, HttpClient client, SourceCache sources, CancellationToken cancellationToken)
     {
         var regular = new List<RegularScript>();
         var modules = new List<ModuleScript>();
 
-        var json = engine.Evaluate<string>("__crawlerCollectScripts()");
+        var json = isolation.Run("Script collection", () => engine.Evaluate<string>("__crawlerCollectScripts()"), string.Empty);
         if (string.IsNullOrEmpty(json))
             return (regular, modules);
 
@@ -272,7 +290,7 @@ public sealed class JsRenderer
                     continue;
 
                 if (isModule)
-                    modules.Add(new ModuleScript(pageUrl, text, External: false));
+                    modules.Add(new ModuleScript(InlineModuleSpecifier(pageUrl, modules.Count), text, External: false));
                 else
                     regular.Add(new RegularScript(text, pageUrl, string.Empty, External: false));
             }
@@ -281,23 +299,31 @@ public sealed class JsRenderer
         return (regular, modules);
     }
 
-    private void RunRegularJs(IJsEngine engine, RegularScript script, string pageUrl)
+    /// <summary>
+    /// An inline module has no URL of its own, so it borrows the page's — but a page with two of them would
+    /// then register the same specifier twice, which one engine refuses outright and the other answers from
+    /// its module cache, running the first module's code in place of the second. The ordinal goes in the
+    /// fragment: relative imports inside the module resolve against the page URL either way.
+    /// </summary>
+    private static string InlineModuleSpecifier(string pageUrl, int ordinal)
+        => $"{pageUrl}#inline-{ordinal}";
+
+    private static void RunRegularJs(IJsEngine engine, RenderIsolation isolation, RegularScript script)
     {
-        SetCurrentScript(engine, script.External ? script.RawSrc : "");
+        SetCurrentScript(engine, isolation, script.External ? script.RawSrc : "");
         try
         {
-            if (script.External)
-                engine.ExecuteCached(script.Src, script.Source);
-            else
-                engine.Execute(script.Source);
-        }
-        catch (JsException ex)
-        {
-            _logger.LogWarning("Bundle execution error on '{url}': {message}\n{details}", pageUrl, ex.Message, ex.ErrorDetails);
+            isolation.Run("Bundle execution", () =>
+            {
+                if (script.External)
+                    engine.ExecuteCached(script.Src, script.Source);
+                else
+                    engine.Execute(script.Source);
+            });
         }
         finally
         {
-            SetCurrentScript(engine, null);
+            SetCurrentScript(engine, isolation, null);
         }
     }
 
@@ -313,10 +339,10 @@ public sealed class JsRenderer
     /// HTMLScriptElement.src).
     /// </para>
     /// </summary>
-    private static void SetCurrentScript(IJsEngine engine, string? src)
-        => engine.CallGlobal("__crawlerSetCurrentScript", src);
+    private static void SetCurrentScript(IJsEngine engine, RenderIsolation isolation, string? src)
+        => isolation.Run("currentScript update", () => engine.CallGlobal("__crawlerSetCurrentScript", src));
 
-    private async Task DrainJsAsync(IJsEngine engine, Uri baseUri, Uri pageUri, HttpClient client, string pageUrl, CancellationToken cancellationToken)
+    private async Task DrainJsAsync(IJsEngine engine, RenderIsolation isolation, Uri baseUri, Uri pageUri, HttpClient client, CancellationToken cancellationToken)
     {
         // Settle after a few idle turns: __crawlerPending reports the queue depth before __crawlerPump runs
         // it, so a turn with no pending work counts as idle. Runtime-appended <script src>/<link> chunks are
@@ -326,21 +352,23 @@ public sealed class JsRenderer
         var idle = 0;
         while (iterations++ < _options.MaxTaskDrainIterations && idle < _idleTurnsBeforeSettled)
         {
-            var loadedResource = await DrainResourcesAsync(engine, baseUri, pageUri, client, pageUrl, cancellationToken);
+            var loadedResource = await DrainResourcesAsync(engine, isolation, baseUri, pageUri, client, cancellationToken);
 
-            engine.RunMicrotasks();
-            var pending = engine.Evaluate<int>("__crawlerPending()");
-            engine.Evaluate<int>("__crawlerPump()");
-            engine.RunMicrotasks();
+            // A turn that could not be read is a turn with nothing left to run: every fallback here settles
+            // the loop rather than spinning it against an engine that is answering with exceptions.
+            isolation.Run("Microtask drain", engine.RunMicrotasks);
+            var pending = isolation.Run("Task queue read", () => engine.Evaluate<int>("__crawlerPending()"), 0);
+            isolation.Run("Task pump", () => engine.Evaluate<int>("__crawlerPump()"), 0);
+            isolation.Run("Microtask drain", engine.RunMicrotasks);
 
-            var pendingResources = engine.Evaluate<int>("__crawlerPendingResources()");
+            var pendingResources = isolation.Run("Resource queue read", () => engine.Evaluate<int>("__crawlerPendingResources()"), 0);
             idle = pending == 0 && pendingResources == 0 && !loadedResource ? idle + 1 : 0;
         }
     }
 
-    private async Task<bool> DrainResourcesAsync(IJsEngine engine, Uri baseUri, Uri pageUri, HttpClient client, string pageUrl, CancellationToken cancellationToken)
+    private async Task<bool> DrainResourcesAsync(IJsEngine engine, RenderIsolation isolation, Uri baseUri, Uri pageUri, HttpClient client, CancellationToken cancellationToken)
     {
-        var json = engine.Evaluate<string>("__crawlerTakeResources()");
+        var json = isolation.Run("Resource queue take", () => engine.Evaluate<string>("__crawlerTakeResources()"), string.Empty);
         if (string.IsNullOrEmpty(json))
             return false;
 
@@ -351,8 +379,9 @@ public sealed class JsRenderer
             var id = entry.GetProperty("id").GetInt32();
             var tag = entry.TryGetProperty("tag", out var tagProp) ? tagProp.GetString() : null;
             var src = entry.TryGetProperty("src", out var srcProp) ? srcProp.GetString() : null;
+            var type = entry.TryGetProperty("type", out var typeProp) ? typeProp.GetString() : null;
 
-            await LoadResourceAsync(engine, id, tag, src, baseUri, pageUri, client, pageUrl, cancellationToken);
+            await LoadResourceAsync(engine, isolation, id, tag, src, type, baseUri, pageUri, client, cancellationToken);
             loaded = true;
         }
 
@@ -367,18 +396,23 @@ public sealed class JsRenderer
     /// links, and nothing awaits their load, which is the right trade for a crawl but the wrong one when the
     /// render exists to observe what the page installs. Every other case fires the node's load (or error)
     /// event to settle the awaiting import().
+    /// <para>
+    /// <paramref name="type"/> is the node's <c>type</c> attribute, and splits the same two entries the
+    /// initial markup is already split into: <c>module</c> goes to the module loader so its imports resolve,
+    /// anything else to the classic-script entry.
+    /// </para>
     /// </summary>
-    private async Task LoadResourceAsync(IJsEngine engine, int id, string? tag, string? src, Uri baseUri, Uri pageUri, HttpClient client, string pageUrl, CancellationToken cancellationToken)
+    private async Task LoadResourceAsync(IJsEngine engine, RenderIsolation isolation, int id, string? tag, string? src, string? type, Uri baseUri, Uri pageUri, HttpClient client, CancellationToken cancellationToken)
     {
         if (!string.Equals(tag, "script", StringComparison.Ordinal))
         {
-            FireResourceEvent(engine, id, "load");
+            FireResourceEvent(engine, isolation, id, "load");
             return;
         }
 
         if (string.IsNullOrEmpty(src) || !Uri.TryCreate(baseUri, src, out var absolute))
         {
-            FireResourceEvent(engine, id, "error");
+            FireResourceEvent(engine, isolation, id, "error");
             return;
         }
 
@@ -389,31 +423,35 @@ public sealed class JsRenderer
         var source = await FetchSourceAsync(client, _sources, absolute, cancellationToken);
         if (source is null)
         {
-            FireResourceEvent(engine, id, "error");
+            FireResourceEvent(engine, isolation, id, "error");
             return;
         }
 
-        SetCurrentScript(engine, src);
+        // A module never becomes document.currentScript, in a browser or here, so only the classic path
+        // brackets its execution with one.
+        if (string.Equals(type, "module", StringComparison.OrdinalIgnoreCase))
+        {
+            RunModule(engine, isolation, new ModuleScript(absolute.AbsoluteUri, source, External: true));
+            FireResourceEvent(engine, isolation, id, "load");
+            return;
+        }
+
+        SetCurrentScript(engine, isolation, src);
+        bool executed;
         try
         {
-            engine.ExecuteCached(absolute.AbsoluteUri, source);
-        }
-        catch (JsException ex)
-        {
-            _logger.LogWarning("Chunk execution error on '{url}': {message}\n{details}", pageUrl, ex.Message, ex.ErrorDetails);
-            FireResourceEvent(engine, id, "error");
-            return;
+            executed = isolation.Run("Chunk execution", () => engine.ExecuteCached(absolute.AbsoluteUri, source));
         }
         finally
         {
-            SetCurrentScript(engine, null);
+            SetCurrentScript(engine, isolation, null);
         }
 
-        FireResourceEvent(engine, id, "load");
+        FireResourceEvent(engine, isolation, id, executed ? "load" : "error");
     }
 
-    private static void FireResourceEvent(IJsEngine engine, int id, string type)
-        => engine.CallGlobal("__crawlerFireResourceEvent", id, type);
+    private static void FireResourceEvent(IJsEngine engine, RenderIsolation isolation, int id, string type)
+        => isolation.Run("Resource event dispatch", () => engine.CallGlobal("__crawlerFireResourceEvent", id, type));
 
     private JsExtract CollectLinks(IJsEngine engine)
     {
@@ -467,13 +505,16 @@ public sealed class JsRenderer
     /// no-op until __crawlerSetLogLevel raises it off Infinity, so unset means no embedding and no formatting
     /// cost. The level numbers match LogLevel's, so the floor round-trips and __crawlerLog casts straight back.
     /// </summary>
-    private void ConfigureScriptLogging(IJsEngine engine)
+    private void ConfigureScriptLogging(IJsEngine engine, RenderIsolation isolation)
     {
         if (_options.ScriptLogging is not { } level)
             return;
 
-        engine.EmbedFunction("__crawlerLog", LogFromScript);
-        engine.CallGlobal("__crawlerSetLogLevel", (int)level);
+        isolation.Run("Script logging setup", () =>
+        {
+            engine.EmbedFunction("__crawlerLog", LogFromScript);
+            engine.CallGlobal("__crawlerSetLogLevel", (int)level);
+        });
     }
 
     /// <summary>
@@ -483,8 +524,8 @@ public sealed class JsRenderer
     /// diagnostics. Routing those catches through this channel turns them into a named exception with a stack
     /// the moment the renderer's log level is Debug, without spamming a normal crawl by default.
     /// </summary>
-    private void ConfigureDiagnostics(IJsEngine engine)
-        => engine.EmbedFunction("__crawlerDiagnostic", ReportDiagnostic);
+    private void ConfigureDiagnostics(IJsEngine engine, RenderIsolation isolation)
+        => isolation.Run("Diagnostics setup", () => engine.EmbedFunction("__crawlerDiagnostic", ReportDiagnostic));
 
     private object? ReportDiagnostic(params object?[] args)
     {
@@ -527,24 +568,8 @@ public sealed class JsRenderer
         };
     }
 
-    private void RunModule(IJsEngine engine, ModuleScript module, string pageUrl)
-    {
-        try
-        {
-            engine.EvaluateModule(module.Specifier, module.Source, module.External);
-        }
-        catch (JsException ex)
-        {
-            _logger.LogWarning("Module execution error on '{url}': {message}\n{details}", pageUrl, ex.Message, ex.ErrorDetails);
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            // Importing a module runs the engine's loader — host code (fetch, parse) that can throw raw CLR
-            // exceptions the engine never surfaces as a JsException. A single failed module must not abort the
-            // whole page render, so anything short of cancellation is logged and the page continues.
-            _logger.LogWarning("Module load error on '{url}': {message}", pageUrl, ex.Message);
-        }
-    }
+    private static void RunModule(IJsEngine engine, RenderIsolation isolation, ModuleScript module)
+        => isolation.Run("Module execution", () => engine.EvaluateModule(module.Specifier, module.Source, module.External));
 
     private static bool ContainsScriptTag(ReadOnlySpan<byte> html)
     {

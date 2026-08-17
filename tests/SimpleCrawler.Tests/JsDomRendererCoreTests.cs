@@ -404,4 +404,216 @@ public class JsDomRendererCoreTests : JsDomRendererTestBase, IClassFixture<JsRen
         Assert.DoesNotContain("href=\"/err\"", rendered);
         Assert.Contains("href=\"/ok\"", rendered);
     }
+
+    // Sanitizers and text-measuring code build a TreeWalker or a NodeIterator at init and step it; naming
+    // NodeFilter for the whatToShow mask is a bare global read, so both the constants and the traversal have
+    // to exist or the whole script is lost before it registers anything.
+    [Theory]
+    [InlineData(JsEngine.Jint)]
+    [InlineData(JsEngine.V8)]
+    public async Task JsMode_TreeWalkerAndNodeIterator_WalkFilteredNodesInDocumentOrder(JsEngine engine)
+    {
+        if (engine == JsEngine.V8)
+            Assert.SkipUnless(V8Support.IsAvailable, V8Support.UnavailableReason);
+
+        const string html = """
+            <!doctype html><html><head></head><body>
+            <div id="root"><p id="one">alpha</p><!-- c --><section id="two"><span id="three">beta</span></section></div>
+            <script>
+            try {
+              var root = document.getElementById('root');
+              var walker = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT, null);
+              var ids = [];
+              while (walker.nextNode()) ids.push(walker.currentNode.id);
+              // Back from the last node to the first, which never yields the root itself.
+              var back = [];
+              while (walker.previousNode()) back.push(walker.currentNode.id);
+              var spans = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT, {
+                acceptNode: function (n) { return n.localName === 'span' ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_SKIP; }
+              });
+              var span = spans.nextNode();
+              // The iterator sees the same tree, filtered to the text nodes the mask asks for.
+              var it = document.createNodeIterator(root, NodeFilter.SHOW_TEXT, null);
+              var text = [];
+              for (var n = it.nextNode(); n; n = it.nextNode()) text.push(n.data);
+              var ok = ids.join(',') === 'one,two,three' &&
+                       back.join(',') === 'two,one' &&
+                       span.id === 'three' &&
+                       spans.nextNode() === null &&
+                       text.join(',') === 'alpha,beta';
+              var l = document.createElement('a');
+              l.setAttribute('href', ok ? '/ok' : '/bad-' + ids.join('.') + '-' + back.join('.') + '-' + text.join('.'));
+              document.body.appendChild(l);
+            } catch (err) {
+              var e = document.createElement('a'); e.setAttribute('href', '/err'); document.body.appendChild(e);
+            }
+            </script>
+            </body></html>
+            """;
+
+        var renderer = CreateJsRenderer(engine);
+        var result = await renderer.RenderAsync(Encoding.UTF8.GetBytes(html), "http://localhost:5000/", new HttpClient(), CancellationToken.None);
+        var rendered = Encoding.UTF8.GetString(result);
+
+        Assert.DoesNotContain("href=\"/err\"", rendered);
+        Assert.Contains("href=\"/ok\"", rendered);
+    }
+
+    // classList is a DOMTokenList instance, not a fresh literal per read: bundles test it by identity and
+    // polyfills patch the prototype to observe class writes, so the constructor has to be a global and the
+    // same element has to hand back the same list. The token operations themselves are unchanged.
+    [Theory]
+    [InlineData(JsEngine.Jint)]
+    [InlineData(JsEngine.V8)]
+    public async Task JsMode_ClassList_IsADomTokenListInstance(JsEngine engine)
+    {
+        if (engine == JsEngine.V8)
+            Assert.SkipUnless(V8Support.IsAvailable, V8Support.UnavailableReason);
+
+        const string html = """
+            <!doctype html><html><head></head><body>
+            <div id="t" class="a b"></div>
+            <script>
+            try {
+              DOMTokenList.prototype.hasAll = function (names) { return names.every(this.contains, this); };
+              var el = document.getElementById('t');
+              var list = el.classList;
+              el.classList.add('c');
+              el.classList.remove('a');
+              var ok = typeof DOMTokenList === 'function' &&
+                       list instanceof DOMTokenList &&
+                       el.classList === list &&
+                       list.hasAll(['b', 'c']) &&
+                       !list.contains('a') &&
+                       list.length === 2 &&
+                       list.item(0) === 'b' &&
+                       String(list) === 'b c' &&
+                       el.getAttribute('class') === 'b c';
+              var l = document.createElement('a');
+              l.setAttribute('href', ok ? '/ok' : '/bad');
+              document.body.appendChild(l);
+            } catch (err) {
+              var e = document.createElement('a'); e.setAttribute('href', '/err'); document.body.appendChild(e);
+            }
+            </script>
+            </body></html>
+            """;
+
+        var renderer = CreateJsRenderer(engine);
+        var result = await renderer.RenderAsync(Encoding.UTF8.GetBytes(html), "http://localhost:5000/", new HttpClient(), CancellationToken.None);
+        var rendered = Encoding.UTF8.GetString(result);
+
+        Assert.DoesNotContain("href=\"/err\"", rendered);
+        Assert.DoesNotContain("href=\"/bad\"", rendered);
+        Assert.Contains("href=\"/ok\"", rendered);
+    }
+
+    // document.write is how a legacy tag loader injects itself. Everything is parsed before any script runs
+    // here, so the written markup lands at the end of the body — never the browser's post-load behaviour,
+    // which implicitly opens the document and would take the whole rendered page with it.
+    [Theory]
+    [InlineData(JsEngine.Jint)]
+    [InlineData(JsEngine.V8)]
+    public async Task JsMode_DocumentWrite_AppendsMarkupWithoutClearingThePage(JsEngine engine)
+    {
+        if (engine == JsEngine.V8)
+            Assert.SkipUnless(V8Support.IsAvailable, V8Support.UnavailableReason);
+
+        const string html = """
+            <!doctype html><html><head></head><body>
+            <a href="/shell">shell</a>
+            <script>
+            document.open();
+            document.write('<a href="/written">w</a>');
+            document.writeln('<a href="/written-line">l</a>');
+            document.close();
+            </script>
+            </body></html>
+            """;
+
+        var renderer = CreateJsRenderer(engine);
+        var result = await renderer.RenderAsync(Encoding.UTF8.GetBytes(html), "http://localhost:5000/", new HttpClient(), CancellationToken.None);
+        var rendered = Encoding.UTF8.GetString(result);
+
+        Assert.Contains("href=\"/shell\"", rendered);
+        Assert.Contains("href=\"/written\"", rendered);
+        Assert.Contains("href=\"/written-line\"", rendered);
+    }
+
+    // Hydration splits a server-rendered text run where the client tree expects a boundary; without
+    // splitText the reconciler throws mid-commit and loses the subtree it was mounting.
+    [Theory]
+    [InlineData(JsEngine.Jint)]
+    [InlineData(JsEngine.V8)]
+    public async Task JsMode_TextSplitText_KeepsHeadAndInsertsTailAsSibling(JsEngine engine)
+    {
+        if (engine == JsEngine.V8)
+            Assert.SkipUnless(V8Support.IsAvailable, V8Support.UnavailableReason);
+
+        const string html = """
+            <!doctype html><html><head></head><body>
+            <div id="t">alphabeta</div>
+            <script>
+            try {
+              var host = document.getElementById('t');
+              var head = host.firstChild;
+              var tail = head.splitText(5);
+              var ok = head.data === 'alpha' &&
+                       tail.data === 'beta' &&
+                       head.nextSibling === tail &&
+                       tail.parentNode === host &&
+                       host.textContent === 'alphabeta';
+              var l = document.createElement('a');
+              l.setAttribute('href', ok ? '/ok' : '/bad');
+              document.body.appendChild(l);
+            } catch (err) {
+              var e = document.createElement('a'); e.setAttribute('href', '/err'); document.body.appendChild(e);
+            }
+            </script>
+            </body></html>
+            """;
+
+        var renderer = CreateJsRenderer(engine);
+        var result = await renderer.RenderAsync(Encoding.UTF8.GetBytes(html), "http://localhost:5000/", new HttpClient(), CancellationToken.None);
+        var rendered = Encoding.UTF8.GetString(result);
+
+        Assert.DoesNotContain("href=\"/err\"", rendered);
+        Assert.DoesNotContain("href=\"/bad\"", rendered);
+        Assert.Contains("href=\"/ok\"", rendered);
+    }
+
+    // document.URL/documentURI are the page address read by code that never touches location, and baseURI is
+    // what a node resolves its own asset URLs against — the <base href>, resolved against the page URL.
+    [Theory]
+    [InlineData(JsEngine.Jint)]
+    [InlineData(JsEngine.V8)]
+    public async Task JsMode_DocumentUrlAndBaseUri_ReportThePageAddress(JsEngine engine)
+    {
+        if (engine == JsEngine.V8)
+            Assert.SkipUnless(V8Support.IsAvailable, V8Support.UnavailableReason);
+
+        const string html = """
+            <!doctype html><html><head><base href="/assets/"></head><body>
+            <div id="t"></div>
+            <script>
+            var host = document.getElementById('t');
+            var l = document.createElement('a');
+            l.setAttribute('href', '/u?url=' + (document.URL === location.href) +
+                                   '&uri=' + (document.documentURI === location.href) +
+                                   '&base=' + document.baseURI +
+                                   '&node=' + (host.baseURI === document.baseURI));
+            document.body.appendChild(l);
+            </script>
+            </body></html>
+            """;
+
+        var renderer = CreateJsRenderer(engine);
+        var result = await renderer.RenderAsync(Encoding.UTF8.GetBytes(html), "http://localhost:5000/deep/page", new HttpClient(), CancellationToken.None);
+        var rendered = Encoding.UTF8.GetString(result);
+
+        Assert.Contains("url=true", rendered);
+        Assert.Contains("uri=true", rendered);
+        Assert.Contains("base=http://localhost:5000/assets/", rendered);
+        Assert.Contains("node=true", rendered);
+    }
 }
