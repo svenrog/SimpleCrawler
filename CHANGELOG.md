@@ -10,6 +10,8 @@ Entries before 4.0.0 are condensed to what changed; the reasoning behind each is
 
 ## [Unreleased]
 
+## [4.1.0] - 2026-08-17
+
 ### Added
 
 - The DOM prelude gained the browser APIs a survey of production pages found it missing, each one an
@@ -341,7 +343,8 @@ Public proxy types are removed and renamed (see _Removed_ and _Changed_), a brea
 
 - Initial release.
 
-[Unreleased]: https://github.com/svenrog/SimpleCrawler/compare/v4.0.0...HEAD
+[Unreleased]: https://github.com/svenrog/SimpleCrawler/compare/v4.1.0...HEAD
+[4.1.0]: https://github.com/svenrog/SimpleCrawler/releases/tag/v4.1.0
 [4.0.0]: https://github.com/svenrog/SimpleCrawler/releases/tag/v4.0.0
 [3.6.5]: https://github.com/svenrog/SimpleCrawler/releases/tag/v3.6.5
 [3.6.4]: https://github.com/svenrog/SimpleCrawler/releases/tag/v3.6.4
