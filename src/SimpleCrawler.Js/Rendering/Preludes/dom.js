@@ -2864,19 +2864,35 @@
     getElementById(id) {
       return walkFind(this.documentElement, (e) => e.getAttribute("id") === id);
     }
+    // The root element is in scope for the document's own getElementsBy* — unlike an element's, which search
+    // strictly below themselves. A browser answers document.getElementsByTagName("html") with the root, and
+    // jQuery resolves a tag-only $("html") through exactly that call: an empty list there is undefined where
+    // the caller expects an element, so `$("html").attr("lang").indexOf(...)` throws inside a CMS bundle's
+    // init and costs every global it would have registered.
     getElementsByTagName(tag) {
+      const name = String(tag).toLowerCase();
       const out = [];
-      if (this.documentElement) collectByTag(this.documentElement, String(tag).toLowerCase(), out);
+      if (this.documentElement) {
+        if (name === "*" || this.documentElement.localName === name) out.push(this.documentElement);
+        collectByTag(this.documentElement, name, out);
+      }
       return out;
     }
     getElementsByClassName(className) {
       const out = [];
-      if (this.documentElement) collectByClass(this.documentElement, String(className), out);
+      if (this.documentElement) {
+        if (this.documentElement.classList.contains(String(className))) out.push(this.documentElement);
+        collectByClass(this.documentElement, String(className), out);
+      }
       return out;
     }
     getElementsByName(name) {
+      const matches2 = (e) => e.getAttribute("name") === name;
       const out = [];
-      if (this.documentElement) collectByPredicate(this.documentElement, (e) => e.getAttribute("name") === name, out);
+      if (this.documentElement) {
+        if (matches2(this.documentElement)) out.push(this.documentElement);
+        collectByPredicate(this.documentElement, matches2, out);
+      }
       return out;
     }
     get scripts() {

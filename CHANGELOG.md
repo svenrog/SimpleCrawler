@@ -47,6 +47,10 @@ Entries before 4.0.0 are condensed to what changed; the reasoning behind each is
   entry, so its imports resolve. The initial markup was already split by type; the runtime path never was.
 - Two inline `<script type="module">` blocks on one page both run. They shared a specifier — the page URL —
   which Jint refuses outright (taking both) and V8 answers from its module cache (running the first twice).
+- `document.getElementsByTagName`/`getElementsByClassName`/`getElementsByName` include the root element,
+  which they searched strictly below. jQuery resolves a tag-only `$("html")` through the first of those, so
+  a CMS bundle reading `$("html").attr("lang")` at init got undefined and threw. An *element's* own search
+  still excludes itself, as it should.
 
 ## [4.0.0] - 2026-07-31
 

@@ -405,6 +405,52 @@ public class JsDomRendererCoreTests : JsDomRendererTestBase, IClassFixture<JsRen
         Assert.Contains("href=\"/ok\"", rendered);
     }
 
+    // The document's own getElementsBy* include the root element; an element's search strictly below itself.
+    // jQuery resolves a tag-only $("html") through getElementsByTagName, so an empty list there is undefined
+    // where the caller expects an element — a CMS bundle reading `$("html").attr("lang").indexOf("-")` at
+    // init threw on it and lost every global that script would have registered.
+    [Theory]
+    [InlineData(JsEngine.Jint)]
+    [InlineData(JsEngine.V8)]
+    public async Task JsMode_DocumentGetElementsBy_IncludeTheRootElement(JsEngine engine)
+    {
+        if (engine == JsEngine.V8)
+            Assert.SkipUnless(V8Support.IsAvailable, V8Support.UnavailableReason);
+
+        const string html = """
+            <!doctype html><html lang="sv-SE" class="no-js" name="root"><head></head><body>
+            <div id="t" class="no-js"></div>
+            <script>
+            var byTag = document.getElementsByTagName('html');
+            var byClass = document.getElementsByClassName('no-js');
+            var byName = document.getElementsByName('root');
+            var all = document.getElementsByTagName('*');
+            var lang = byTag.length ? byTag[0].getAttribute('lang') : '';
+            var l = document.createElement('a');
+            l.setAttribute('href', '/r?tag=' + byTag.length +
+                                   '&class=' + byClass.length +
+                                   '&name=' + byName.length +
+                                   '&first=' + (all.length ? all[0].tagName : '') +
+                                   '&lang=' + lang.indexOf('-') +
+                                   // An element's own search still excludes itself.
+                                   '&below=' + document.documentElement.getElementsByTagName('html').length);
+            document.body.appendChild(l);
+            </script>
+            </body></html>
+            """;
+
+        var renderer = CreateJsRenderer(engine);
+        var result = await renderer.RenderAsync(Encoding.UTF8.GetBytes(html), "http://localhost:5000/", new HttpClient(), CancellationToken.None);
+        var rendered = Encoding.UTF8.GetString(result);
+
+        Assert.Contains("tag=1", rendered);
+        Assert.Contains("class=2", rendered);
+        Assert.Contains("name=1", rendered);
+        Assert.Contains("first=HTML", rendered);
+        Assert.Contains("lang=2", rendered);
+        Assert.Contains("below=0", rendered);
+    }
+
     // Sanitizers and text-measuring code build a TreeWalker or a NodeIterator at init and step it; naming
     // NodeFilter for the whatToShow mask is a bare global read, so both the constants and the traversal have
     // to exist or the whole script is lost before it registers anything.
