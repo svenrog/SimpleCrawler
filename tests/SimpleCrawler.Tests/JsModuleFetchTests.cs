@@ -140,6 +140,65 @@ public class JsModuleFetchTests
         Assert.Contains("href=\"/dependency-ran\"", rendered);
     }
 
+    // import.meta.url, which a loader reads to find where its own chunks live: `new URL(import.meta.url)`
+    // over an undefined value throws before it fetches any of them, costing the page every component that
+    // entry point defines. Jint only — it implements the syntax and delegates the properties to its host,
+    // which is ours to supply, and it is the engine the published binary runs. Measured on ClearScript 7.5.1
+    // while writing this: V8 answers undefined for a seeded module, a loaded one and an inline one alike, so
+    // asserting it over both engines would pin a gap rather than a contract.
+    [Fact]
+    public async Task ImportMeta_CarriesTheModulesOwnUrl()
+    {
+        const string html = """
+            <!doctype html><html><head></head><body>
+            <script type="module" src="/assets/loader.mjs"></script>
+            <script type="module">
+            const a = document.createElement('a');
+            // The inline module borrows the page's URL and an ordinal to tell two of them apart, so what it
+            // owes a page is the page it is in — not a spelling this test would then hold the ordinal to.
+            a.setAttribute('href', 'inline:' + (String(import.meta.url).indexOf('https://www.example.com/') === 0));
+            document.body.appendChild(a);
+            </script>
+            </body></html>
+            """;
+
+        using var client = new HttpClient(new ImportMetaHandler());
+        var renderer = CreateRenderer(JsEngine.Jint);
+        var result = await renderer.RenderAsync(Encoding.UTF8.GetBytes(html), "https://www.example.com/", client, CancellationToken.None);
+        var rendered = Encoding.UTF8.GetString(result);
+
+        // The entry module's own URL, and the imported one's — the two arrive by different routes, the entry
+        // seeded under the specifier the renderer fetched it as and the dependency built by the module loader.
+        Assert.Contains("href=\"module:https://www.example.com/assets/loader.mjs\"", rendered);
+        Assert.Contains("href=\"dep:https://www.example.com/assets/dep.mjs\"", rendered);
+        Assert.Contains("href=\"inline:true\"", rendered);
+    }
+
+    /// <summary>Serves an entry module that imports a second one; each reports its own <c>import.meta.url</c>.</summary>
+    private sealed class ImportMetaHandler : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+            => Task.FromResult(Send(request, cancellationToken));
+
+        protected override HttpResponseMessage Send(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            var body = request.RequestUri!.AbsolutePath == "/assets/loader.mjs"
+                ? """
+                  import "./dep.mjs";
+                  const a = document.createElement('a');
+                  a.setAttribute('href', 'module:' + String(import.meta.url));
+                  document.body.appendChild(a);
+                  """
+                : """
+                  const d = document.createElement('a');
+                  d.setAttribute('href', 'dep:' + String(import.meta.url));
+                  document.body.appendChild(d);
+                  """;
+
+            return new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(body) };
+        }
+    }
+
     /// <summary>Serves an ES module entry point that imports a second module; both append an anchor.</summary>
     private sealed class ModuleChunkHandler : HttpMessageHandler
     {
