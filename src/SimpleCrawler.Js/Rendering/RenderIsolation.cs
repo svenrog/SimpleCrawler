@@ -15,7 +15,10 @@ namespace SimpleCrawler.Js.Rendering;
 /// </list>
 /// <para>
 /// The warning is the point as much as the isolation is: a consumer counting the renderer's warnings can
-/// still tell a page that ran in full from one that did not.
+/// still tell a page that ran in full from one that did not. The <c>what</c> argument names the crossing and
+/// the templates read <c>"&lt;what&gt; error on '&lt;url&gt;'"</c> for page code and
+/// <c>"&lt;what&gt; failed on '&lt;url&gt;'"</c> for everything else, which is the text a log-matching
+/// consumer keys on — <c>docs/RENDER-ISSUES.md</c> in the Overlode repo is one.
 /// </para>
 /// </summary>
 internal sealed class RenderIsolation
@@ -63,7 +66,7 @@ internal sealed class RenderIsolation
         }
         catch (TimeoutException ex)
         {
-            _logger.LogWarning("{what} on '{url}' exceeded the script ceiling: {message}", what, _pageUrl, ex.Message);
+            _logger.LogWarning("{what} exceeded the script ceiling on '{url}': {message}", what, _pageUrl, ex.Message);
             if (++_spentCeilings > _maxSpentScriptCeilings)
                 throw new JsPageTimeoutException($"The page spent {_spentCeilings} script ceilings; abandoning the render.", ex);
 
@@ -71,7 +74,7 @@ internal sealed class RenderIsolation
         }
         catch (JsException ex)
         {
-            _logger.LogWarning("{what} failed on '{url}': {message}\n{details}", what, _pageUrl, ex.Message, ex.ErrorDetails);
+            _logger.LogWarning("{what} error on '{url}': {message}\n{details}", what, _pageUrl, ex.Message, ex.ErrorDetails);
             return onFailure;
         }
         // Host code the engine called (a module fetch, a parse, an embedded function) throws raw CLR
