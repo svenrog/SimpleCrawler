@@ -6,10 +6,10 @@ export class HTMLVideoElement extends HTMLMediaElement {
     }
 
     get poster(): string {
-        return this.getAttribute("poster") || "";
+        return this.getAttributeInternal("poster") || "";
     }
 
     set poster(value: unknown) {
-        this.setAttribute("poster", value == null ? "" : String(value));
+        this.setAttributeInternal("poster", value == null ? "" : String(value));
     }
 }

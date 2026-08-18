@@ -40,6 +40,11 @@ public class JsBrowsingContextGlobalsTests : IClassFixture<JsRendererFixture>
           window.__topIsWindow = window.top === window;
           window.__parentIsWindow = window.parent === window;
           window.__length = window.length;
+          // Matomo's tracker keeps its overlay session in window.name and splits it at construction.
+          window.__nameType = typeof window.name;
+          window.__nameParts = window.name.split('###').length;
+          window.name = 'Matomo_Overlay###day###today###';
+          window.__nameRoundTrip = window.name.split('###').length;
           try {
             window.__locator = !!(window.frames['__tcfapiLocator']);
             window.__probeThrew = false;
@@ -47,6 +52,26 @@ public class JsBrowsingContextGlobalsTests : IClassFixture<JsRendererFixture>
             window.__probeThrew = true;
           }
           window.__stubInstalled = true;
+          window.__windowIsFunction = typeof Window === 'function';
+          window.__windowIsInstance = window instanceof Window;
+          window.__documentIsInstance = document instanceof Window;
+          window.__brand = Object.prototype.toString.call(window);
+          // jQuery's isPlainObject, in the shape 3.x ships it.
+          // The chain a browser gives the window, and what a polyfill relies on when it installs the natives
+          // it later calls off `window` onto one of those prototypes.
+          window.__protoIsWindow = Object.getPrototypeOf(window) === Window.prototype;
+          window.__eventTargetInChain = Object.getPrototypeOf(Window.prototype) === EventTarget.prototype;
+          Window.prototype.__patchedByAPolyfill = function () { return 'reached'; };
+          window.__patchReaches = typeof window.__patchedByAPolyfill === 'function'
+            ? window.__patchedByAPolyfill() : 'missing';
+          window.__windowIsPlain = (function (obj) {
+            var proto, Ctor, hasOwn = Object.prototype.hasOwnProperty, fnToString = hasOwn.toString;
+            if (!obj || Object.prototype.toString.call(obj) !== '[object Object]') return false;
+            proto = Object.getPrototypeOf(obj);
+            if (!proto) return true;
+            Ctor = hasOwn.call(proto, 'constructor') && proto.constructor;
+            return typeof Ctor === 'function' && fnToString.call(Ctor) === fnToString.call(Object);
+          })(window);
         </script>
         </body></html>
         """;
@@ -59,9 +84,20 @@ public class JsBrowsingContextGlobalsTests : IClassFixture<JsRendererFixture>
               topIsWindow: window.__topIsWindow,
               parentIsWindow: window.__parentIsWindow,
               length: window.__length,
+              nameType: window.__nameType,
+              nameParts: window.__nameParts,
+              nameRoundTrip: window.__nameRoundTrip,
               locator: window.__locator,
               probeThrew: window.__probeThrew,
-              stubInstalled: !!window.__stubInstalled
+              stubInstalled: !!window.__stubInstalled,
+              windowIsFunction: window.__windowIsFunction,
+              windowIsInstance: window.__windowIsInstance,
+              documentIsInstance: window.__documentIsInstance,
+              brand: window.__brand,
+              windowIsPlain: window.__windowIsPlain,
+              protoIsWindow: window.__protoIsWindow,
+              eventTargetInChain: window.__eventTargetInChain,
+              patchReaches: window.__patchReaches
             })
             """),
     ]);
@@ -97,6 +133,24 @@ public class JsBrowsingContextGlobalsTests : IClassFixture<JsRendererFixture>
         Assert.Equal(0, ctx.GetProperty("length").GetInt32());
     }
 
+    // The context's name: a string always, empty for a window nothing opened, and writable. Matomo reads
+    // `window.name.split("###")` unguarded while constructing its tracker, so an undefined there costs the
+    // tracker and every global it would have registered — the most common analytics script in the corpus.
+    [Theory]
+    [InlineData(JsEngine.Jint)]
+    [InlineData(JsEngine.V8)]
+    public async Task ATopLevelContext_CarriesAnEmptyWritableName(JsEngine engine)
+    {
+        if (engine == JsEngine.V8)
+            Assert.SkipUnless(V8Support.IsAvailable, V8Support.UnavailableReason);
+
+        var ctx = await CollectAsync(engine);
+
+        Assert.Equal("string", ctx.GetProperty("nameType").GetString());
+        Assert.Equal(1, ctx.GetProperty("nameParts").GetInt32());
+        Assert.Equal(4, ctx.GetProperty("nameRoundTrip").GetInt32());
+    }
+
     [Theory]
     [InlineData(JsEngine.Jint)]
     [InlineData(JsEngine.V8)]
@@ -110,5 +164,60 @@ public class JsBrowsingContextGlobalsTests : IClassFixture<JsRendererFixture>
         Assert.False(ctx.GetProperty("probeThrew").GetBoolean());
         Assert.False(ctx.GetProperty("locator").GetBoolean());
         Assert.True(ctx.GetProperty("stubInstalled").GetBoolean());
+    }
+
+    // The window's own interface object. The realm's global belongs to the engine, so it cannot be a real
+    // instance of anything the prelude declares — but `x instanceof Window` is answerable exactly in a
+    // context with no frames, and naming the constructor bare (a `typeof Window` guard, a prototype patch)
+    // is a ReferenceError that costs whatever script does it.
+    [Theory]
+    [InlineData(JsEngine.Jint)]
+    [InlineData(JsEngine.V8)]
+    public async Task TheWindowInterfaceObject_IdentifiesTheGlobalAndNothingElse(JsEngine engine)
+    {
+        if (engine == JsEngine.V8)
+            Assert.SkipUnless(V8Support.IsAvailable, V8Support.UnavailableReason);
+
+        var ctx = await CollectAsync(engine);
+
+        Assert.True(ctx.GetProperty("windowIsFunction").GetBoolean());
+        Assert.True(ctx.GetProperty("windowIsInstance").GetBoolean());
+        Assert.False(ctx.GetProperty("documentIsInstance").GetBoolean());
+    }
+
+    // The brand a library reads before it decides what the global *is*. An engine global answers
+    // "[object Object]" on its own, which jQuery reads as a plain object — and jQuery UI deep-clones a plain
+    // option value, so an ordinary `of: window` default sent widget.extend into window.window/self/top/parent
+    // and spent the whole stack there, ending the page's scripts before the page had run.
+    [Theory]
+    [InlineData(JsEngine.Jint)]
+    [InlineData(JsEngine.V8)]
+    public async Task TheGlobal_IsBrandedAsAWindowRatherThanAPlainObject(JsEngine engine)
+    {
+        if (engine == JsEngine.V8)
+            Assert.SkipUnless(V8Support.IsAvailable, V8Support.UnavailableReason);
+
+        var ctx = await CollectAsync(engine);
+
+        Assert.Equal("[object Window]", ctx.GetProperty("brand").GetString());
+        Assert.False(ctx.GetProperty("windowIsPlain").GetBoolean());
+    }
+
+    // The window's prototype chain: `window` → `Window.prototype` → `EventTarget.prototype`, as a browser
+    // builds it. The realm's global is the engine's, so it was flat — and the shadow-DOM polyfill installs
+    // the native methods it then calls off `window` onto exactly those prototypes, finding nothing.
+    [Theory]
+    [InlineData(JsEngine.Jint)]
+    [InlineData(JsEngine.V8)]
+    public async Task ATopLevelContext_InheritsFromWindowPrototype(JsEngine engine)
+    {
+        if (engine == JsEngine.V8)
+            Assert.SkipUnless(V8Support.IsAvailable, V8Support.UnavailableReason);
+
+        var ctx = await CollectAsync(engine);
+
+        Assert.True(ctx.GetProperty("protoIsWindow").GetBoolean());
+        Assert.True(ctx.GetProperty("eventTargetInChain").GetBoolean());
+        Assert.Equal("reached", ctx.GetProperty("patchReaches").GetString());
     }
 }

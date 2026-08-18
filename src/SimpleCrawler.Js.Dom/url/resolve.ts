@@ -6,21 +6,22 @@ export function resolveUrl(u: unknown, base?: string): string {
     const input = String(u ?? "");
     if (/^[a-zA-Z][\w+.-]*:\/\//.test(input)) return input;
     const b = String(base || currentLocation()?.href || "http://localhost/");
-    const bm = b.match(/^([a-zA-Z][\w+.-]*:\/\/[^/?#]*)([^?#]*)/) || [];
-    const origin = bm[1] || "http://localhost";
+    const bm = b.match(/^([a-zA-Z][\w+.-]*:)\/\/([^/?#]*)([^?#]*)/) || [];
+    const scheme = bm[1] || "http:";
+    const origin = bm[2] ? scheme + "//" + bm[2] : "http://localhost";
+    // A scheme-relative reference carries its own authority and only borrows the base's scheme. Read as a
+    // path it becomes an origin-relative one whose first segment is a hostname, so the request goes to the
+    // page's own server and 404s — and a loader that builds its CDN prefix as "//" + host is a common shape.
+    if (input.slice(0, 2) === "//") return scheme + input;
     if (input.charAt(0) === "/") return origin + input;
-    if (input.charAt(0) === "#" || input.charAt(0) === "?") return origin + (bm[2] || "/") + input;
-    const dir = (bm[2] || "/").replace(/[^/]*$/, "");
+    if (input.charAt(0) === "#" || input.charAt(0) === "?") return origin + (bm[3] || "/") + input;
+    const dir = (bm[3] || "/").replace(/[^/]*$/, "");
     return origin + dir + input;
 }
 
 export function applyUrl(u: string): void {
     try {
-        let abs = u;
-        if (u.indexOf("http") !== 0) {
-            const base = currentLocation()?.origin || "http://localhost";
-            abs = u.charAt(0) === "/" ? base + u : base + "/" + u;
-        }
+        const abs = resolveUrl(u);
         const m = abs.match(/^(https?:)\/\/([^/?#]+)([^?#]*)(\?[^#]*)?(#.*)?$/);
         if (!m) return;
         const loc = currentLocation();

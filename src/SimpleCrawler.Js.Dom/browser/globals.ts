@@ -1,10 +1,13 @@
 import { Document } from "../dom/Document";
 import { Node } from "../dom/Node";
 import { NodeList } from "../dom/NodeList";
+import { HTMLCollection } from "../dom/HTMLCollection";
 import { Element } from "../dom/Element";
 import { CharacterData } from "../dom/CharacterData";
 import { Text } from "../dom/Text";
 import { Comment } from "../dom/Comment";
+import { CDATASection } from "../dom/CDATASection";
+import { ProcessingInstruction } from "../dom/ProcessingInstruction";
 import { DocumentType } from "../dom/DocumentType";
 import { DocumentFragment } from "../dom/DocumentFragment";
 import { HTMLElement } from "../dom/HTMLElement";
@@ -12,7 +15,8 @@ import { HTMLImageElement } from "../dom/HTMLImageElement";
 import { HTMLTemplateElement } from "../dom/HTMLTemplateElement";
 import { CSSTransition } from "../dom/CSSTransition";
 import * as htmlInterfaces from "../dom/htmlInterfaces";
-import { customElements } from "../dom/customElements";
+import { customElements, CustomElementRegistry } from "../dom/customElements";
+import { ShadowRoot } from "../dom/ShadowRoot";
 import { navigator } from "./navigator";
 import { createLocation } from "./location";
 import { createHistory } from "./history";
@@ -21,6 +25,7 @@ import { URL } from "../url/URL";
 import { URLSearchParams } from "../url/URLSearchParams";
 import { Event } from "./Event";
 import { CustomEvent } from "./CustomEvent";
+import { UIEvent, MouseEvent, PointerEvent, KeyboardEvent, FocusEvent, InputEvent, WheelEvent } from "./UIEvents";
 import { PromiseRejectionEvent } from "./PromiseRejectionEvent";
 import { DOMRect, DOMRectReadOnly } from "./DOMRect";
 import { OffscreenCanvas } from "../dom/OffscreenCanvas";
@@ -32,6 +37,8 @@ import { AbortSignal } from "../network/types/AbortSignal";
 import { XMLHttpRequestEventTarget } from "../network/XMLHttpRequestEventTarget";
 import { XMLHttpRequestStub } from "../network/XMLHttpRequestStub";
 import { fetchStub } from "../network/fetchStub";
+import { BroadcastChannel } from "./BroadcastChannel";
+import { createObjectUrl, revokeObjectUrl } from "./objectUrl";
 import { MessageChannel, MessagePort } from "./MessageChannel";
 import { Storage, createStorage } from "./Storage";
 import { performance } from "./Performance";
@@ -41,6 +48,16 @@ import { IntersectionObserverEntry } from "./IntersectionObserverEntry";
 import { PerformanceObserver } from "./PerformanceObserver";
 import { Worker } from "./Worker";
 import { Blob } from "./Blob";
+import { File } from "./File";
+import { Window } from "./Window";
+import { DOMTokenList } from "../dom/DOMTokenList";
+import { NodeFilter } from "../dom/NodeFilter";
+import { TreeWalker } from "../dom/TreeWalker";
+import { NodeIterator } from "../dom/NodeIterator";
+import { FormData } from "../network/types/FormData";
+import { Headers } from "../network/types/Headers";
+import { Request } from "../network/types/Request";
+import { Response } from "../network/types/Response";
 import { DOMException } from "./DOMException";
 import { DOMParser } from "./DOMParser";
 import { XMLSerializer } from "./XMLSerializer";
@@ -48,6 +65,7 @@ import { FileList } from "./FileList";
 import { btoa, atob } from "./base64";
 import { documentRef } from "../dom/documentRef";
 import { createStyleDeclaration } from "../css/CSSStyleDeclaration";
+import { CSS } from "../css/CSS";
 import { installScrollApi } from "./scroll";
 import { markPrototypeNative } from "./native";
 import { EventListenerMap, EventTarget, addListener, removeListener, fireEvent } from "../dom/eventTarget";
@@ -70,6 +88,16 @@ export function installDOM(global: any): void {
     global.top = global;
     global.parent = global;
     if (!("length" in global)) global.length = 0;
+    // The browsing context's name: empty for a window nothing opened, and a string every time. Matomo's
+    // tracker stores its overlay session in it and reads `window.name.split("###")` unguarded at construction,
+    // so an undefined here costs the whole tracker — the single most common analytics script in the corpus.
+    if (typeof global.name !== "string") global.name = "";
+    // A browser brands the global as Window, and the brand is what keeps it out of a deep clone: jQuery's
+    // isPlainObject asks Object.prototype.toString first, and an engine whose global answers "[object Object]"
+    // has it clone the window instead of copying the reference. window.window/self/top/parent/frames make that
+    // recursion endless, so a widget option carrying `of: window` — an ordinary jQuery UI default — spends the
+    // whole stack before it reaches anything of the page's. The two engines disagreed here without it.
+    Object.defineProperty(global, Symbol.toStringTag, { value: "Window", configurable: true });
     global.navigator = navigator;
     global.location = createLocation();
     global.history = createHistory();
@@ -78,6 +106,23 @@ export function installDOM(global: any): void {
     global.addEventListener = (t: string, cb: (...args: any[]) => void) => addListener(_windowListeners, t, cb);
     global.removeEventListener = (t: string, cb: (...args: any[]) => void) => removeListener(_windowListeners, t, cb);
     global.dispatchEvent = (event: any) => fireEvent(global, _windowListeners, event);
+    // The same three functions on the interface object's prototype, which is where a browser keeps them. The
+    // realm's global belongs to the engine, so its methods are its own and `Window.prototype` carried none —
+    // an accessibility overlay that copies the descriptor off it to wrap listener registration read undefined
+    // and threw at defineProperty.
+    for (const method of ["addEventListener", "removeEventListener", "dispatchEvent"]) {
+        (Window.prototype as any)[method] = global[method];
+    }
+    // …and the global inherits from it, the way a browser's window does — `window` → `Window.prototype` →
+    // `EventTarget.prototype`. Without the chain a patch made on either prototype is unreachable from the
+    // global, and the shadow-DOM polyfill installs the natives it then calls off `window` exactly there. An
+    // engine that refuses to reparent its global keeps the flat shape, which is what this was before.
+    try {
+        Object.setPrototypeOf(Window.prototype, EventTarget.prototype);
+        Object.setPrototypeOf(global, Window.prototype);
+    } catch {
+        // The engine owns the global; a refusal is not something the render can act on.
+    }
     // Handler props declared null so `'onX' in window` feature-detection passes and bundle assignments stick;
     // events never fire in the single-pass render, so the assigned handlers are only ever stored.
     for (const on of ["onresize", "onscroll", "onload", "onerror", "onunload", "onbeforeunload",
@@ -100,6 +145,7 @@ export function installDOM(global: any): void {
     // `getComputedStyle(el, ':after').content.replace(...)`, which throws if `.content` is undefined), so a
     // fresh empty declaration — which returns "" for any key and via getPropertyValue — covers both paths.
     global.getComputedStyle = () => createStyleDeclaration();
+    global.CSS = global.CSS || CSS;
     global.getSelection = () => ({
         rangeCount: 0,
         type: "None",
@@ -137,26 +183,45 @@ export function installDOM(global: any): void {
     // (functions, cycles) aren't supported, matching nothing real but never reached by our targets.
     global.structuredClone = global.structuredClone || ((value: any) => value == null ? value : JSON.parse(JSON.stringify(value)));
     global.Blob = Blob;
+    global.File = global.File || File;
+    // The inert half of the fetch API. FormData/Headers/Request/Response construct and hold data; they issue
+    // nothing, so they belong here rather than behind EnableFetch, which a caller declines to keep the page's
+    // beacons off the network — not to lose four constructors a form widget builds its payload in. The fetch
+    // prelude reinstalls its own copies when it runs, so a Response it hands back stays instanceof-comparable
+    // with the global the page reads.
+    global.FormData = global.FormData || FormData;
+    global.Headers = global.Headers || Headers;
+    global.Request = global.Request || Request;
+    global.Response = global.Response || Response;
     global.DOMException = global.DOMException || DOMException;
     global.DOMParser = global.DOMParser || DOMParser;
     global.XMLSerializer = global.XMLSerializer || XMLSerializer;
     global.FileList = global.FileList || FileList;
     global.btoa = global.btoa || btoa;
     global.atob = global.atob || atob;
-    // Blobs never leave the render, so an object URL only needs to be a unique, revocable token.
-    (URL as any).createObjectURL = (URL as any).createObjectURL || (() => "blob:" + Math.random().toString(36).slice(2));
-    (URL as any).revokeObjectURL = (URL as any).revokeObjectURL || (() => { });
+    // An object URL is a token for bytes the render already holds — see browser/objectUrl.ts for why the
+    // bytes are kept rather than dropped.
+    (URL as any).createObjectURL = (URL as any).createObjectURL || createObjectUrl;
+    (URL as any).revokeObjectURL = (URL as any).revokeObjectURL || revokeObjectUrl;
     global.URL = URL;
     global.URLSearchParams = URLSearchParams;
     global.EventTarget = EventTarget;
     global.Node = Node;
     global.NodeList = NodeList;
+    global.HTMLCollection = HTMLCollection;
     global.Element = Element;
     global.CharacterData = CharacterData;
+    global.DOMTokenList = DOMTokenList;
+    global.NodeFilter = NodeFilter;
+    global.TreeWalker = TreeWalker;
+    global.NodeIterator = NodeIterator;
+    global.Window = global.Window || Window;
     global.Document = Document;
     global.DocumentType = DocumentType;
     global.Text = Text;
     global.Comment = Comment;
+    global.CDATASection = CDATASection;
+    global.ProcessingInstruction = ProcessingInstruction;
     global.DocumentFragment = DocumentFragment;
     global.HTMLElement = HTMLElement;
     global.HTMLTemplateElement = HTMLTemplateElement;
@@ -164,9 +229,18 @@ export function installDOM(global: any): void {
     global.Image = HTMLImageElement;
     for (const name in htmlInterfaces) global[name] = (htmlInterfaces as any)[name];
     global.customElements = customElements;
+    global.CustomElementRegistry = CustomElementRegistry;
+    global.ShadowRoot = ShadowRoot;
     customElements.setDocument(doc);
     global.Event = Event;
     global.CustomEvent = CustomEvent;
+    global.UIEvent = UIEvent;
+    global.MouseEvent = MouseEvent;
+    global.PointerEvent = PointerEvent;
+    global.KeyboardEvent = KeyboardEvent;
+    global.FocusEvent = FocusEvent;
+    global.InputEvent = InputEvent;
+    global.WheelEvent = WheelEvent;
     // A callable PromiseRejectionEvent keeps core-js from force-replacing the native Promise with a polyfill
     // whose finally/allSettled/withResolvers a bundle may have tree-shaken (native in real browsers).
     global.PromiseRejectionEvent = global.PromiseRejectionEvent || PromiseRejectionEvent;
@@ -184,6 +258,7 @@ export function installDOM(global: any): void {
     global.XMLHttpRequest = global.XMLHttpRequest || XMLHttpRequestStub;
     global.fetch = global.fetch || fetchStub;
     global.MessageChannel = global.MessageChannel || MessageChannel;
+    global.BroadcastChannel = global.BroadcastChannel || BroadcastChannel;
     global.MessagePort = global.MessagePort || MessagePort;
     // window.postMessage is called bare (unguarded) by SDKs handing a MessageChannel port to a peer — a
     // reCAPTCHA worker handshake does `postMessage(msg, [channel.port2])` during init, so its absence is a

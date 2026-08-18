@@ -160,6 +160,86 @@ public class JsDomRendererStorageAndPlatformApiTests : JsDomRendererTestBase, IC
         Assert.Contains("href=\"/perf\"", rendered);
     }
 
+    // The navigation-timing pair an analytics SDK reads at init: the legacy performance.timing (epoch
+    // milliseconds, subtracted from each other) and its Level 2 replacement, the entry
+    // getEntriesByType("navigation")[0]. Both report a render that fetched nothing and painted nothing, so
+    // every phase is the same instant — an absent surface is a TypeError inside the SDK, a zero-length phase
+    // is only an uninteresting measurement.
+    [Theory]
+    [InlineData(JsEngine.Jint)]
+    [InlineData(JsEngine.V8)]
+    public async Task JsMode_PerformanceTimingAndNavigationEntry_AreReadable(JsEngine engine)
+    {
+        if (engine == JsEngine.V8)
+            Assert.SkipUnless(V8Support.IsAvailable, V8Support.UnavailableReason);
+
+        const string html = """
+            <html><body><div id="t"></div>
+            <script>
+            try {
+              var t = performance.timing;
+              var nav = performance.getEntriesByType('navigation')[0];
+              var ok = typeof t.navigationStart === 'number' && t.navigationStart > 0 &&
+                       t.domInteractive - t.navigationStart === 0 &&
+                       t.loadEventEnd >= t.navigationStart &&
+                       performance.navigation.type === 0 &&
+                       !!nav && nav.entryType === 'navigation' && nav.type === 'navigate' &&
+                       nav.name === location.href &&
+                       typeof nav.domComplete === 'number' &&
+                       performance.getEntriesByType('resource').length === 0;
+              var a = document.createElement('a'); a.setAttribute('href', ok ? '/ok' : '/bad');
+              document.getElementById('t').appendChild(a);
+            } catch (err) {
+              var e = document.createElement('a'); e.setAttribute('href', '/err'); document.getElementById('t').appendChild(e);
+            }
+            </script>
+            </body></html>
+            """;
+
+        var renderer = CreateJsRenderer(engine);
+        var result = await renderer.RenderAsync(Encoding.UTF8.GetBytes(html), "http://localhost:5000/", new HttpClient(), CancellationToken.None);
+        var rendered = Encoding.UTF8.GetString(result);
+
+        Assert.DoesNotContain("href=\"/err\"", rendered);
+        Assert.DoesNotContain("href=\"/bad\"", rendered);
+        Assert.Contains("href=\"/ok\"", rendered);
+    }
+
+    // An upload widget builds a File from its own bytes during init — the same unguarded construction Blob
+    // is here for. It is a named Blob and must satisfy both instanceof checks.
+    [Theory]
+    [InlineData(JsEngine.Jint)]
+    [InlineData(JsEngine.V8)]
+    public async Task JsMode_File_IsANamedBlob(JsEngine engine)
+    {
+        if (engine == JsEngine.V8)
+            Assert.SkipUnless(V8Support.IsAvailable, V8Support.UnavailableReason);
+
+        const string html = """
+            <html><body><div id="t"></div>
+            <script>
+            try {
+              var f = new File(['hello'], 'note.txt', { type: 'text/plain', lastModified: 5 });
+              var ok = f instanceof File && f instanceof Blob &&
+                       f.name === 'note.txt' && f.size === 5 && f.type === 'text/plain' && f.lastModified === 5;
+              var a = document.createElement('a'); a.setAttribute('href', ok ? '/ok' : '/bad');
+              document.getElementById('t').appendChild(a);
+            } catch (err) {
+              var e = document.createElement('a'); e.setAttribute('href', '/err'); document.getElementById('t').appendChild(e);
+            }
+            </script>
+            </body></html>
+            """;
+
+        var renderer = CreateJsRenderer(engine);
+        var result = await renderer.RenderAsync(Encoding.UTF8.GetBytes(html), "http://localhost:5000/", new HttpClient(), CancellationToken.None);
+        var rendered = Encoding.UTF8.GetString(result);
+
+        Assert.DoesNotContain("href=\"/err\"", rendered);
+        Assert.DoesNotContain("href=\"/bad\"", rendered);
+        Assert.Contains("href=\"/ok\"", rendered);
+    }
+
     // window.Blob backs bundles that build object URLs or read blob bytes; a missing global threw
     // ReferenceError into the SPA error boundary. Size (bytes across string + typed-array parts), type, and
     // URL.createObjectURL must all resolve.
@@ -234,5 +314,99 @@ public class JsDomRendererStorageAndPlatformApiTests : JsDomRendererTestBase, IC
         var rendered = Encoding.UTF8.GetString(result);
 
         Assert.Contains("href=\"/idb/value-42\"", rendered);
+    }
+
+    // The CSS namespace object, read off the global bare — a module that did so died on the ReferenceError,
+    // taking the entry point with it. escape() has to serialize an identifier a selector can be built from,
+    // and a feature probe answers as the current browser this render presents itself as.
+    [Theory]
+    [InlineData(JsEngine.Jint)]
+    [InlineData(JsEngine.V8)]
+    public async Task JsMode_CssNamespace_EscapesAnIdentifierAndAnswersAFeatureProbe(JsEngine engine)
+    {
+        if (engine == JsEngine.V8)
+            Assert.SkipUnless(V8Support.IsAvailable, V8Support.UnavailableReason);
+
+        const string html = """
+            <html><body><div id="t"></div>
+            <script>
+            var escaped = CSS.escape('a.b');
+            var probed = CSS.supports('display', 'grid') && CSS.supports('(display: grid)') && !CSS.supports('');
+            var a = document.createElement('a');
+            a.setAttribute('href', '/css/' + escaped + '/' + probed);
+            document.getElementById('t').appendChild(a);
+            </script>
+            </body></html>
+            """;
+
+        var renderer = CreateJsRenderer(engine);
+        var result = await renderer.RenderAsync(Encoding.UTF8.GetBytes(html), "http://localhost:5000/", new HttpClient(), CancellationToken.None);
+        var rendered = Encoding.UTF8.GetString(result);
+
+        Assert.Contains("href=\"/css/a\\.b/true\"", rendered);
+    }
+
+    // The feature tests a page runs before it decides this browser is one it supports. Each is read off an
+    // object rather than called, so a missing one answers undefined and reads as a pre-2018 browser — and a
+    // bundle that branches on that replaces document.body with an "unsupported browser" page, which costs
+    // every script after it the whole DOM rather than only its own globals.
+    [Theory]
+    [InlineData(JsEngine.Jint)]
+    [InlineData(JsEngine.V8)]
+    public async Task JsMode_TheModernBrowserFeatureTestsAnswerForTheEngineThatIsActuallyRunning(JsEngine engine)
+    {
+        if (engine == JsEngine.V8)
+            Assert.SkipUnless(V8Support.IsAvailable, V8Support.UnavailableReason);
+
+        const string html = """
+            <html><head><title>a title</title></head><body>
+            <script>
+            var checks = [
+                'noModule' in document.createElement('script'),
+                !!Element.prototype.attachShadow,
+                document.createElementNS('http://www.w3.org/1999/xhtml', 'script') instanceof HTMLScriptElement,
+                typeof document.title === 'string' && document.title === 'a title'
+            ];
+            document.title = 'renamed';
+            var a = document.createElement('a');
+            a.setAttribute('href', '/support/' + checks.join('-') + '/' + document.title);
+            document.body.appendChild(a);
+            </script>
+            </body></html>
+            """;
+
+        var renderer = CreateJsRenderer(engine);
+        var result = await renderer.RenderAsync(Encoding.UTF8.GetBytes(html), "https://example.test/", new HttpClient(), CancellationToken.None);
+        var rendered = Encoding.UTF8.GetString(result);
+
+        Assert.Contains("href=\"/support/true-true-true-true/renamed\"", rendered);
+    }
+
+    // The other half of claiming module support: the legacy branch of a differential-serving pair is the one
+    // a module-capable browser skips, and running both initialises the same app twice over one DOM.
+    [Theory]
+    [InlineData(JsEngine.Jint)]
+    [InlineData(JsEngine.V8)]
+    public async Task JsMode_ANomoduleScriptIsNotRun(JsEngine engine)
+    {
+        if (engine == JsEngine.V8)
+            Assert.SkipUnless(V8Support.IsAvailable, V8Support.UnavailableReason);
+
+        const string html = """
+            <html><body>
+            <script nomodule>window.__legacy = true;</script>
+            <script>
+            var a = document.createElement('a');
+            a.setAttribute('href', '/legacy/' + (window.__legacy === true));
+            document.body.appendChild(a);
+            </script>
+            </body></html>
+            """;
+
+        var renderer = CreateJsRenderer(engine);
+        var result = await renderer.RenderAsync(Encoding.UTF8.GetBytes(html), "https://example.test/", new HttpClient(), CancellationToken.None);
+        var rendered = Encoding.UTF8.GetString(result);
+
+        Assert.Contains("href=\"/legacy/false\"", rendered);
     }
 }

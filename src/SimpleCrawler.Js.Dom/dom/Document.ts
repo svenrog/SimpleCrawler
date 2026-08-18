@@ -12,6 +12,22 @@ import { reflectedElementFactories } from "./reflectedElements";
 import { customElements } from "./customElements";
 import { collectByTag, walkFind, hideOwnFields, collectByClass, collectByPredicate } from "./utils";
 import { querySelectorAll } from "../selector/querySelector";
+import { TreeWalker } from "./TreeWalker";
+import { NodeIterator } from "./NodeIterator";
+import { parserRef } from "../html/parserRef";
+import { resolveUrl } from "../url/resolve";
+import { HTMLCollection } from "./HTMLCollection";
+import { clearParserInserted } from "./resourceLoader";
+import { createFontFaceSet } from "../browser/fonts";
+import { Event } from "../browser/Event";
+import { CustomEvent } from "../browser/CustomEvent";
+import { viewportWidth, viewportHeight } from "../browser/viewport";
+
+function withinViewport(x: unknown, y: unknown): boolean {
+    const px = Number(x);
+    const py = Number(y);
+    return px >= 0 && py >= 0 && px <= viewportWidth() && py <= viewportHeight();
+}
 
 export class Document extends Node {
     documentElement: Element | null = null;
@@ -27,7 +43,10 @@ export class Document extends Node {
     // nothing left "loading" — frameworks that gate on readyState (Next's Flight stream close among them)
     // see "complete" immediately instead of stalling behind a state that never advances.
     readyState: string = "complete";
+    visibilityState: string = "visible";
+    hidden: boolean = false;
     private _cookies = new Map<string, string>();
+    private _fonts: any = null;
 
     constructor(defaultView?: any) {
         super(NodeType.Document);
@@ -39,6 +58,45 @@ export class Document extends Node {
     // loader) read document.location.protocol/href, which threw on undefined when only window.location existed.
     get location(): any {
         return this.defaultView ? this.defaultView.location : null;
+    }
+
+    // The page's own address, read as a string by consent/analytics code that never touches location
+    // (`document.URL.indexOf(...)`, `new URL(document.documentURI)`). Both alias location.href here: this
+    // render performs no navigation, so there is no history entry for them to diverge over.
+    get URL(): string {
+        const loc = this.location;
+        return loc && loc.href ? String(loc.href) : "";
+    }
+
+    get documentURI(): string {
+        return this.URL;
+    }
+
+    // The base against which the document's relative URLs resolve: the first <base href>, resolved against
+    // the page URL, else the page URL itself. Node.baseURI delegates here for every node in the tree.
+    get baseURI(): string {
+        const base = this.querySelector("base");
+        const href = base ? base.getAttributeInternal("href") : null;
+        return href ? resolveUrl(href, this.URL) : this.URL;
+    }
+
+    // The <title> element's text, which analytics and consent code reads as a string on every page
+    // (`document.title.replace(...)`, `title.split("|")`). Absent, it answers undefined and the read after it
+    // throws. The setter creates the element when the document has none, exactly as a browser does.
+    get title(): string {
+        const el = this.querySelector("title");
+        return el ? String(el.textContent ?? "") : "";
+    }
+
+    set title(value: unknown) {
+        const text = value == null ? "" : String(value);
+        let el = this.querySelector("title");
+        if (!el) {
+            if (!this.head) return;
+            el = this.createElement("title");
+            this.head.appendChild(el as any);
+        }
+        el.textContent = text;
     }
 
     // Bundles read document.referrer as a string (analytics, `referrer.split('/')[2] !== location.host`);
@@ -83,7 +141,13 @@ export class Document extends Node {
         return custom || new HTMLElement(name);
     }
 
+    // In the HTML namespace this is createElement with the namespace spelled out, and it must answer the
+    // same classes: Cloudflare's Rocket Loader rebuilds every deferred script with
+    // createElementNS(script.namespaceURI, "script") and then assigns .src/.textContent, so a plain Element
+    // here means the page's own scripts are rebuilt into elements that reflect nothing and never load —
+    // on a Rocket Loader site that is the whole page.
     createElementNS(ns: string, tag: string): Element {
+        if (!ns || ns === "http://www.w3.org/1999/xhtml") return this.createElement(tag);
         return new Element(tag, ns);
     }
 
@@ -103,30 +167,112 @@ export class Document extends Node {
         return new Range();
     }
 
-    getElementById(id: string): Element | null {
-        return walkFind(this.documentElement, (e) => (e as any).getAttribute("id") === id) as Element | null;
+    createTreeWalker(root: Node, whatToShow?: number, filter?: any): TreeWalker {
+        return new TreeWalker(root, whatToShow, filter);
     }
 
+    createNodeIterator(root: Node, whatToShow?: number, filter?: any): NodeIterator {
+        return new NodeIterator(root, whatToShow, filter);
+    }
+
+    // Nothing here is written during parsing — the host parses the whole shell before any script runs — so a
+    // write lands at the end of the body, which is where a trailing loader script's own write would have gone.
+    // A written <script src> is a real appended resource: the drain loop fetches and runs it like any other.
+    // Deliberately not the browser's post-load behaviour, which implicitly calls document.open() and wipes the
+    // page: a bundle that writes after load would take the whole render's content with it.
+    write(...parts: unknown[]): void {
+        const target = this.body || this.documentElement;
+        const parse = parserRef.parseFragment;
+        if (!target || !parse) return;
+
+        const html = parts.map((p) => (p == null ? "" : String(p))).join("");
+        // A written script is the one exception to the parser-inserted rule: the spec runs it, and a loader
+        // that re-adds a script by writing its outerHTML depends on that.
+        for (const node of parse(html)) {
+            clearParserInserted(node);
+            target.appendChild(node);
+        }
+    }
+
+    writeln(...parts: unknown[]): void {
+        this.write(parts.map((p) => (p == null ? "" : String(p))).join("") + "\n");
+    }
+
+    // A single-pass render has no parser to suspend and no stream to reopen; the pair exists so a loader that
+    // brackets its write() with them doesn't throw on the way in or out.
+    open(): Document {
+        return this;
+    }
+
+    close(): void { }
+
+    getElementById(id: string): Element | null {
+        return walkFind(this.documentElement, (e) => (e as any).getAttributeInternal("id") === id) as Element | null;
+    }
+
+    // The root element is in scope for the document's own getElementsBy* — unlike an element's, which search
+    // strictly below themselves. A browser answers document.getElementsByTagName("html") with the root, and
+    // jQuery resolves a tag-only $("html") through exactly that call: an empty list there is undefined where
+    // the caller expects an element, so `$("html").attr("lang").indexOf(...)` throws inside a CMS bundle's
+    // init and costs every global it would have registered.
     getElementsByTagName(tag: string): Element[] {
-        const out: Node[] = [];
-        if (this.documentElement) collectByTag(this.documentElement, String(tag).toLowerCase(), out);
+        const name = String(tag).toLowerCase();
+        const out = new HTMLCollection<Node>();
+        if (this.documentElement) {
+            if (name === "*" || this.documentElement.localName === name) out.push(this.documentElement);
+            collectByTag(this.documentElement, name, out);
+        }
         return out as unknown as Element[];
     }
 
     getElementsByClassName(className: string): Element[] {
-        const out: Node[] = [];
-        if (this.documentElement) collectByClass(this.documentElement, String(className), out);
+        const out = new HTMLCollection<Node>();
+        if (this.documentElement) {
+            if ((this.documentElement as any).classList.contains(String(className))) out.push(this.documentElement);
+            collectByClass(this.documentElement, String(className), out);
+        }
         return out as unknown as Element[];
     }
 
     getElementsByName(name: string): Element[] {
-        const out: Node[] = [];
-        if (this.documentElement) collectByPredicate(this.documentElement, (e) => (e as any).getAttribute("name") === name, out);
+        const matches = (e: any): boolean => e.getAttributeInternal("name") === name;
+        const out = new HTMLCollection<Node>();
+        if (this.documentElement) {
+            if (matches(this.documentElement)) out.push(this.documentElement);
+            collectByPredicate(this.documentElement, matches, out);
+        }
         return out as unknown as Element[];
     }
 
     get scripts(): Element[] {
         return this.getElementsByTagName("script");
+    }
+
+    // The foreground answers: the tab is visible, it has focus, and nothing is focused past the body. Bot
+    // management and session recorders read these during init and dereference what they get, so a missing one
+    // throws instead of taking the backgrounded branch it was written for.
+    hasFocus(): boolean {
+        return true;
+    }
+
+    get activeElement(): Element | null {
+        return this.body || this.documentElement;
+    }
+
+    // No layout, so nothing truly occupies a point. A recorder hit-testing its own cursor trail gets the
+    // element a browser would always have under one, and null outside the viewport — the answer it guards
+    // for already, since a browser returns null there too.
+    elementFromPoint(x: unknown, y: unknown): Element | null {
+        return withinViewport(x, y) ? (this.body || this.documentElement) : null;
+    }
+
+    elementsFromPoint(x: unknown, y: unknown): Element[] {
+        if (!withinViewport(x, y)) return [];
+        return [this.body, this.documentElement].filter((e) => e !== null) as Element[];
+    }
+
+    get fonts(): any {
+        return this._fonts || (this._fonts = createFontFaceSet());
     }
 
     querySelector(sel: string): Element | null {
@@ -138,8 +284,12 @@ export class Document extends Node {
         return querySelectorAll(this, sel) as unknown as Element[];
     }
 
-    createEvent(): any {
-        return { initEvent() { } };
+    // The pre-constructor construction path: create it untyped, then name it through initEvent /
+    // initCustomEvent. An analytics shim builds every event this way and reads nothing back, so what matters
+    // is that the object it gets is a real Event carrying the initializer the family it asked for defines.
+    createEvent(kind?: string): any {
+        const family = String(kind || "Event").toLowerCase();
+        return family.startsWith("custom") ? new CustomEvent("") : new Event("");
     }
 
     // jQuery's UMD factory feature-detects against `implementation.createHTMLDocument` during init; a missing
@@ -149,6 +299,19 @@ export class Document extends Node {
             hasFeature: () => true,
             createDocumentType: (name: string, publicId?: string, systemId?: string) =>
                 new DocumentType(name, publicId ?? "", systemId ?? ""),
+            // The XML sibling of createHTMLDocument, reached the same way: an SVG or feed helper calls it
+            // during init with no feature test, so its absence costs that helper's whole script. The document
+            // it answers with is an ordinary one carrying the named root element — namespaces are not modelled.
+            createDocument: (_ns: string | null, qualifiedName?: string, doctype?: any) => {
+                const d = new Document();
+                if (doctype) d.appendChild(doctype);
+                if (qualifiedName) {
+                    const root = d.createElement(String(qualifiedName));
+                    d.appendChild(root);
+                    d.documentElement = root;
+                }
+                return d;
+            },
             createHTMLDocument: (title?: string) => {
                 const d = new Document();
                 const html = d.createElement("html");

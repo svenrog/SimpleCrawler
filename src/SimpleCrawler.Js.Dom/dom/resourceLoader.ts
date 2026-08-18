@@ -1,4 +1,5 @@
 import { Event } from "../browser/Event";
+import { objectUrlSource } from "../browser/objectUrl";
 import { reportSwallowed } from "../diagnostics";
 
 // A <script src> or <link> the bundle appends at runtime (webpack lazy-route JS/CSS chunks, React 18's
@@ -9,6 +10,27 @@ import { reportSwallowed } from "../diagnostics";
 interface PendingResource {
     id: number;
     node: any;
+    // The source behind an object-URL src, read when the node is connected: that is when a browser starts
+    // the fetch, and the page may revoke the token on the next line.
+    held: string | null;
+}
+
+// Scripts the HTML parser built rather than page code: everything the fragment parser produces for
+// innerHTML/insertAdjacentHTML/DOMParser/<template>, and the shell's own tags. The HTML spec starts such a
+// script "already started", so connecting it never runs it — which is why innerHTML is not an XSS vector,
+// and why a tag manager that stages its snippets through innerHTML and *also* creates the live ones with
+// createElement would otherwise have every staged copy run here, entity-escaped source and all.
+// document.write is the exception the spec carves out, and Document.write clears the mark for it.
+const _parserInserted = new WeakSet<object>();
+
+export function markParserInserted(node: object): void {
+    _parserInserted.add(node);
+}
+
+export function clearParserInserted(node: any): void {
+    _parserInserted.delete(node);
+    const kids = node.childNodes;
+    if (kids) for (let i = 0; i < kids.length; i++) clearParserInserted(kids[i]);
 }
 
 let _counter = 0;
@@ -16,21 +38,43 @@ const _pending: PendingResource[] = [];
 const _byId = new Map<number, any>();
 const _seen = new WeakSet<object>();
 
+// The types a browser executes a classic or module script for; anything else (application/ld+json, a
+// template, Cloudflare Rocket Loader's token-prefixed type) is inert data. Mirrors the shell's own filter.
+const runnableTypes = ["", "text/javascript", "module", "application/javascript"];
+
 export function registerResource(node: any): void {
     const tag = node.localName;
     if (tag !== "script" && tag !== "link") return;
-    if (tag === "script" && !node.getAttribute("src")) return;
+    if (tag === "script" && _parserInserted.has(node)) return;
+    if (tag === "script" && !node.getAttributeInternal("src")) {
+        // An appended script with no src carries its source in the node. A browser runs it the moment it is
+        // connected; queuing it here is what makes that true — a tag manager writing its snippet inline, or
+        // a loader re-adding a script it took out of the markup, is otherwise silently dead code.
+        const type = (node.getAttributeInternal("type") || "").trim().toLowerCase();
+        if (runnableTypes.indexOf(type) === -1) return;
+        if (!String(node.textContent || "")) return;
+    }
     if (_seen.has(node)) return;
     _seen.add(node);
     const id = ++_counter;
-    _pending.push({ id, node });
+    const src = tag === "script" ? String(node.getAttributeInternal("src") || "") : "";
+    _pending.push({ id, node, held: src.indexOf("blob:") === 0 ? objectUrlSource(src) : null });
     _byId.set(id, node);
 }
 
 export function takeResources(): string {
     if (!_pending.length) return "";
     const batch = _pending.splice(0, _pending.length);
-    return JSON.stringify(batch.map((r) => ({ id: r.id, tag: r.node.localName, src: r.node.getAttribute("src") || "" })));
+    // type carries the script's own type attribute: an appended type="module" has to reach the host's module
+    // loader rather than its classic-script entry, or its imports never resolve and its exports never run.
+    // text carries a source beside a src only for one the render built: there is nothing to fetch for it.
+    return JSON.stringify(batch.map((r) => ({
+        id: r.id,
+        tag: r.node.localName,
+        src: r.node.getAttributeInternal("src") || "",
+        type: r.node.getAttributeInternal("type") || "",
+        text: r.node.getAttributeInternal("src") ? (r.held || "") : String(r.node.textContent || ""),
+    })));
 }
 
 export function pendingResourceCount(): number {

@@ -14,10 +14,13 @@ export function installNetwork(global: any): void {
         request: (url: string, method: string, headersJson: string, body: string | null) =>
             JSON.parse(__httpRequest(url, method, headersJson, body)),
     };
-    global.Headers = global.Headers || Headers;
-    global.Response = global.Response || Response;
-    global.Request = global.Request || Request;
-    global.FormData = global.FormData || FormData;
+    // Assigned unconditionally over the base prelude's copies of the same four classes: fetch() below builds
+    // its result from this bundle's Response, so the global a page instanceof-checks has to be this one too.
+    // The base prelude runs first and page scripts run after both, so nothing observes the swap.
+    global.Headers = Headers;
+    global.Response = Response;
+    global.Request = Request;
+    global.FormData = FormData;
     // Override the base prelude's inert stubs: with the fetch shim enabled, both fetch and XHR issue real
     // requests through __http. Assigned unconditionally (not `||`) so the functional ones win over the stubs
     // the base prelude always installs, and the XHR pair together so both come from this bundle — Zone.js

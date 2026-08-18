@@ -61,6 +61,7 @@ internal sealed class JintJsEngine : IJsEngine, IDisposable
             // already surface host exceptions as JS errors, so this matches that behaviour.
             options
                 .EnableModules(loader)
+                .UseHostFactory(_ => new JintImportMetaHost(baseUri))
                 .CatchClrExceptions();
 
             options.Constraints.MaxExecutionStackCount = _maxExecutionStackCount;

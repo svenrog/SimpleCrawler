@@ -198,6 +198,37 @@ public class JsDomRendererNetworkingTests : JsDomRendererTestBase, IClassFixture
         Assert.Contains("href=\"/xhr-200\"", rendered);
     }
 
+    // The fetch prelude carries its own copy of Response, so with the shim on it must reinstall the global
+    // over the base prelude's copy — otherwise a fetched response and the global a page tests it against are
+    // two different classes and `res instanceof Response` is false where a browser says true.
+    [Theory]
+    [InlineData(JsEngine.Jint)]
+    [InlineData(JsEngine.V8)]
+    public async Task JsMode_FetchedResponse_IsInstanceOfTheGlobalResponse(JsEngine engine)
+    {
+        if (engine == JsEngine.V8)
+            Assert.SkipUnless(V8Support.IsAvailable, V8Support.UnavailableReason);
+
+        const string html = """
+            <!doctype html><html><head></head><body>
+            <script>
+              fetch('/api').then(function (res) {
+                var a = document.createElement('a');
+                a.setAttribute('href', res instanceof Response ? '/same-class' : '/two-classes');
+                document.body.appendChild(a);
+              });
+            </script>
+            </body></html>
+            """;
+
+        using var client = new HttpClient(new FixedResponseHandler());
+        var renderer = CreateJsRenderer(engine, new JsRenderOptions { EnableFetch = true });
+        var result = await renderer.RenderAsync(Encoding.UTF8.GetBytes(html), "https://example.test/", client, CancellationToken.None);
+        var rendered = Encoding.UTF8.GetString(result);
+
+        Assert.Contains("href=\"/same-class\"", rendered);
+    }
+
     // The global Response is a spec-compliant constructor the page's own bundle may call directly
     // (new Response(body, init), or new Response() with no args) — not only the internal wrapper fetch
     // builds. A bundle that did `new Response()` and read `.ok` crashed ("Cannot read properties of
@@ -270,6 +301,54 @@ public class JsDomRendererNetworkingTests : JsDomRendererTestBase, IClassFixture
 
         Assert.DoesNotContain("href=\"/err\"", rendered);
         Assert.Contains("href=\"/ok\"", rendered);
+    }
+
+    // FormData/Headers/Request/Response issue nothing — they construct and hold data — so they belong to the
+    // base prelude, not behind EnableFetch. A caller declines the fetch shim to keep the page's beacons off
+    // the network, and used to lose these four with it: a form widget building its payload during init died
+    // on a ReferenceError, taking every global that script would have registered. Nothing here reaches the
+    // network, and the counting host proves it.
+    [Theory]
+    [InlineData(JsEngine.Jint)]
+    [InlineData(JsEngine.V8)]
+    public async Task JsMode_InertFetchTypes_ArePresentWithoutFetchShim(JsEngine engine)
+    {
+        if (engine == JsEngine.V8)
+            Assert.SkipUnless(V8Support.IsAvailable, V8Support.UnavailableReason);
+
+        const string html = """
+            <!doctype html><html><head></head><body>
+            <script>
+            try {
+              var form = new FormData();
+              form.append('a', '1');
+              var headers = new Headers({ 'Content-Type': 'application/json' });
+              var request = new Request('https://example.test/api', { method: 'POST', headers: headers });
+              var response = new Response('{"v":1}', { status: 201 });
+              var ok = form.get('a') === '1' && form.has('a') &&
+                       headers.get('content-type') === 'application/json' &&
+                       request.url === 'https://example.test/api' && request.method === 'POST' &&
+                       request.headers instanceof Headers &&
+                       response instanceof Response && response.status === 201 && response.ok === true;
+              var l = document.createElement('a'); l.setAttribute('href', ok ? '/ok' : '/bad');
+              document.body.appendChild(l);
+            } catch (err) {
+              var e = document.createElement('a'); e.setAttribute('href', '/err'); document.body.appendChild(e);
+            }
+            </script>
+            </body></html>
+            """;
+
+        var host = new RequestCountingHandler();
+        using var client = new HttpClient(host);
+        var renderer = CreateJsRenderer(engine, new JsRenderOptions { EnableFetch = false });
+        var result = await renderer.RenderAsync(Encoding.UTF8.GetBytes(html), "http://localhost:5000/", client, CancellationToken.None);
+        var rendered = Encoding.UTF8.GetString(result);
+
+        Assert.DoesNotContain("href=\"/err\"", rendered);
+        Assert.DoesNotContain("href=\"/bad\"", rendered);
+        Assert.Contains("href=\"/ok\"", rendered);
+        Assert.Equal(0, host.Requests);
     }
 
     // The base prelude provides an inert XMLHttpRequest so an SDK that patches XMLHttpRequest.prototype.open

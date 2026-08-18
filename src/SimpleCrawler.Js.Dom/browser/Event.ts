@@ -1,7 +1,7 @@
 export class Event {
-    readonly type: string;
-    readonly bubbles: boolean;
-    readonly cancelable: boolean;
+    type: string;
+    bubbles: boolean;
+    cancelable: boolean;
     readonly timeStamp: number;
     isTrusted = false;
     defaultPrevented = false;
@@ -25,5 +25,13 @@ export class Event {
 
     stopImmediatePropagation(): void {
         this._stoppedImmediate = true;
+    }
+
+    // The pre-constructor spelling, still how a polyfill built on document.createEvent names its event —
+    // and it names it *after* creating it, so the type cannot be readonly.
+    initEvent(type: unknown, bubbles?: unknown, cancelable?: unknown): void {
+        this.type = String(type);
+        (this as any).bubbles = !!bubbles;
+        (this as any).cancelable = !!cancelable;
     }
 }

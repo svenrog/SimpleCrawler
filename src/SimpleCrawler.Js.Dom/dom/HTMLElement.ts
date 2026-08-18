@@ -1,5 +1,4 @@
 import { Element } from "./Element";
-import { DocumentFragment } from "./DocumentFragment";
 import { customElements } from "./customElements";
 import { hideOwnFields } from "./utils";
 
@@ -24,22 +23,11 @@ const ValidityStateAllValid = Object.freeze({
 // tag from the registry's name stack when the registry is constructing it, so a subclass `super()` lands
 // with the correct localName without the caller passing one.
 export class HTMLElement extends Element {
-    shadowRoot: any = null;
-
     constructor(tag?: string, ns?: string) {
         super(tag || customElements.currentName() || "", ns);
         hideOwnFields(this);
         const target = customElements.takeUpgradeTarget();
         if (target) return target;
-    }
-
-    attachShadow(init?: { mode?: string }): any {
-        if (this.shadowRoot) return this.shadowRoot;
-        const root = new DocumentFragment();
-        (root as any).host = this;
-        (root as any).mode = init && init.mode ? init.mode : "open";
-        this.shadowRoot = root;
-        return root;
     }
 
     focus(): void { }
@@ -63,13 +51,15 @@ export class HTMLElement extends Element {
 
     attributeChangedCallback(_name: string, _oldValue: string | null, _newValue: string | null): void { }
 
-    setAttribute(name: string, value: unknown): void {
+    // Overrides the internal steps rather than the public method, so an observed attribute reports its change
+    // however it was set — through setAttribute, or through the reflected property that bypasses it.
+    setAttributeInternal(name: string, value: unknown): void {
         const observed = (this.constructor as any).observedAttributes;
         const tracked = Array.isArray(observed) && observed.indexOf(name) >= 0;
-        const old = tracked ? this.getAttribute(name) : null;
-        super.setAttribute(name, value);
+        const old = tracked ? this.getAttributeInternal(name) : null;
+        super.setAttributeInternal(name, value);
         if (tracked && typeof this.attributeChangedCallback === "function") {
-            this.attributeChangedCallback(name, old, this.getAttribute(name));
+            this.attributeChangedCallback(name, old, this.getAttributeInternal(name));
         }
     }
 }

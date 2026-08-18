@@ -1,7 +1,6 @@
 using Microsoft.Extensions.Logging;
 using SimpleCrawler.Core.Extensions;
 using SimpleCrawler.Js.Abstractions;
-using SimpleCrawler.Js.Errors;
 using SimpleCrawler.Core.Collectors;
 using SimpleCrawler.Core.Helpers;
 using SimpleCrawler.Js.Models;
@@ -114,61 +113,86 @@ public sealed class JsRenderer
         RenderProfiler.Stop("phase.engineCreate", createTime);
 
         var engine = RenderProfiler.Enabled ? new ProfilingJsEngine(baseEngine) : baseEngine;
+        var isolation = new RenderIsolation(_logger, pageUrl);
         var setupTime = RenderProfiler.Start();
 
+        // The DOM prelude is the one crossing that is not isolated: a page whose document/window never
+        // existed is not a partial render, and reporting it as one would hand the caller a page that failed
+        // for our reasons dressed as a page that ran.
         if (engine.BeginPage())
-            RunPrelude(engine, JsPreludes.Dom);
+        {
+            try
+            {
+                RunPrelude(engine, JsPreludes.Dom);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                _logger.LogError(ex, "The JS DOM prelude failed on '{url}'; nothing could be rendered.", pageUrl);
+                throw;
+            }
+        }
 
-        engine.CallGlobal("__crawlerSetLocation", pageUrl);
-        engine.CallGlobal("__crawlerSetViewport", (int)_options.Viewport.Width, (int)_options.Viewport.Height);
+        isolation.Run("Location setup", () => engine.CallGlobal("__crawlerSetLocation", pageUrl));
+        isolation.Run("Viewport setup", () => engine.CallGlobal("__crawlerSetViewport", (int)_options.Viewport.Width, (int)_options.Viewport.Height));
 
-        ConfigureScriptLogging(engine);
-        ConfigureDiagnostics(engine);
+        ConfigureScriptLogging(engine, isolation);
+        ConfigureDiagnostics(engine, isolation);
         if (_options.EnableWebGl)
-            engine.CallGlobal("__crawlerEnableWebGl");
+            isolation.Run("WebGL setup", () => engine.CallGlobal("__crawlerEnableWebGl"));
 
+        // A shim prelude that fails costs the page its shim, not its render: the base prelude's inert stubs
+        // are still installed underneath each of them.
         if (_options.EnableIndexedDb)
-            RunPrelude(engine, JsPreludes.IndexedDb);
+            isolation.Run("IndexedDB prelude", () => RunPrelude(engine, JsPreludes.IndexedDb));
 
         if (_options.EnableStreams)
-            RunPrelude(engine, JsPreludes.Stream);
+            isolation.Run("Streams prelude", () => RunPrelude(engine, JsPreludes.Stream));
 
         if (DomProfiler.Enabled)
-            engine.CallGlobal("__crawlerEnableDomProfile");
+            isolation.Run("DOM profile setup", () => engine.CallGlobal("__crawlerEnableDomProfile"));
 
         RenderProfiler.Stop("phase.setupGlobals", setupTime);
 
         var parseTime = RenderProfiler.Start();
-        try
+        if (!isolation.Run("JS DOM parse", () => engine.CallGlobal("__crawlerLoadHtml", html)))
         {
-            engine.CallGlobal("__crawlerLoadHtml", html);
-        }
-        catch (JsException ex)
-        {
-            _logger.LogWarning("JS DOM parse error on '{url}': {message}\n{details}", pageUrl, ex.Message, ex.ErrorDetails);
             RenderProfiler.Stop("phase.total", totalTime);
             return abortValue;
         }
         RenderProfiler.Stop("phase.parse", parseTime);
 
-        var documentBaseUri = ResolveDocumentBase(engine, pageUri);
+        // Everything from here reads the parsed document, so it travels together: the context is what the
+        // steps below take instead of six parameters each.
+        var context = new RenderingContext
+        {
+            Engine = engine,
+            Isolation = isolation,
+            PageUrl = pageUrl,
+            PageUri = pageUri,
+            DocumentBaseUri = ResolveDocumentBase(engine, isolation, pageUri),
+            Client = client,
+            CancellationToken = cancellationToken,
+        };
+
+        // Before any module resolves, because the map is what a bare specifier resolves through.
+        fetcher.ImportMap = ReadImportMap(context);
 
         var collectTime = RenderProfiler.Start();
-        var (regularScripts, moduleEntries) = await CollectScriptsFromJsAsync(engine, documentBaseUri, pageUrl, client, _sources, cancellationToken);
+        var (regularScripts, moduleEntries) = await CollectScriptsFromJsAsync(context);
         RenderProfiler.Stop("phase.collect", collectTime);
 
         // The markup had a <script> tag but the parser surfaced nothing executable (e.g. JSON), so nothing
         // ran: finalize against the parsed-only tree.
         if (regularScripts.Count == 0 && moduleEntries.Count == 0)
         {
-            return Finalize(engine, finalize, totalTime);
+            return Finalize(context, finalize, abortValue, totalTime);
         }
 
         // Snapshot the parsed-but-unscripted tree so a streaming/hydration bundle that tears down the
         // server markup without rebuilding it can't leave the render worse off than the shell it started
         // from. Only under EnableStreams, the one path that lets such bundles run.
         if (_options.EnableStreams)
-            engine.CallGlobal("__crawlerCaptureBaseline");
+            isolation.Run("Baseline capture", () => engine.CallGlobal("__crawlerCaptureBaseline"));
 
         if (_options.EnableFetch)
         {
@@ -176,47 +200,64 @@ public sealed class JsRenderer
             // invoke a host object's instance method under NativeAOT. The fetch prelude wraps this in a JS
             // __http shim. See JsHttp.requestJson.
             var http = new JsHttp(client, pageUri, _logger, _fetchCache, cancellationToken);
-            engine.EmbedFunction("__httpRequest", http.requestJson);
-            RunPrelude(engine, JsPreludes.Fetch);
+            isolation.Run("Fetch prelude", () =>
+            {
+                engine.EmbedFunction("__httpRequest", http.requestJson);
+                RunPrelude(engine, JsPreludes.Fetch);
+            });
         }
 
         var bundleExecutionTime = RenderProfiler.Start();
         foreach (var script in regularScripts)
         {
-            RunRegularJs(engine, script, pageUrl);
+            if (!script.Deferred)
+                RunRegularJs(context, script);
+        }
+
+        // async/defer, then modules — everything the parser handed to the network runs after the document's
+        // own inline code, which is the order a browser produces and the order page code is written against:
+        // an async loader that reads a global the inline snippet below it defines finds it defined.
+        foreach (var script in regularScripts)
+        {
+            if (script.Deferred)
+                RunRegularJs(context, script);
         }
 
         foreach (var module in moduleEntries)
         {
-            RunModule(engine, module, pageUrl);
+            RunModule(context, module);
         }
         RenderProfiler.Stop("phase.bundleExec", bundleExecutionTime);
 
-        engine.CallGlobal("__crawlerFireDomContentLoaded");
+        isolation.Run("DOMContentLoaded dispatch", () => engine.CallGlobal("__crawlerFireDomContentLoaded"));
 
         var drainTime = RenderProfiler.Start();
-        await DrainJsAsync(engine, documentBaseUri, pageUri, client, pageUrl, cancellationToken);
+        await DrainJsAsync(context);
         RenderProfiler.Stop("phase.drain", drainTime);
 
         if (_options.EnableStreams)
         {
-            var restored = engine.Evaluate<int>("__crawlerGuardRegression()");
+            var restored = isolation.Run("Regression guard", () => engine.Evaluate<int>("__crawlerGuardRegression()"), -1);
             if (restored >= 0)
                 _logger.LogDebug("JS render regressed below the server-rendered shell on '{url}'; restored baseline ({anchors} anchors).", pageUrl, restored);
         }
 
-        return Finalize(engine, finalize, totalTime);
+        return Finalize(context, finalize, abortValue, totalTime);
     }
 
-    private static T Finalize<T>(IJsEngine engine, Func<IJsEngine, T> finalize, long totalTime)
+    /// <summary>
+    /// The last crossing, and the one with the most to lose: a throw while reading the settled tree would
+    /// discard a render that already ran, so it degrades to <paramref name="abortValue"/> like any other.
+    /// </summary>
+    private static T Finalize<T>(RenderingContext context, Func<IJsEngine, T> finalize, T abortValue, long totalTime)
     {
         var finalizeTime = RenderProfiler.Start();
-        var result = finalize(engine);
+        var result = context.Isolation.Run("Render finalize", () => finalize(context.Engine), abortValue);
         RenderProfiler.Stop("phase.finalize", finalizeTime);
         RenderProfiler.Stop("phase.total", totalTime);
 
         if (DomProfiler.Enabled)
-            DomProfiler.Add(engine.Evaluate<string>("__crawlerDomProfileDump()"));
+            DomProfiler.Add(context.Isolation.Run("DOM profile dump", () => context.Engine.Evaluate<string>("__crawlerDomProfileDump()"), string.Empty));
 
         return result;
     }
@@ -226,21 +267,33 @@ public sealed class JsRenderer
     /// not the page URL — matching the browser. Without this, a &lt;base href="/"&gt; page served from a nested
     /// path fetches the site's HTML fallback for every relative &lt;script src&gt;, and the engine aborts on it.
     /// </summary>
-    private static Uri ResolveDocumentBase(IJsEngine engine, Uri pageUri)
+    private static Uri ResolveDocumentBase(IJsEngine engine, RenderIsolation isolation, Uri pageUri)
     {
-        var baseHref = engine.Evaluate<string>("__crawlerGetBaseHref()");
+        var baseHref = isolation.Run("Base href read", () => engine.Evaluate<string>("__crawlerGetBaseHref()"), string.Empty);
         if (!string.IsNullOrEmpty(baseHref) && Uri.TryCreate(pageUri, baseHref, out var baseUri))
             return baseUri;
 
         return pageUri;
     }
 
-    private async Task<(IReadOnlyList<RegularScript> Regular, IReadOnlyList<ModuleScript> Modules)> CollectScriptsFromJsAsync(IJsEngine engine, Uri baseUri, string pageUrl, HttpClient client, SourceCache sources, CancellationToken cancellationToken)
+    /// <summary>
+    /// The page's import map. Its addresses resolve against the document base, so a map on a page carrying a
+    /// <c>&lt;base href&gt;</c> means what the page meant by it.
+    /// </summary>
+    private static ImportMap? ReadImportMap(RenderingContext context)
+    {
+        var json = context.Isolation.Run(
+            "Import map read", () => context.Engine.Evaluate<string>("__crawlerGetImportMap()"), string.Empty);
+
+        return ImportMap.Parse(json, context.DocumentBaseUri);
+    }
+
+    private async Task<(IReadOnlyList<RegularScript> Regular, IReadOnlyList<ModuleScript> Modules)> CollectScriptsFromJsAsync(RenderingContext context)
     {
         var regular = new List<RegularScript>();
         var modules = new List<ModuleScript>();
 
-        var json = engine.Evaluate<string>("__crawlerCollectScripts()");
+        var json = context.Isolation.Run("Script collection", () => context.Engine.Evaluate<string>("__crawlerCollectScripts()"), string.Empty);
         if (string.IsNullOrEmpty(json))
             return (regular, modules);
 
@@ -249,22 +302,24 @@ public sealed class JsRenderer
         {
             var isModule = entry.TryGetProperty("module", out var moduleProp) && moduleProp.ValueKind == JsonValueKind.True;
             var external = entry.TryGetProperty("external", out var externalProp) && externalProp.ValueKind == JsonValueKind.True;
+            var deferred = entry.TryGetProperty("deferred", out var deferredProp) && deferredProp.ValueKind == JsonValueKind.True;
+            var index = entry.TryGetProperty("index", out var indexProp) && indexProp.ValueKind == JsonValueKind.Number ? indexProp.GetInt32() : -1;
             var src = entry.TryGetProperty("src", out var srcProp) && srcProp.ValueKind == JsonValueKind.String ? srcProp.GetString()! : "";
             var text = entry.TryGetProperty("text", out var textProp) && textProp.ValueKind == JsonValueKind.String ? textProp.GetString()! : "";
 
             if (external)
             {
-                if (!Uri.TryCreate(baseUri, src, out var absolute))
+                if (!Uri.TryCreate(context.DocumentBaseUri, src, out var absolute))
                     continue;
 
-                var source = await FetchSourceAsync(client, sources, absolute, cancellationToken);
+                var source = await FetchSourceAsync(context, absolute);
                 if (source is null)
                     continue;
 
                 if (isModule)
                     modules.Add(new ModuleScript(absolute.ToString(), source, External: true));
                 else
-                    regular.Add(new RegularScript(source, absolute.ToString(), src, External: true));
+                    regular.Add(new RegularScript(source, absolute.ToString(), src, External: true, Deferred: deferred, Index: index));
             }
             else
             {
@@ -272,32 +327,47 @@ public sealed class JsRenderer
                     continue;
 
                 if (isModule)
-                    modules.Add(new ModuleScript(pageUrl, text, External: false));
+                    modules.Add(new ModuleScript(InlineModuleSpecifier(context.PageUrl, modules.Count), text, External: false));
                 else
-                    regular.Add(new RegularScript(text, pageUrl, string.Empty, External: false));
+                    regular.Add(new RegularScript(text, context.PageUrl, string.Empty, External: false, Deferred: false, Index: index));
             }
         }
 
         return (regular, modules);
     }
 
-    private void RunRegularJs(IJsEngine engine, RegularScript script, string pageUrl)
+    /// <summary>
+    /// An inline module has no URL of its own, so it borrows the page's — but a page with two of them would
+    /// then register the same specifier twice, which one engine refuses outright and the other answers from
+    /// its module cache, running the first module's code in place of the second. The ordinal goes in the
+    /// fragment: relative imports inside the module resolve against the page URL either way.
+    /// </summary>
+    private static string InlineModuleSpecifier(string pageUrl, int ordinal)
+        => $"{pageUrl}#inline-{ordinal}";
+
+    /// <summary>
+    /// The same, for an inline module the page appended after parse. It counts on its own axis, so its
+    /// fragment is its own — sharing "#inline-n" with the markup's would collide the moment the ordinals met.
+    /// </summary>
+    private static string AppendedInlineModuleSpecifier(string pageUrl, int ordinal)
+        => $"{pageUrl}#appended-{ordinal}";
+
+    private static void RunRegularJs(RenderingContext context, RegularScript script)
     {
-        SetCurrentScript(engine, script.External ? script.RawSrc : "");
+        SetCurrentScript(context, script.Index >= 0 ? script.Index : script.External ? script.RawSrc : "");
         try
         {
-            if (script.External)
-                engine.ExecuteCached(script.Src, script.Source);
-            else
-                engine.Execute(script.Source);
-        }
-        catch (JsException ex)
-        {
-            _logger.LogWarning("Bundle execution error on '{url}': {message}\n{details}", pageUrl, ex.Message, ex.ErrorDetails);
+            context.Isolation.Run("Bundle execution", () =>
+            {
+                if (script.External)
+                    context.Engine.ExecuteCached(script.Src, script.Source);
+                else
+                    context.Engine.Execute(script.Source);
+            });
         }
         finally
         {
-            SetCurrentScript(engine, null);
+            SetCurrentScript(context, null);
         }
     }
 
@@ -306,41 +376,45 @@ public sealed class JsRenderer
     /// auto-public-path (and Next's instanceof-HTMLScriptElement invariant over it) reads that during chunk
     /// evaluation, so it must be set around each execution and cleared after — exactly as a browser does.
     /// <para>
-    /// <paramref name="src"/> is the <c>src</c> attribute as authored, not the URL this host resolved and
-    /// fetched. The synthetic node stores it as the attribute, so getAttribute("src") returns the literal
-    /// string a browser would and the .src property resolves it back to absolute for webpack — feeding the
-    /// resolved URL in collapses that distinction and breaks Turbopack's chunk identity (see
-    /// HTMLScriptElement.src).
+    /// <paramref name="script"/> is the collected script's index, which names the page's own element — the one
+    /// whose data-* attributes a widget reads its configuration from, and whose <c>src</c> attribute is the
+    /// literal a browser hands back rather than the URL this host resolved and fetched (feeding the resolved
+    /// URL in breaks Turbopack's chunk identity — see HTMLScriptElement.src). A string is the authored
+    /// <c>src</c> for a script the collector never reported, and stands a node up for it.
     /// </para>
     /// </summary>
-    private static void SetCurrentScript(IJsEngine engine, string? src)
-        => engine.CallGlobal("__crawlerSetCurrentScript", src);
+    private static void SetCurrentScript(RenderingContext context, object? script)
+        => context.Isolation.Run("currentScript update", () => context.Engine.CallGlobal("__crawlerSetCurrentScript", script));
 
-    private async Task DrainJsAsync(IJsEngine engine, Uri baseUri, Uri pageUri, HttpClient client, string pageUrl, CancellationToken cancellationToken)
+    private async Task DrainJsAsync(RenderingContext context)
     {
         // Settle after a few idle turns: __crawlerPending reports the queue depth before __crawlerPump runs
         // it, so a turn with no pending work counts as idle. Runtime-appended <script src>/<link> chunks are
         // loaded at the top of each turn — before the timer pump — so a code-split route's chunk is installed
         // and its load event fired before webpack's chunk-load timeout callback runs.
+        var engine = context.Engine;
+        var isolation = context.Isolation;
         var iterations = 0;
         var idle = 0;
         while (iterations++ < _options.MaxTaskDrainIterations && idle < _idleTurnsBeforeSettled)
         {
-            var loadedResource = await DrainResourcesAsync(engine, baseUri, pageUri, client, pageUrl, cancellationToken);
+            var loadedResource = await DrainResourcesAsync(context);
 
-            engine.RunMicrotasks();
-            var pending = engine.Evaluate<int>("__crawlerPending()");
-            engine.Evaluate<int>("__crawlerPump()");
-            engine.RunMicrotasks();
+            // A turn that could not be read is a turn with nothing left to run: every fallback here settles
+            // the loop rather than spinning it against an engine that is answering with exceptions.
+            isolation.Run("Microtask drain", engine.RunMicrotasks);
+            var pending = isolation.Run("Task queue read", () => engine.Evaluate<int>("__crawlerPending()"), 0);
+            isolation.Run("Task pump", () => engine.Evaluate<int>("__crawlerPump()"), 0);
+            isolation.Run("Microtask drain", engine.RunMicrotasks);
 
-            var pendingResources = engine.Evaluate<int>("__crawlerPendingResources()");
+            var pendingResources = isolation.Run("Resource queue read", () => engine.Evaluate<int>("__crawlerPendingResources()"), 0);
             idle = pending == 0 && pendingResources == 0 && !loadedResource ? idle + 1 : 0;
         }
     }
 
-    private async Task<bool> DrainResourcesAsync(IJsEngine engine, Uri baseUri, Uri pageUri, HttpClient client, string pageUrl, CancellationToken cancellationToken)
+    private async Task<bool> DrainResourcesAsync(RenderingContext context)
     {
-        var json = engine.Evaluate<string>("__crawlerTakeResources()");
+        var json = context.Isolation.Run("Resource queue take", () => context.Engine.Evaluate<string>("__crawlerTakeResources()"), string.Empty);
         if (string.IsNullOrEmpty(json))
             return false;
 
@@ -348,11 +422,19 @@ public sealed class JsRenderer
         var loaded = false;
         foreach (var entry in doc.RootElement.EnumerateArray())
         {
-            var id = entry.GetProperty("id").GetInt32();
-            var tag = entry.TryGetProperty("tag", out var tagProp) ? tagProp.GetString() : null;
-            var src = entry.TryGetProperty("src", out var srcProp) ? srcProp.GetString() : null;
+            // The queue is this host's own payload, so a malformed entry is not a page failure to report —
+            // but an entry with no handle can neither be loaded nor answered, so it is skipped rather than
+            // thrown over.
+            if (!entry.TryGetProperty("id", out var idProp) || !idProp.TryGetInt32(out var id))
+                continue;
 
-            await LoadResourceAsync(engine, id, tag, src, baseUri, pageUri, client, pageUrl, cancellationToken);
+            await LoadResourceAsync(context, new PendingResource(
+                id,
+                entry.TryGetProperty("tag", out var tagProp) ? tagProp.GetString() : null,
+                entry.TryGetProperty("src", out var srcProp) ? srcProp.GetString() : null,
+                entry.TryGetProperty("type", out var typeProp) ? typeProp.GetString() : null,
+                entry.TryGetProperty("text", out var textProp) ? textProp.GetString() : null));
+
             loaded = true;
         }
 
@@ -368,52 +450,142 @@ public sealed class JsRenderer
     /// render exists to observe what the page installs. Every other case fires the node's load (or error)
     /// event to settle the awaiting import().
     /// </summary>
-    private async Task LoadResourceAsync(IJsEngine engine, int id, string? tag, string? src, Uri baseUri, Uri pageUri, HttpClient client, string pageUrl, CancellationToken cancellationToken)
+    private async Task LoadResourceAsync(RenderingContext context, PendingResource resource)
     {
-        if (!string.Equals(tag, "script", StringComparison.Ordinal))
+        if (!string.Equals(resource.Tag, "script", StringComparison.Ordinal))
         {
-            FireResourceEvent(engine, id, "load");
+            FireResourceEvent(context, resource, "load");
             return;
         }
 
-        if (string.IsNullOrEmpty(src) || !Uri.TryCreate(baseUri, src, out var absolute))
+        // An appended script with no src carries its own source: there is nothing to fetch and no origin to
+        // check, so it runs against the page's URL exactly as an inline script in the markup does.
+        if (string.IsNullOrEmpty(resource.Src))
         {
-            FireResourceEvent(engine, id, "error");
+            if (string.IsNullOrEmpty(resource.Text))
+            {
+                FireResourceEvent(context, resource, "error");
+                return;
+            }
+
+            var inlineRan = RunAppendedInlineScript(context, resource);
+            FireResourceEvent(context, resource, inlineRan ? "load" : "error");
+            return;
+        }
+
+        if (!Uri.TryCreate(context.DocumentBaseUri, resource.Src, out var absolute))
+        {
+            FireResourceEvent(context, resource, "error");
+            return;
+        }
+
+        // A scheme no fetch can answer. The page built one of these itself with URL.createObjectURL and the
+        // prelude sends its source along when it still holds it; what is left is a source nothing can supply,
+        // and that is the node's error, not a cross-origin script to leave pending — no later turn loads one.
+        if (absolute.Scheme != Uri.UriSchemeHttp && absolute.Scheme != Uri.UriSchemeHttps)
+        {
+            if (!string.IsNullOrEmpty(resource.Text))
+            {
+                var heldRan = RunHeldScript(context, resource);
+                FireResourceEvent(context, resource, heldRan ? "load" : "error");
+                return;
+            }
+
+            _logger.LogWarning("Script source '{url}' is not fetchable over HTTP.", absolute);
+            FireResourceEvent(context, resource, "error");
             return;
         }
 
         if (!_options.ExecuteCrossOriginScripts
-            && !string.Equals(absolute.Host, pageUri.Host, StringComparison.OrdinalIgnoreCase))
+            && !string.Equals(absolute.Host, context.PageUri.Host, StringComparison.OrdinalIgnoreCase))
             return;
 
-        var source = await FetchSourceAsync(client, _sources, absolute, cancellationToken);
+        var source = await FetchSourceAsync(context, absolute);
         if (source is null)
         {
-            FireResourceEvent(engine, id, "error");
+            FireResourceEvent(context, resource, "error");
             return;
         }
 
-        SetCurrentScript(engine, src);
+        var ran = RunAppendedScript(context, resource, absolute, source);
+        FireResourceEvent(context, resource, ran ? "load" : "error");
+    }
+
+    /// <summary>
+    /// An inline script the page connected after parse. It borrows the page URL the same way an inline script
+    /// in the markup does, and a module one borrows it under its own synthetic specifier — two of them would
+    /// otherwise collide on one name and the second would be answered from the loader's cache.
+    /// </summary>
+    private static bool RunAppendedInlineScript(RenderingContext context, PendingResource resource)
+    {
+        var source = resource.Text!;
+        if (string.Equals(resource.Type, "module", StringComparison.OrdinalIgnoreCase))
+        {
+            var specifier = AppendedInlineModuleSpecifier(context.PageUrl, ++context.AppendedInlineModules);
+            return RunModule(context, new ModuleScript(specifier, source, External: false));
+        }
+
+        SetCurrentScript(context, string.Empty);
         try
         {
-            engine.ExecuteCached(absolute.AbsoluteUri, source);
-        }
-        catch (JsException ex)
-        {
-            _logger.LogWarning("Chunk execution error on '{url}': {message}\n{details}", pageUrl, ex.Message, ex.ErrorDetails);
-            FireResourceEvent(engine, id, "error");
-            return;
+            return context.Isolation.Run("Chunk execution", () => context.Engine.Execute(source));
         }
         finally
         {
-            SetCurrentScript(engine, null);
+            SetCurrentScript(context, null);
         }
-
-        FireResourceEvent(engine, id, "load");
     }
 
-    private static void FireResourceEvent(IJsEngine engine, int id, string type)
-        => engine.CallGlobal("__crawlerFireResourceEvent", id, type);
+    /// <summary>
+    /// A script whose source the render already holds, run under its own <c>src</c> as its specifier so two
+    /// object URLs are two modules. An object URL carries no path, so what a module built from one resolves
+    /// its own imports against is the page — see <see cref="ModuleSpecifier.ReferrerOrBase"/>.
+    /// </summary>
+    private static bool RunHeldScript(RenderingContext context, PendingResource resource)
+    {
+        var source = resource.Text!;
+
+        // Neither half is cached: an object URL is minted per page, so a parsed form filed under one is an
+        // AST held for the rest of the crawl that nothing can ever hit again — the same reason an inline
+        // module's is not cached under the page URL it borrows.
+        if (string.Equals(resource.Type, "module", StringComparison.OrdinalIgnoreCase))
+            return RunModule(context, new ModuleScript(resource.Src!, source, External: false));
+
+        SetCurrentScript(context, resource.Src);
+        try
+        {
+            return context.Isolation.Run("Inline script execution", () => context.Engine.Execute(source));
+        }
+        finally
+        {
+            SetCurrentScript(context, null);
+        }
+    }
+
+    /// <summary>
+    /// The same split the initial markup already gets, on the runtime path: the node's <c>type</c> decides
+    /// whether its source runs as a module — so its imports resolve through the loader — or as a classic
+    /// script. Only the classic half brackets the execution with a <c>document.currentScript</c>, because a
+    /// module never becomes one, in a browser or here.
+    /// </summary>
+    private static bool RunAppendedScript(RenderingContext context, PendingResource resource, Uri absolute, string source)
+    {
+        if (string.Equals(resource.Type, "module", StringComparison.OrdinalIgnoreCase))
+            return RunModule(context, new ModuleScript(absolute.AbsoluteUri, source, External: true));
+
+        SetCurrentScript(context, resource.Src);
+        try
+        {
+            return context.Isolation.Run("Chunk execution", () => context.Engine.ExecuteCached(absolute.AbsoluteUri, source));
+        }
+        finally
+        {
+            SetCurrentScript(context, null);
+        }
+    }
+
+    private static void FireResourceEvent(RenderingContext context, PendingResource resource, string type)
+        => context.Isolation.Run("Resource event dispatch", () => context.Engine.CallGlobal("__crawlerFireResourceEvent", resource.Id, type));
 
     private JsExtract CollectLinks(IJsEngine engine)
     {
@@ -467,13 +639,16 @@ public sealed class JsRenderer
     /// no-op until __crawlerSetLogLevel raises it off Infinity, so unset means no embedding and no formatting
     /// cost. The level numbers match LogLevel's, so the floor round-trips and __crawlerLog casts straight back.
     /// </summary>
-    private void ConfigureScriptLogging(IJsEngine engine)
+    private void ConfigureScriptLogging(IJsEngine engine, RenderIsolation isolation)
     {
         if (_options.ScriptLogging is not { } level)
             return;
 
-        engine.EmbedFunction("__crawlerLog", LogFromScript);
-        engine.CallGlobal("__crawlerSetLogLevel", (int)level);
+        isolation.Run("Script logging setup", () =>
+        {
+            engine.EmbedFunction("__crawlerLog", LogFromScript);
+            engine.CallGlobal("__crawlerSetLogLevel", (int)level);
+        });
     }
 
     /// <summary>
@@ -483,8 +658,8 @@ public sealed class JsRenderer
     /// diagnostics. Routing those catches through this channel turns them into a named exception with a stack
     /// the moment the renderer's log level is Debug, without spamming a normal crawl by default.
     /// </summary>
-    private void ConfigureDiagnostics(IJsEngine engine)
-        => engine.EmbedFunction("__crawlerDiagnostic", ReportDiagnostic);
+    private void ConfigureDiagnostics(IJsEngine engine, RenderIsolation isolation)
+        => isolation.Run("Diagnostics setup", () => engine.EmbedFunction("__crawlerDiagnostic", ReportDiagnostic));
 
     private object? ReportDiagnostic(params object?[] args)
     {
@@ -527,24 +702,12 @@ public sealed class JsRenderer
         };
     }
 
-    private void RunModule(IJsEngine engine, ModuleScript module, string pageUrl)
-    {
-        try
-        {
-            engine.EvaluateModule(module.Specifier, module.Source, module.External);
-        }
-        catch (JsException ex)
-        {
-            _logger.LogWarning("Module execution error on '{url}': {message}\n{details}", pageUrl, ex.Message, ex.ErrorDetails);
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            // Importing a module runs the engine's loader — host code (fetch, parse) that can throw raw CLR
-            // exceptions the engine never surfaces as a JsException. A single failed module must not abort the
-            // whole page render, so anything short of cancellation is logged and the page continues.
-            _logger.LogWarning("Module load error on '{url}': {message}", pageUrl, ex.Message);
-        }
-    }
+    /// <summary>
+    /// Whether the module ran. A module that threw registered nothing, so the appended-script path reports it
+    /// to the page as the classic path reports a chunk that threw — an error event, not a load.
+    /// </summary>
+    private static bool RunModule(RenderingContext context, ModuleScript module)
+        => context.Isolation.Run("Module execution", () => context.Engine.EvaluateModule(module.Specifier, module.Source, module.External));
 
     private static bool ContainsScriptTag(ReadOnlySpan<byte> html)
     {
@@ -587,35 +750,35 @@ public sealed class JsRenderer
     /// or times out is ordinary against a live page. Same reasoning and same shape as
     /// <c>HttpModuleFetcher.Download</c>, which the module half of this already had.
     /// </summary>
-    private async Task<string?> FetchSourceAsync(HttpClient client, SourceCache sources, Uri absolute, CancellationToken cancellationToken)
+    private async Task<string?> FetchSourceAsync(RenderingContext context, Uri absolute)
     {
-        if (sources.TryGet(absolute, out var cached))
+        if (_sources.TryGet(absolute, out var cached))
             return cached;
 
         if (absolute.Scheme != Uri.UriSchemeHttp && absolute.Scheme != Uri.UriSchemeHttps)
         {
             _logger.LogWarning("Script source '{url}' is not fetchable over HTTP.", absolute);
-            return sources.Store(absolute, null);
+            return _sources.Store(absolute, null);
         }
 
         try
         {
-            using var response = await client.GetAsync(absolute, cancellationToken);
+            using var response = await context.Client.GetAsync(absolute, context.CancellationToken);
             if (!response.IsSuccessStatus())
             {
                 _logger.LogWarning("Script source '{url}' was refused with status {status}.", absolute, (int)response.StatusCode);
-                return sources.Store(absolute, null);
+                return _sources.Store(absolute, null);
             }
 
-            return sources.Store(absolute, await response.Content.ReadAsStringAsync(cancellationToken));
+            return _sources.Store(absolute, await response.Content.ReadAsStringAsync(context.CancellationToken));
         }
         // Guarded on the caller's token rather than on the exception type: a per-request timeout arrives as a
         // cancellation that is not the crawl stopping, and losing the whole render to one slow chunk is the
         // failure this exists to prevent.
-        catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
+        catch (Exception ex) when (!context.CancellationToken.IsCancellationRequested)
         {
             _logger.LogWarning("Script fetch error for '{url}': {message}", absolute, ex.Message);
-            return sources.Store(absolute, null);
+            return _sources.Store(absolute, null);
         }
     }
 }

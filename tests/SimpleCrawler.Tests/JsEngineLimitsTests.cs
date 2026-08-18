@@ -1,6 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using SimpleCrawler.Js.Abstractions;
+using SimpleCrawler.Js.Errors;
 using SimpleCrawler.Js.Jint;
 using SimpleCrawler.Js.Models;
 using SimpleCrawler.Js.Rendering;
@@ -24,6 +25,12 @@ namespace SimpleCrawler.Tests;
 /// <see cref="V8EngineOptions.PageTimeout"/> per page. Only the observable contract is shared: a spent
 /// ceiling is a <see cref="TimeoutException"/>, a cancelled run an <see cref="OperationCanceledException"/>.
 /// </para>
+/// <para>
+/// The two scopes are not interchangeable and the renderer does not treat them as such: a per-script ceiling
+/// costs its own script and the page runs on, while a page-scoped one (<see cref="JsPageTimeoutException"/>)
+/// ends the render — a page budget absorbed as one script's failure would stop nothing at all. A page that
+/// keeps spending script ceilings is abandoned all the same, which is what bounds the total.
+/// </para>
 /// </summary>
 [Collection("Crawler")]
 public class JsEngineLimitsTests
@@ -43,6 +50,14 @@ public class JsEngineLimitsTests
     private static readonly TimeSpan _stoppedByTheLimitUnderTest = TimeSpan.FromSeconds(20);
 
     private static byte[] Runaway => Encoding.UTF8.GetBytes(_runaway);
+
+    // The same page with one runaway script per block, for the case where the ceiling under test is spent
+    // per script rather than per page.
+    private static byte[] RunawayScripts(int count)
+    {
+        var block = string.Concat(Enumerable.Repeat("<script>while (true) { Math.sqrt(Math.random()); }</script>", count));
+        return Encoding.UTF8.GetBytes($"<!doctype html><html><body>{block}</body></html>");
+    }
 
     // Each engine's ceiling lives on its own options, so a test that sets one builds its own container
     // rather than sharing the fixture's default-configured factories. Both configure the standard way;
@@ -78,9 +93,36 @@ public class JsEngineLimitsTests
         using var provider = Provider(engine, TimeSpan.FromSeconds(2));
         var elapsed = Stopwatch.StartNew();
 
-        await Assert.ThrowsAsync<TimeoutException>(() => Renderer(provider).RenderAsync(
-            Runaway, "http://localhost:5000/", new HttpClient(), TestContext.Current.CancellationToken));
+        // Four runaway scripts: V8 spends its one page ceiling on the first, Jint spends a script ceiling on
+        // each until the renderer stops crediting them. Either way the render ends in a timeout rather than
+        // running until the process does.
+        await Assert.ThrowsAnyAsync<TimeoutException>(() => Renderer(provider).RenderAsync(
+            RunawayScripts(4), "http://localhost:5000/", new HttpClient(), TestContext.Current.CancellationToken));
 
+        Assert.True(elapsed.Elapsed < _stoppedByTheLimitUnderTest, $"took {elapsed.Elapsed}");
+    }
+
+    // The per-script scope, stated as what it costs: one script that never returns is abandoned and the page
+    // keeps everything else it would have rendered. This is the whole point of naming the ceiling per script
+    // — treating it as fatal discarded pages that had already run their real bundle, reporting no evidence at
+    // all where a floor of it was there to be had.
+    [Fact]
+    public async Task A_spent_script_ceiling_costs_that_script_and_not_the_page()
+    {
+        const string html = """
+            <!doctype html><html><body>
+            <script>while (true) { Math.sqrt(Math.random()); }</script>
+            <script>document.body.setAttribute('data-ran', '1');</script>
+            </body></html>
+            """;
+
+        using var provider = Provider(JsEngine.Jint, TimeSpan.FromSeconds(2));
+        var elapsed = Stopwatch.StartNew();
+
+        var rendered = await Renderer(provider).RenderAsync(
+            Encoding.UTF8.GetBytes(html), "http://localhost:5000/", new HttpClient(), TestContext.Current.CancellationToken);
+
+        Assert.Contains("data-ran", Encoding.UTF8.GetString(rendered), StringComparison.Ordinal);
         Assert.True(elapsed.Elapsed < _stoppedByTheLimitUnderTest, $"took {elapsed.Elapsed}");
     }
 

@@ -211,6 +211,60 @@ public class JsDomRendererEnvironmentTests : JsDomRendererTestBase, IClassFixtur
         Assert.Contains("href=\"/ok\"", rendered);
     }
 
+    // element.style and the style attribute are one property, read from both directions. A page reads
+    // `el.style.display` off markup it did not write to decide whether something is already open, and writes
+    // `el.style.height` expecting the attribute — and therefore the serialized page — to carry it. Two
+    // disconnected stores answer both without complaining: the read is "" whatever the markup says, and the
+    // write is invisible to everything that looks at the attribute.
+    [Theory]
+    [InlineData(JsEngine.Jint)]
+    [InlineData(JsEngine.V8)]
+    public async Task JsMode_StyleDeclarationAndTheStyleAttributeAreOneProperty(JsEngine engine)
+    {
+        if (engine == JsEngine.V8)
+            Assert.SkipUnless(V8Support.IsAvailable, V8Support.UnavailableReason);
+
+        const string html = """
+            <html><body>
+            <div id="from-markup" style="display:none;background-color:red">x</div>
+            <script>
+            var marked = document.getElementById('from-markup');
+            var fromMarkup = marked.style.display;
+            // The IDL name and the CSS name are the same property.
+            var camel = marked.style.backgroundColor;
+            marked.style.height = '3px';
+            var written = marked.getAttribute('style').indexOf('height: 3px') >= 0;
+            marked.setAttribute('style', 'left:2px');
+            var afterAttribute = marked.style.left;
+            // A value carrying its own semicolon is one declaration, not two.
+            var url = document.createElement('div');
+            url.setAttribute('style', 'background:url(data:image/svg+xml;base64,AAA);color:blue');
+            var probe = document.createElement('a');
+            probe.setAttribute('href', '/probe'
+              + '?fromMarkup=' + fromMarkup
+              + '&camel=' + camel
+              + '&written=' + written
+              + '&afterAttribute=' + afterAttribute
+              + '&afterSemicolon=' + url.style.color);
+            document.body.appendChild(probe);
+            </script>
+            </body></html>
+            """;
+
+        var renderer = CreateJsRenderer(engine);
+        var result = await renderer.RenderAsync(
+            Encoding.UTF8.GetBytes(html), "http://localhost:5000/", new HttpClient(), TestContext.Current.CancellationToken);
+        var rendered = Encoding.UTF8.GetString(result);
+
+        Assert.Contains("fromMarkup=none", rendered);
+        Assert.Contains("camel=red", rendered);
+        Assert.Contains("written=true", rendered);
+        Assert.Contains("afterAttribute=2px", rendered);
+        Assert.Contains("afterSemicolon=blue", rendered);
+        // The write reached the serialized page, not just the declaration.
+        Assert.Contains("left:2px", rendered);
+    }
+
     // Viewport: the JS DOM reports the configured screen size (default desktop 1920x1080) through
     // window.innerWidth/screen/documentElement.clientWidth, and matchMedia evaluates width queries against it
     // — so a responsive bundle takes its desktop branch. A mobile override flips every signal, proving both
@@ -497,5 +551,132 @@ public class JsDomRendererEnvironmentTests : JsDomRendererTestBase, IClassFixtur
         Assert.Contains("href=\"/short\"", rendered);
         Assert.DoesNotContain("href=\"/give-up\"", rendered);
         Assert.DoesNotContain("href=\"/cancelled\"", rendered);
+    }
+
+    // What a script asks before it decides whether anyone is looking: the tab is visible and focused, the
+    // body is what has focus, and a point inside the viewport has an element under it. A session recorder
+    // hit-tests its own cursor trail and a bot-management bundle calls document.hasFocus() unguarded, so a
+    // missing answer is a throw rather than the backgrounded branch each was written to take. document.fonts
+    // is the same shape: a chat widget enumerates families through `fonts.ready.then(s => Array.from(s))`.
+    [Theory]
+    [InlineData(JsEngine.Jint)]
+    [InlineData(JsEngine.V8)]
+    public async Task JsMode_TheDocumentReportsAForegroundPageAndAnswersHitTests(JsEngine engine)
+    {
+        if (engine == JsEngine.V8)
+            Assert.SkipUnless(V8Support.IsAvailable, V8Support.UnavailableReason);
+
+        const string html = """
+            <html><body><div id="t"></div>
+            <script>
+            var hit = document.elementFromPoint(10, 10);
+            var l = document.createElement('a');
+            l.setAttribute('href', '/f?focus=' + document.hasFocus() +
+                                   '&active=' + document.activeElement.tagName +
+                                   '&visible=' + document.visibilityState +
+                                   '&hidden=' + document.hidden +
+                                   '&hit=' + (hit ? hit.tagName : 'none') +
+                                   '&outside=' + document.elementFromPoint(-1, 999999) +
+                                   '&stack=' + document.elementsFromPoint(10, 10).length);
+            document.body.appendChild(l);
+            document.fonts.ready.then(function (set) {
+              var f = document.createElement('a');
+              f.setAttribute('href', '/fonts?count=' + Array.from(set).length + '&status=' + document.fonts.status);
+              document.body.appendChild(f);
+            });
+            </script>
+            </body></html>
+            """;
+
+        var renderer = CreateJsRenderer(engine);
+        var result = await renderer.RenderAsync(Encoding.UTF8.GetBytes(html), "http://localhost:5000/", new HttpClient(), CancellationToken.None);
+        var rendered = Encoding.UTF8.GetString(result);
+
+        Assert.Contains("focus=true", rendered);
+        Assert.Contains("active=BODY", rendered);
+        Assert.Contains("visible=visible", rendered);
+        Assert.Contains("hidden=false", rendered);
+        Assert.Contains("hit=BODY", rendered);
+        Assert.Contains("outside=null", rendered);
+        Assert.Contains("stack=2", rendered);
+        Assert.Contains("count=0", rendered);
+        Assert.Contains("status=loaded", rendered);
+    }
+
+    // The event families a page constructs to drive its own UI, and the pre-constructor spelling a shim
+    // built on document.createEvent still uses. Each name is read at module scope, where an absent
+    // constructor is `X is not defined` for the whole chunk rather than a feature that quietly does nothing.
+    [Theory]
+    [InlineData(JsEngine.Jint)]
+    [InlineData(JsEngine.V8)]
+    public async Task JsMode_EventConstructorsAndTheLegacyInitializers_AreBothAvailable(JsEngine engine)
+    {
+        if (engine == JsEngine.V8)
+            Assert.SkipUnless(V8Support.IsAvailable, V8Support.UnavailableReason);
+
+        const string html = """
+            <html><body><div id="t"></div>
+            <script>
+            var click = new MouseEvent('click', { bubbles: true, clientX: 12 });
+            var key = new KeyboardEvent('keydown', { key: 'Escape' });
+            var legacy = document.createEvent('CustomEvent');
+            legacy.initCustomEvent('ready', true, false, { id: 7 });
+            var seen = '';
+            document.getElementById('t').addEventListener('ready', function (e) { seen = e.type + ':' + e.detail.id; });
+            document.getElementById('t').dispatchEvent(legacy);
+            var a = document.createElement('a');
+            a.setAttribute('href', '/probe?click=' + click.type + click.clientX + '&key=' + key.key
+              + '&legacy=' + seen + '&isEvent=' + (legacy instanceof Event));
+            document.body.appendChild(a);
+            </script>
+            </body></html>
+            """;
+
+        var renderer = CreateJsRenderer(engine);
+        var result = await renderer.RenderAsync(Encoding.UTF8.GetBytes(html), "http://localhost:5000/", new HttpClient(), CancellationToken.None);
+        var rendered = Encoding.UTF8.GetString(result);
+
+        Assert.Contains("click=click12", rendered);
+        Assert.Contains("key=Escape", rendered);
+        Assert.Contains("legacy=ready:7", rendered);
+        Assert.Contains("isEvent=true", rendered);
+    }
+
+    // `document.contains(node)` — the guard a deferred-script loader runs before activating anything it
+    // parked. It lived on Element, so the document could not answer it and every parked script was lost.
+    // The character-data and shadow types are named the same way: a polyfill reads `.prototype` off each by
+    // name before it does anything, and one absent global costs the whole polyfill.
+    [Theory]
+    [InlineData(JsEngine.Jint)]
+    [InlineData(JsEngine.V8)]
+    public async Task JsMode_TheDocumentAnswersContains_AndTheNodeTypeGlobalsExist(JsEngine engine)
+    {
+        if (engine == JsEngine.V8)
+            Assert.SkipUnless(V8Support.IsAvailable, V8Support.UnavailableReason);
+
+        const string html = """
+            <html><body><div id="t"></div>
+            <script>
+            var host = document.getElementById('t');
+            var detached = document.createElement('span');
+            var named = ['Text', 'Comment', 'CDATASection', 'ProcessingInstruction', 'ShadowRoot',
+                         'CustomElementRegistry'].filter(function (n) { return !window[n] || !window[n].prototype; });
+            var a = document.createElement('a');
+            a.setAttribute('href', '/probe?in=' + document.contains(host) + '&out=' + document.contains(detached)
+              + '&missing=' + (named.length ? named.join(',') : 'none')
+              + '&shadow=' + (host.attachShadow({ mode: 'open' }) instanceof ShadowRoot));
+            document.body.appendChild(a);
+            </script>
+            </body></html>
+            """;
+
+        var renderer = CreateJsRenderer(engine);
+        var result = await renderer.RenderAsync(Encoding.UTF8.GetBytes(html), "http://localhost:5000/", new HttpClient(), CancellationToken.None);
+        var rendered = Encoding.UTF8.GetString(result);
+
+        Assert.Contains("in=true", rendered);
+        Assert.Contains("out=false", rendered);
+        Assert.Contains("missing=none", rendered);
+        Assert.Contains("shadow=true", rendered);
     }
 }

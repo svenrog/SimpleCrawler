@@ -23,7 +23,9 @@ public sealed class V8EngineOptions
 
     /// <summary>
     /// How long one page may run scripts before it is interrupted and the render fails with a
-    /// <see cref="TimeoutException"/>; <see cref="TimeSpan.Zero"/> disables the ceiling. V8 exposes no
+    /// <see cref="SimpleCrawler.Js.Errors.JsPageTimeoutException"/> — a <see cref="TimeoutException"/> named
+    /// for the scope it bounds, so the renderer re-raises it instead of charging it to whichever script
+    /// happened to be executing; <see cref="TimeSpan.Zero"/> disables the ceiling. V8 exposes no
     /// per-statement constraint hook, so this is enforced from another thread and the timer runs from the
     /// engine's creation — the bound is <b>per page</b>, and every script the page runs draws on the one
     /// ceiling. Named for that: <c>JintEngineOptions.ScriptTimeout</c> is the same idea per execution call,

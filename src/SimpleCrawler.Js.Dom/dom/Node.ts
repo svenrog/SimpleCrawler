@@ -18,6 +18,25 @@ export abstract class Node extends EventTarget {
         return documentRef.current;
     }
 
+    // Every node answers the document's base URL; Document overrides this with the computation. Bundles
+    // resolve their own asset URLs against `node.baseURI` (a web component reading it off itself), where
+    // undefined is a throw inside the component's constructor rather than a missed lookup.
+    get baseURI(): string {
+        const doc = this.ownerDocument;
+        return doc ? doc.baseURI : "";
+    }
+
+    // Node's, not Element's — `document.contains(el)` is the guard a deferred-script loader runs before it
+    // activates anything, and a document that cannot answer it loses every script behind the loader.
+    contains(n: Node | null): boolean {
+        let cur: Node | null = n;
+        while (cur) {
+            if (cur === this) return true;
+            cur = cur.parentNode;
+        }
+        return false;
+    }
+
     appendChild(child: Node): Node {
         return this.insertBefore(child, null);
     }
@@ -67,6 +86,15 @@ export abstract class Node extends EventTarget {
         return this.childNodes[this.childNodes.length - 1] || null;
     }
 
+    // Every node answers this, not only elements: it is Node.prototype's in a browser, and a text node's
+    // parentElement is what a text-measuring or highlight library reads to find the box it sits in. An
+    // accessibility overlay copies the descriptor off Node.prototype to wrap it, and finding none there
+    // threw at defineProperty rather than skipping the wrap.
+    get parentElement(): any {
+        const p = this.parentNode;
+        return p && p.nodeType === NodeType.Element ? p : null;
+    }
+
     get nextSibling(): Node | null {
         if (!this.parentNode) return null;
         const s = this.parentNode.childNodes;
@@ -112,6 +140,14 @@ export abstract class Node extends EventTarget {
         for (const n of nodes) this.insertBefore(asNode(n), ref);
     }
 
+    // Read before it is called — a consent banner swaps its markup in with
+    // `host.replaceChildren.apply(host, Array.from(tmp.childNodes))` — so the gap is a throw inside that
+    // banner's init, not a skipped update.
+    replaceChildren(...nodes: any[]): void {
+        for (const c of this.childNodes.slice()) this.removeChild(c);
+        for (const n of nodes) this.appendChild(asNode(n));
+    }
+
     cloneNode(deep?: boolean): Node {
         const clone = this._shallowClone();
         if (deep) for (const c of this.childNodes) clone.appendChild(c.cloneNode(true));
@@ -127,7 +163,7 @@ export abstract class Node extends EventTarget {
             if (a.nodeName !== b.nodeName || a.namespaceURI !== b.namespaceURI) return false;
             const names = a.getAttributeNames();
             if (names.length !== b.getAttributeNames().length) return false;
-            for (const name of names) if (a.getAttribute(name) !== b.getAttribute(name)) return false;
+            for (const name of names) if (a.getAttributeInternal(name) !== b.getAttributeInternal(name)) return false;
         } else if (this.nodeType === NodeType.Text || this.nodeType === NodeType.Comment) {
             if (a.nodeValue !== b.nodeValue) return false;
         }

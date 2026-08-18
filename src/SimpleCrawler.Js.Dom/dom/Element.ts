@@ -7,9 +7,20 @@ import { querySelectorAll, matchesSelector } from "../selector/querySelector";
 import { serializeChildren, serializeNode } from "../html/serializer";
 import { parserRef } from "../html/parserRef";
 import { registerResource } from "./resourceLoader";
+import { DOMTokenList, classListFor } from "./DOMTokenList";
 import { viewportWidth, viewportHeight } from "../browser/viewport";
 import { Animatable } from "./Animatable";
 import { Animation } from "./Animation";
+import { HTMLCollection } from "./HTMLCollection";
+import { ShadowRoot } from "./ShadowRoot";
+
+// Every attribute name a browser takes is coerced to a string first, so `el.setAttribute(undefined, v)` — a
+// framework passing a name it failed to compute — stores it under "undefined" rather than under the value
+// undefined. Keying the map on a non-string leaves an attribute whose own `.name` reads back undefined, and
+// the next walk of `el.attributes` throws on it.
+function attrKey(name: unknown): string {
+    return typeof name === "string" ? name : String(name);
+}
 
 function attrNode(name: string, value: string, owner: Element): any {
     return { name, value, localName: name, namespaceURI: null, ownerElement: owner };
@@ -24,6 +35,7 @@ function nthAttrNode(attrs: Map<string, string>, index: number, owner: Element):
 }
 
 export class Element extends Node implements Animatable {
+    shadowRoot: any = null;
     localName: string;
     tagName: string;
     nodeName: string;
@@ -40,42 +52,73 @@ export class Element extends Node implements Animatable {
         this.tagName = this.localName.toUpperCase();
         this.nodeName = this.tagName;
         this.namespaceURI = ns || "http://www.w3.org/1999/xhtml";
-        this.style = createStyleDeclaration();
+        this.style = createStyleDeclaration(this);
         hideOwnFields(this);
     }
 
+    // Shadow DOM lives on Element, not on HTMLElement: a page that tests support reads
+    // `Element.prototype.attachShadow` (or `'attachShadow' in Element.prototype`) rather than calling it on
+    // an instance, and a prototype that does not carry it reads as a browser without shadow DOM.
+    attachShadow(init?: { mode?: string }): any {
+        if (this.shadowRoot) return this.shadowRoot;
+        const root = new ShadowRoot();
+        root.host = this;
+        root.mode = init && init.mode ? init.mode : "open";
+        this.shadowRoot = root;
+        return root;
+    }
+
+    // The attribute steps a browser runs inside the platform, where page code cannot reach them. Every
+    // reflected IDL property (el.src, el.href, …) goes through these rather than through the public methods
+    // below: a consent blocker that wraps Element.prototype.setAttribute and, inside its wrapper, assigns the
+    // property it is guarding re-enters its own wrapper otherwise, and that recursion spends the whole stack
+    // before the page has run. A browser is immune because its setter never calls the method.
+    setAttributeInternal(name: string, value: unknown): void {
+        this.attrs.set(attrKey(name), value == null ? "" : String(value));
+    }
+
+    getAttributeInternal(name: string): string | null {
+        const key = attrKey(name);
+        return this.attrs.has(key) ? this.attrs.get(key)! : null;
+    }
+
+    removeAttributeInternal(name: string): void {
+        this.attrs.delete(attrKey(name));
+    }
+
     setAttribute(name: string, value: unknown): void {
-        this.attrs.set(name, value == null ? "" : String(value));
+        this.setAttributeInternal(name, value);
     }
 
     setAttributeNS(_ns: string | null, name: string, value: unknown): void {
-        this.setAttribute(name, value);
+        this.setAttributeInternal(name, value);
     }
 
     getAttribute(name: string): string | null {
-        return this.attrs.has(name) ? this.attrs.get(name)! : null;
+        return this.getAttributeInternal(name);
     }
 
     removeAttribute(name: string): void {
-        this.attrs.delete(name);
+        this.removeAttributeInternal(name);
     }
 
     removeAttributeNS(_ns: string | null, name: string): void {
-        this.attrs.delete(name);
+        this.attrs.delete(attrKey(name));
     }
 
     hasAttribute(name: string): boolean {
-        return this.attrs.has(name);
+        return this.attrs.has(attrKey(name));
     }
 
     toggleAttribute(name: string, force?: boolean): boolean {
-        const present = this.attrs.has(name);
+        const key = attrKey(name);
+        const present = this.attrs.has(key);
         const add = force === undefined ? !present : force;
         if (add) {
-            if (!present) this.attrs.set(name, "");
+            if (!present) this.attrs.set(key, "");
             return true;
         }
-        this.attrs.delete(name);
+        this.attrs.delete(key);
         return false;
     }
 
@@ -97,15 +140,46 @@ export class Element extends Node implements Animatable {
                 if (prop === "length") return el.attrs.size;
                 if (prop === "item") return (i: number) => nthAttrNode(el.attrs, i, el);
                 if (prop === "getNamedItem") return (name: string) => el.getAttributeNode(name);
+                // A NamedNodeMap is iterable, and a widget copying an element's attributes spreads it
+                // (`[...el.attributes]`); answering undefined here is "is not iterable" thrown at the trap.
+                if (prop === Symbol.iterator) {
+                    return function* () {
+                        for (const name of Array.from(el.attrs.keys())) yield el.getAttributeNode(name);
+                    };
+                }
                 if (typeof prop !== "string") return undefined;
                 if (/^\d+$/.test(prop)) return nthAttrNode(el.attrs, Number(prop), el);
                 return el.attrs.has(prop) ? attrNode(prop, el.attrs.get(prop)!, el) : undefined;
+            },
+            // Array.prototype.slice.call(el.attributes) — how a widget copies an element's attributes onto
+            // another — asks whether each index is present before reading it, and a bare target answers no,
+            // leaving an array of holes. The index and key traps have to agree with the getter.
+            has(_t, prop) {
+                if (prop === "length" || prop === "item" || prop === "getNamedItem" || prop === Symbol.iterator) return true;
+                if (typeof prop !== "string") return false;
+                return /^\d+$/.test(prop) ? Number(prop) < el.attrs.size : el.attrs.has(prop);
+            },
+            ownKeys() {
+                const keys: string[] = [];
+                for (let i = 0; i < el.attrs.size; i++) keys.push(String(i));
+                for (const name of el.attrs.keys()) keys.push(name);
+                keys.push("length");
+                return keys;
+            },
+            getOwnPropertyDescriptor(_t, prop) {
+                if (prop === "length") return { value: el.attrs.size, writable: false, enumerable: false, configurable: true };
+                if (typeof prop !== "string") return undefined;
+                const value = /^\d+$/.test(prop)
+                    ? nthAttrNode(el.attrs, Number(prop), el)
+                    : el.attrs.has(prop) ? attrNode(prop, el.attrs.get(prop)!, el) : undefined;
+                return value === undefined ? undefined : { value, writable: false, enumerable: true, configurable: true };
             },
         });
     }
 
     getAttributeNode(name: string): any {
-        return this.attrs.has(name) ? attrNode(name, this.attrs.get(name)!, this) : null;
+        const key = attrKey(name);
+        return this.attrs.has(key) ? attrNode(key, this.attrs.get(key)!, this) : null;
     }
 
     setAttributeNode(attr: any): any {
@@ -119,7 +193,7 @@ export class Element extends Node implements Animatable {
     }
 
     getElementsByTagName(tag: string): Element[] {
-        const out: Node[] = [];
+        const out = new HTMLCollection<Node>();
         collectByTag(this, String(tag).toLowerCase(), out);
         return out as unknown as Element[];
     }
@@ -231,15 +305,6 @@ export class Element extends Node implements Animatable {
             addEventListener() { },
             removeEventListener() { },
         };
-    }
-
-    contains(n: Node | null): boolean {
-        let cur: Node | null = n;
-        while (cur) {
-            if (cur === this) return true;
-            cur = cur.parentNode;
-        }
-        return false;
     }
 
     get relList(): any {
@@ -364,44 +429,14 @@ export class Element extends Node implements Animatable {
         this.attrs.set("lang", String(v));
     }
 
-    get classList(): any {
-        const read = (): string[] => (this.attrs.get("class") || "").split(/\s+/).filter(Boolean);
-        const write = (tokens: string[]): void => { this.attrs.set("class", tokens.join(" ")); };
-        return {
-            add: (...names: string[]): void => {
-                const t = read();
-                for (const n of names) if (t.indexOf(n) < 0) t.push(n);
-                write(t);
-            },
-            remove: (...names: string[]): void => {
-                write(read().filter((x) => names.indexOf(x) < 0));
-            },
-            toggle: (name: string, force?: boolean): boolean => {
-                const has = read().indexOf(name) >= 0;
-                const next = force === undefined ? !has : force;
-                if (next && !has) write([...read(), name]);
-                else if (!next && has) write(read().filter((x) => x !== name));
-                return next;
-            },
-            replace: (oldName: string, newName: string): boolean => {
-                const t = read();
-                const i = t.indexOf(oldName);
-                if (i < 0) return false;
-                t[i] = newName;
-                write(t);
-                return true;
-            },
-            contains: (name: string): boolean => read().indexOf(name) >= 0,
-            item: (i: number): string | null => read()[i] ?? null,
-            forEach: (cb: (value: string, index: number) => void): void => read().forEach(cb),
-            get length(): number { return read().length; },
-            get value(): string { return read().join(" "); },
-            toString: (): string => read().join(" "),
-        };
+    get classList(): DOMTokenList {
+        return classListFor(this);
     }
 
     get children(): Element[] {
-        return this.childNodes.filter((n) => n.nodeType === NodeType.Element) as unknown as Element[];
+        const out = new HTMLCollection<Node>();
+        for (const n of this.childNodes) if (n.nodeType === NodeType.Element) out.push(n);
+        return out as unknown as Element[];
     }
 
     get childElementCount(): number {
@@ -409,13 +444,8 @@ export class Element extends Node implements Animatable {
     }
 
     // Element-only traversal. Slider/drag libraries step through slides via nextElementSibling and cache
-    // the track's parentElement/firstElementChild; a missing accessor returns undefined where they expect an
+    // the track's firstElementChild; a missing accessor returns undefined where they expect an
     // element-or-null, so the next `.removeAttribute`/`.classList` call throws instead of skipping.
-    get parentElement(): Element | null {
-        const p = this.parentNode;
-        return p && p.nodeType === NodeType.Element ? (p as unknown as Element) : null;
-    }
-
     get firstElementChild(): Element | null {
         return this.children[0] || null;
     }
@@ -438,7 +468,7 @@ export class Element extends Node implements Animatable {
     }
 
     getElementsByClassName(className: string): Element[] {
-        const out: Node[] = [];
+        const out = new HTMLCollection<Node>();
         collectByClass(this, String(className), out);
         return out as unknown as Element[];
     }
@@ -454,7 +484,7 @@ export class Element extends Node implements Animatable {
         this.childNodes = [];
         const html = v == null ? "" : String(v);
         const parse = parserRef.parseFragment;
-        if (parse) for (const node of parse(html)) this.appendChild(node);
+        if (parse) for (const node of parse(html, this.localName)) this.appendChild(node);
         this.cachedInnerHTML = html;
     }
 
@@ -466,6 +496,17 @@ export class Element extends Node implements Animatable {
         this.childNodes = [];
         this.cachedInnerHTML = null;
         if (v != null && v !== "") this.appendChild(new Text(v));
+    }
+
+    // A browser's innerText is the *rendered* text, which a layout-free render cannot compute; the
+    // concatenated text is the closest honest answer. It has to exist at all because page code reads
+    // `.length`/`.trim()` straight off the lookup, and undefined there throws instead of measuring nothing.
+    get innerText(): string {
+        return textOf(this);
+    }
+
+    set innerText(v: unknown) {
+        this.textContent = v;
     }
 
     get outerHTML(): string {
@@ -480,7 +521,7 @@ export class Element extends Node implements Animatable {
         if (!parent) return;
         const html = v == null ? "" : String(v);
         const parse = parserRef.parseFragment;
-        const nodes = parse ? parse(html) : [];
+        const nodes = parse ? parse(html, (parent as any).localName) : [];
         for (const node of nodes) parent.insertBefore(node, this);
         parent.removeChild(this);
     }
@@ -506,5 +547,40 @@ export class Element extends Node implements Animatable {
 
     getAnimations(): Animation[] {
         return [];
+    }
+
+    // The three adjacent-insertion methods, which a widget uses in place of innerHTML precisely because it
+    // must not disturb the siblings already there. Called bare, so absence is a TypeError that costs the
+    // whole script rather than one insertion. An unknown position is a no-op here, where a browser throws:
+    // the render has nothing to gain from ending a script over a misspelt argument.
+    insertAdjacentElement(position: string, element: Node): Node | null {
+        this.insertAdjacent(position, [element]);
+        return element;
+    }
+
+    insertAdjacentText(position: string, text: unknown): void {
+        this.insertAdjacent(position, [new Text(text == null ? "" : String(text))]);
+    }
+
+    insertAdjacentHTML(position: string, html: unknown): void {
+        const parse = parserRef.parseFragment;
+        this.insertAdjacent(position, parse ? parse(html == null ? "" : String(html)) : []);
+    }
+
+    private insertAdjacent(position: string, nodes: Node[]): void {
+        const where = String(position).toLowerCase();
+        const parent = this.parentNode;
+
+        if (where === "beforeend") {
+            for (const node of nodes) this.appendChild(node);
+        } else if (where === "afterbegin") {
+            const first = this.childNodes[0] || null;
+            for (const node of nodes) this.insertBefore(node, first);
+        } else if (where === "beforebegin" && parent) {
+            for (const node of nodes) parent.insertBefore(node, this);
+        } else if (where === "afterend" && parent) {
+            const next = this.nextSibling;
+            for (const node of nodes) parent.insertBefore(node, next);
+        }
     }
 }

@@ -16,11 +16,11 @@ export class HTMLMediaElement extends HTMLElement {
     }
 
     get src(): string {
-        return this.getAttribute("src") || "";
+        return this.getAttributeInternal("src") || "";
     }
 
     set src(value: unknown) {
-        this.setAttribute("src", value == null ? "" : String(value));
+        this.setAttributeInternal("src", value == null ? "" : String(value));
     }
 
     get muted(): boolean {
@@ -28,7 +28,7 @@ export class HTMLMediaElement extends HTMLElement {
     }
 
     set muted(value: unknown) {
-        if (value) this.setAttribute("muted", ""); else this.removeAttribute("muted");
+        if (value) this.setAttributeInternal("muted", ""); else this.removeAttributeInternal("muted");
     }
 
     load(): void { }

@@ -10,6 +10,223 @@ Entries before 4.0.0 are condensed to what changed; the reasoning behind each is
 
 ## [Unreleased]
 
+## [4.1.0] - 2026-08-18
+
+### Added
+
+- A `<script>` whose `src` the page built with `URL.createObjectURL` runs from the bytes the page handed
+  over. An object URL was a bare token and the blob was dropped, so a module shim rewriting its own imports,
+  or a bundler inlining a worker body, ended as "not fetchable over HTTP" and everything the chunk defined
+  was lost. The source is read when the node is connected — which is when a browser starts its fetch, and
+  why revoking the token on the next line, as pages do, is not a lost source.
+- Bare module specifiers resolve through the page's own `<script type="importmap">`. Without the map there
+  is nowhere for one to resolve, and resolving it as a path asked the target for `/@scope/pkg` — a URL it
+  never published, so the answer was its 404 page and the package's whole graph was lost on a page that said
+  exactly where the package lives. The `imports` member is read (exact keys and trailing-slash subtrees);
+  `scopes` and `integrity` are declined — neither changes what a single-pass render collects.
+
+- The DOM prelude gained the browser APIs a survey of production pages found it missing, each one an
+  exception inside a real bundle's init rather than a missed lookup: `document.URL`/`documentURI` and
+  `Node.baseURI`; `performance.timing` with its `navigation` counterpart from
+  `getEntriesByType("navigation")`; `document.createTreeWalker`/`createNodeIterator` and the `NodeFilter`
+  constants they are called with; `document.write`/`writeln` (appending, never the browser's post-load
+  document-clearing behaviour) with `open`/`close` beside them; `Text.splitText`; and the `DOMTokenList`,
+  `Window` and `File` constructors.
+- `JsPageTimeoutException`, a `TimeoutException` named for the scope it bounds: a ceiling over the whole page
+  has to end the render, while one over a single execution call must not.
+- `BroadcastChannel`, whose peers are the other channels the same render opened on that name. A page keeps a
+  cart, a consent choice or a session in step across tabs through one and constructs it unguarded at module
+  scope, so its absence cost the chunk and everything the chunk defined.
+- `:open` as a real answer, and the rest of the CSS pseudo-classes a single-pass render can never be in
+  (`:hover`, `:focus`, `:valid`, the pseudo-elements) as names that parse and match nothing.
+- The `CSS` namespace object (`CSS.escape`, `CSS.supports`, `CSS.registerProperty`), `insertAdjacentHTML`
+  with its element and text siblings, and `document.implementation.createDocument` — each named bare by a
+  bundle that never feature-tests it, so each was a certain error inside somebody's init.
+- `import.meta.url` on the Jint backend, answered with the module's own URL. Jint implements the syntax and
+  delegates the properties to its host, so it read back `undefined`, and a loader doing
+  `new URL(import.meta.url)` to find where its own chunks live threw before fetching any of them. The V8
+  backend answers `undefined` here too (measured on ClearScript 7.5.1) and is not addressed by this.
+- `window.name` — the browsing context's own name, empty and writable. Matomo splits it (`window.name
+  .split("###")`) while constructing its tracker, with no guard, so an undefined there cost the tracker and
+  everything built on it; it was the single most common execution error in the surveyed corpus.
+- `HTMLCollection`, answered by `getElementsByTagName`/`getElementsByClassName`/`getElementsByName` and
+  `children` in place of the plain arrays they returned. Pre-`querySelector` code indexes a collection through
+  `item()`/`namedItem()`, which an array has no answer for.
+- The foreground answers a page asks before deciding whether anyone is looking: `document.hasFocus()`,
+  `activeElement`, `visibilityState`/`hidden`, and `elementFromPoint`/`elementsFromPoint` (the body for a
+  point inside the viewport, null outside — no layout means nothing else can be under one). Bot management
+  and session recorders read them unguarded during init.
+- `document.fonts`, an empty but iterable `FontFaceSet` whose `ready` resolves. A chat widget enumerates the
+  families it may use through `fonts.ready.then(set => Array.from(set))` before it renders anything.
+- `Node.replaceChildren`, and an iterable `element.attributes` — both are read by reference before they are
+  called (`host.replaceChildren.apply(host, …)`, `[...el.attributes]`), so each gap was a throw rather than a
+  skipped update.
+- The event constructors a page builds its own interactions from — `UIEvent`, `MouseEvent`, `PointerEvent`,
+  `KeyboardEvent`, `FocusEvent`, `InputEvent`, `WheelEvent` — each carrying the init members its handlers
+  read, and the pre-constructor spelling beside them: `document.createEvent` answers a real `Event` or
+  `CustomEvent` with `initEvent`/`initCustomEvent` rather than an object with one no-op method.
+- `CDATASection`, `ProcessingInstruction`, `ShadowRoot` and `CustomElementRegistry` as globals. An HTML parse
+  produces none of the first two, but the shadow-DOM polyfill patches the character-data types by name and
+  dereferences each one's prototype unchecked — one absent global costs the entire polyfill, and everything
+  the page had parked behind it.
+- `Node.contains`, which lived on `Element`. `document.contains(node)` is the guard Cloudflare's deferred
+  script loader runs before activating anything it parked, so a document that could not answer it lost every
+  script on the page.
+- `element.innerText`, `CharacterData.textContent` (only `Text` carried it, so a comment's read back
+  undefined and Svelte hydration — which finds its boundaries by looking for a marker comment's trimmed text
+  — threw on every page of one CMS), and the form controls: `input`/`textarea` were marker classes with no
+  `value`, `checked`, `type`, `name` or owner `form`, and a page that measures `field.value.length` or
+  retargets `input.form.action` needs all of them. `form` reflects `action`/`method`/`name` and answers
+  `elements`, so a retarget lands on the attribute instead of on an expando nothing serializes.
+- `HTMLScriptElement.noModule` and `.text`, `document.title`, and `Element.prototype.attachShadow` (it was
+  on `HTMLElement`, and support is tested against the prototype, not an instance). `noModule` is the one a
+  page tests against a *created* element — `'noModule' in document.createElement('script')` — and answering
+  false reads as a pre-2018 browser: one CMS's Stencil bundle responds by replacing `document.body` with an
+  "unsupported browser" page, which costs every script after it the whole DOM rather than its own globals.
+
+- An iframe carries a same-origin blank document on `contentWindow.document`/`contentDocument`, which is what
+  a frame with no `src` is in a browser. A RUM beacon builds its loader by writing into it and reads
+  `.open()` off it unguarded. Nothing written there is executed or serialized. Everything the frame's window
+  does not define is answered from this realm, because there is only one: an accessibility overlay opens a
+  frame precisely to read constructors off it (`win.Node.prototype`), and a window carrying a document but no
+  `Node` is a throw where the missing frame was merely a skipped feature.
+
+### Changed
+
+- The Jint floor is 4.16.0. A range floored at 4.15.0 restores exactly 4.15.0, which predates the fix for
+  calling a bound function whose target is itself bound (`f.bind(a).bind(b)()`, jint#2853, released in
+  4.15.2) — so every consumer that did not pin Jint itself got the throw, and webpack's own chunk-loading
+  shim binds an already-bound `push`: nine executions lost on one surveyed site, three on another. The floor
+  is the current release rather than the first one carrying the fix, so what this package is tested on and
+  what a consumer restores are the same engine.
+- `FormData`, `Headers`, `Request` and `Response` moved out from behind `EnableFetch` into the base prelude.
+  They construct and hold data and issue nothing; a caller declines the fetch shim to keep the page's
+  requests off the network, not to lose four constructors a form widget builds its payload in. Only
+  `fetch`/`XMLHttpRequest`/`__http` remain gated, and the shim still reinstalls its own copies so a fetched
+  response and the global a page tests it against stay the same class.
+- The global inherits from `Window.prototype`, which inherits from `EventTarget.prototype` — the chain a
+  browser gives the window. The realm's global belongs to the engine and was flat, so a patch installed on
+  either prototype was unreachable from `window`; the shadow-DOM polyfill installs the native methods it then
+  calls off `window` onto exactly those prototypes. An engine that refuses to reparent its global keeps the
+  flat shape.
+- The selector engine understands combinators and pseudo-classes. It matched only the rightmost compound of
+  a selector, so `.a > .b` answered every `.b` in the document and a query on an element could answer with
+  that element itself; and its tokenizer read `:first-child` as a type selector, so any compound carrying a
+  pseudo-class matched nothing and `querySelector` returned null where a browser finds an element — which a
+  page then dereferences. Selector lists, the four combinators matched right-to-left, the structural and
+  logical pseudo-classes (`:nth-*(an+b)`, `:not`, `:is`/`:where`, `:has`, …), case-insensitive attribute
+  matching and escaped identifiers are all honoured; anything still unrepresentable matches nothing rather
+  than throwing, as do the pseudo-elements and the interaction pseudo-classes a single-pass render can never
+  be in.
+- A `<script>` connected after parse runs the source it carries, by every route a page uses to connect one:
+  `appendChild` of an element whose `textContent` or `.text` was assigned, `createElementNS` in the HTML
+  namespace, and `document.write`. Only `src` scripts were fetched and run, so a tag manager's inline
+  snippet, and everything it defined, was silently dead. A parser-built script is excluded, as the HTML spec
+  requires — a fragment parse starts one "already started", which is why `innerHTML` never executes one —
+  with `document.write` the exception the spec carves out.
+- A `<script nomodule>` is not executed, because this renderer runs ES modules and so is the kind of browser
+  that skips the legacy half of a differential-serving pair. Running both initialises the same app twice
+  over one DOM.
+- `createElementNS` in the HTML namespace answers the same reflecting element classes as `createElement`
+  rather than a plain `Element`. Cloudflare's Rocket Loader rebuilds every script it deferred with
+  `createElementNS(script.namespaceURI, "script")`, and an element reflecting nothing loads nothing.
+
+- `classList` returns a real `DOMTokenList` instance, one per element, instead of a fresh object literal per
+  read — so identity tests and `DOMTokenList.prototype` patches both work. The token operations are unchanged.
+
+### Fixed
+
+- A script source with a scheme no fetch can answer now fires the node's error event instead of being left
+  pending as a cross-origin one. Nothing later can load it, and the page is waiting on the event either way.
+- A specifier no import map covers is answered an empty module without a request, rather than being fetched
+  from the page's own origin as a path.
+- A module built from an object URL resolves its own imports against the page. The token carries no path of
+  its own, where a browser's `blob:` URL carries the page's origin, so a relative import from one reached
+  nothing.
+- One isolation policy at every crossing into the JS engine, stated once instead of per call site:
+  cancellation and a page-scoped ceiling propagate, everything else is a counted warning and the render
+  continues. A raw CLR exception — most often Jint's per-script `TimeoutException`, but equally anything host
+  code the engine called threw — used to escape from any of a dozen unprotected crossings (the preludes, the
+  location/viewport setup, the script collection, the drain loop, and the finalize that reads the settled
+  tree) and discard a render that had already run. A page is still abandoned once it has spent several script
+  ceilings, which is what bounds the total.
+- An `async` or `defer` external script runs after the document's own inline code rather than where its tag
+  sits. Every classic script ran in document order, which a browser cannot do for one it fetched: the parser
+  is long past the tag by the time the network answers. The standard vendor shape — a loader tag followed by
+  the inline snippet that creates the global it writes into — therefore ran backwards and threw on the first
+  statement.
+- `document.currentScript` is the page's own element, not a stand-in carrying only the authored `src`. A
+  widget configured through `data-*` attributes on its tag (`JSON.parse(currentScript.getAttribute(…))`) read
+  null off every one of them. The literal-`src`-versus-resolved-`.src` split is unchanged — the real element
+  has the real attribute.
+- An attribute name is coerced to a string on every path that takes one. A framework passing a computed name
+  that came out `undefined` left the map keyed on the value rather than on `"undefined"`, so the attribute's
+  own `.name` read back undefined and the next walk of `el.attributes` threw on it. That walk also goes
+  through `Array.prototype.slice`, which asks whether each index exists before reading it, so the
+  `attributes` map answers the index and key queries its getter already served.
+- A `<script type="module">` appended at runtime runs through the module loader instead of the classic-script
+  entry, so its imports resolve. The initial markup was already split by type; the runtime path never was.
+- Two inline `<script type="module">` blocks on one page both run. They shared a specifier — the page URL —
+  which Jint refuses outright (taking both) and V8 answers from its module cache (running the first twice).
+- The global is branded as a `Window` (`Object.prototype.toString.call(window)`), which an engine global does
+  not do for itself. jQuery reads that brand as "a plain object", and jQuery UI deep-clones a plain option
+  value — so the ordinary `of: window` default sent `widget.extend` through `window.window`/`self`/`top`/
+  `parent` and spent the entire call stack there. It presented as `Maximum call stack size exceeded` on six
+  surveyed sites, none of which had recursion of its own.
+- A reflected property (`el.src`, `el.href`, …) writes the content attribute through the DOM's internal
+  steps instead of calling the page-visible `setAttribute`. A consent or script-blocking tool wraps
+  `Element.prototype.setAttribute` and assigns the guarded property inside its wrapper; the property setter
+  called the method straight back, and the recursion spent the stack before the page ran. A browser is immune
+  because its setters never call the method. Every internal read and write in the DOM — the parser, the
+  serializer, selector matching, `classList`, resource registration — now takes the same internal path.
+- `parentElement` is `Node.prototype`'s, where a browser keeps it, rather than `Element`'s. A text node has
+  one, and a library that wraps the accessor copies its descriptor off `Node.prototype` — finding none there
+  threw at `defineProperty` instead of skipping the wrap. The window's own `addEventListener`/
+  `removeEventListener`/`dispatchEvent` are mirrored onto `Window.prototype` for the same reason; a patch
+  made there does not reach the engine's global, and surviving the descriptor read is the point.
+- Fragment parsing takes its insertion mode from the context element: in `<html>` context the implied `head`
+  and `body` are part of the result, instead of being stripped as the parser scaffolding they are everywhere
+  else. DOMPurify feature-tests itself by replacing a scratch document's body and then looking the body up
+  again, so the stripped wrapper left it dereferencing `undefined` — the sanitizer never defined its global,
+  and every script that then named `DOMPurify` failed after it.
+- A raw-text element's children serialize literally, as the HTML spec requires. `script.innerHTML` and
+  `style.innerHTML` came back HTML-escaped, so a tag manager that stages a snippet in the markup and copies
+  it onto a live script got `&amp;&amp;` and `&lt;` where the source had `&&` and `<` — source that no
+  longer parses as JavaScript. The parser never decoded entities inside these elements, so escaping on the
+  way out corrupted what they hold rather than round-tripping it.
+
+- The tags HTML lets a page leave open are closed by the one that implies their end. The parser pushed every
+  element unconditionally, so `<li>a<li>b` and `<p>one<p>two` — ordinary markup — nested instead of becoming
+  siblings, and every structural query the page then ran answered wrongly with nothing thrown: a list of
+  thirty items looked like one. The implied start tags came with it, so `<table><tr>` puts the row in the
+  row group a browser inserts.
+- A selector the CSS grammar rejects now throws a `SyntaxError`, where the engine used to match nothing.
+  jQuery decides whether it can use `querySelectorAll` at all by handing it deliberate garbage (`*,:x`,
+  `[s!='']:x`) and watching for the exception; an empty list told it the native engine was buggy, and it fell
+  back to its own for every selector carrying a comma and a colon — which then rejected the plain CSS this
+  engine supports, reported as `unsupported pseudo: hover` from inside the page's own library. The two halves
+  are deliberate: a name outside CSS is invalid, while a pseudo-class that is valid CSS but unsatisfiable
+  here parses and matches nothing, and the names a library defines for itself (`:first`, `:visible`,
+  `:contains`) are rejected so the query goes back to the engine that implements them.
+- A scheme-relative reference (`//host/path`) keeps its own authority and borrows only the base's scheme,
+  instead of being pasted onto the page's origin as a path. A loader that derives its CDN prefix as
+  `"//" + anchor.host` was fetching every chunk from the page's own server, which 404s.
+- `URL` is a live object rather than a snapshot: every component is settable, `searchParams` reports its
+  mutations back into the URL that owns it, and `URLSearchParams` accepts a record, a sequence of pairs and
+  another params list as well as a query string. A page that builds a request as
+  `u.searchParams.set(k, v)` — or from `new URLSearchParams({...})` — was sending the URL it started with, or
+  one with an empty query, and nothing threw to say so. Form-encoding (`+` for a space) is handled on both
+  sides, and an undecodable percent sequence comes back as itself.
+- `element.style` and the `style` attribute are one property, read and written from both directions. They
+  were two disconnected stores: a read of `el.style.display` on an element the markup styled answered `""`,
+  and a write was invisible to `getAttribute("style")` and to the serialized page. An IDL name and a CSS name
+  now resolve to the same property, and a declaration splits on semicolons outside parentheses so a
+  `url(data:...;base64,...)` value no longer truncates the rest.
+- `document.getElementsByTagName`/`getElementsByClassName`/`getElementsByName` include the root element,
+  which they searched strictly below. jQuery resolves a tag-only `$("html")` through the first of those, so
+  a CMS bundle reading `$("html").attr("lang")` at init got undefined and threw. An *element's* own search
+  still excludes itself, as it should.
+
 ## [4.0.0] - 2026-07-31
 
 ### Added
@@ -305,7 +522,8 @@ Public proxy types are removed and renamed (see _Removed_ and _Changed_), a brea
 
 - Initial release.
 
-[Unreleased]: https://github.com/svenrog/SimpleCrawler/compare/v4.0.0...HEAD
+[Unreleased]: https://github.com/svenrog/SimpleCrawler/compare/v4.1.0...HEAD
+[4.1.0]: https://github.com/svenrog/SimpleCrawler/releases/tag/v4.1.0
 [4.0.0]: https://github.com/svenrog/SimpleCrawler/releases/tag/v4.0.0
 [3.6.5]: https://github.com/svenrog/SimpleCrawler/releases/tag/v3.6.5
 [3.6.4]: https://github.com/svenrog/SimpleCrawler/releases/tag/v3.6.4

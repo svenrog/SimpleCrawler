@@ -6,18 +6,18 @@ export class HTMLImageElement extends HTMLElement {
     }
 
     get alt(): string {
-        return this.getAttribute("alt") || "";
+        return this.getAttributeInternal("alt") || "";
     }
 
     set alt(value: unknown) {
-        this.setAttribute("alt", value == null ? "" : String(value));
+        this.setAttributeInternal("alt", value == null ? "" : String(value));
     }
 
     get src(): string {
-        return this.getAttribute("src") || "";
+        return this.getAttributeInternal("src") || "";
     }
 
     set src(value: unknown) {
-        this.setAttribute("src", value == null ? "" : String(value));
+        this.setAttributeInternal("src", value == null ? "" : String(value));
     }
 }

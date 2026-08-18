@@ -12,17 +12,17 @@ export class HTMLAnchorElement extends HTMLElement {
     }
 
     get href(): string {
-        const raw = this.getAttribute("href");
+        const raw = this.getAttributeInternal("href");
         if (raw == null) return "";
         try { return new URL(raw).href; } catch { return raw; }
     }
 
     set href(value: unknown) {
-        this.setAttribute("href", value == null ? "" : String(value));
+        this.setAttributeInternal("href", value == null ? "" : String(value));
     }
 
     private resolved(): URL | null {
-        const raw = this.getAttribute("href");
+        const raw = this.getAttributeInternal("href");
         if (!raw) return null;
         try { return new URL(raw); } catch { return null; }
     }

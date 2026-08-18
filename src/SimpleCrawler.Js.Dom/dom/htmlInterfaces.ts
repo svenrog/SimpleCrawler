@@ -15,16 +15,16 @@ export { HTMLVideoElement } from "./HTMLVideoElement";
 export { HTMLAudioElement } from "./HTMLAudioElement";
 export { HTMLDialogElement } from "./HTMLDialogElement";
 export { HTMLCanvasElement } from "./HTMLCanvasElement";
+export { HTMLInputElement } from "./HTMLInputElement";
+export { HTMLTextAreaElement } from "./HTMLTextAreaElement";
+export { HTMLFormElement } from "./HTMLFormElement";
 
 // Marker interfaces for `instanceof` checks. Frameworks probe element types (React's getActiveElementDeep
 // does `node instanceof window.HTMLIFrameElement`, Vue references SVGElement) and a `instanceof undefined`
 // throws "Right-hand side of 'instanceof' is not an object". dom.js creates most HTML nodes as a plain
 // Element/HTMLElement, so these are never actually instantiated — they exist so the checks evaluate (false)
 // instead of throwing.
-export class HTMLInputElement extends HTMLElement { }
-export class HTMLTextAreaElement extends HTMLElement { }
 export class HTMLButtonElement extends HTMLElement { }
-export class HTMLFormElement extends HTMLElement { }
 export class HTMLStyleElement extends HTMLElement { }
 export class HTMLUnknownElement extends HTMLElement { }
 export class SVGElement extends Element { }
