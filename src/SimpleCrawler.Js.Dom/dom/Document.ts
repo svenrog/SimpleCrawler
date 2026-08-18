@@ -18,6 +18,8 @@ import { parserRef } from "../html/parserRef";
 import { resolveUrl } from "../url/resolve";
 import { HTMLCollection } from "./HTMLCollection";
 import { createFontFaceSet } from "../browser/fonts";
+import { Event } from "../browser/Event";
+import { CustomEvent } from "../browser/CustomEvent";
 import { viewportWidth, viewportHeight } from "../browser/viewport";
 
 function withinViewport(x: unknown, y: unknown): boolean {
@@ -251,8 +253,12 @@ export class Document extends Node {
         return querySelectorAll(this, sel) as unknown as Element[];
     }
 
-    createEvent(): any {
-        return { initEvent() { } };
+    // The pre-constructor construction path: create it untyped, then name it through initEvent /
+    // initCustomEvent. An analytics shim builds every event this way and reads nothing back, so what matters
+    // is that the object it gets is a real Event carrying the initializer the family it asked for defines.
+    createEvent(kind?: string): any {
+        const family = String(kind || "Event").toLowerCase();
+        return family.startsWith("custom") ? new CustomEvent("") : new Event("");
     }
 
     // jQuery's UMD factory feature-detects against `implementation.createHTMLDocument` during init; a missing

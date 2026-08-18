@@ -814,4 +814,147 @@ public class JsDomRendererElementsTests : JsDomRendererTestBase, IClassFixture<J
 
         Assert.Contains("href=\"/xml-svg-1\"", rendered);
     }
+
+    // A form control's value is a property seeded by the attribute, and `input.form` is the form it submits
+    // with: a page finds its search box, measures `field.value.length` and retargets `field.form.action`, and
+    // both reads are undefined off a plain Element — the second one throws.
+    [Theory]
+    [InlineData(JsEngine.Jint)]
+    [InlineData(JsEngine.V8)]
+    public async Task JsMode_FormControlsCarryTheirValueAndOwnerForm(JsEngine engine)
+    {
+        if (engine == JsEngine.V8)
+            Assert.SkipUnless(V8Support.IsAvailable, V8Support.UnavailableReason);
+
+        const string html = """
+            <html><body>
+            <form id="f" action="/old"><input id="q" name="s" value="seed"><textarea id="t">typed</textarea>
+            <input id="c" type="checkbox" checked></form>
+            <script>
+            var q = document.getElementById('q');
+            var probe = '?len=' + q.value.length + '&name=' + q.name + '&type=' + q.type;
+            q.form.action = '/new';
+            q.value = 'changed';
+            probe += '&action=' + q.form.getAttribute('action') + '&set=' + q.value;
+            probe += '&area=' + document.getElementById('t').value;
+            probe += '&checked=' + document.getElementById('c').checked;
+            var a = document.createElement('a');
+            a.setAttribute('href', '/probe' + probe);
+            document.body.appendChild(a);
+            </script>
+            </body></html>
+            """;
+
+        var renderer = CreateJsRenderer(engine);
+        var result = await renderer.RenderAsync(Encoding.UTF8.GetBytes(html), "http://localhost:5000/", new HttpClient(), CancellationToken.None);
+        var rendered = Encoding.UTF8.GetString(result);
+
+        Assert.Contains("len=4", rendered);
+        Assert.Contains("name=s", rendered);
+        Assert.Contains("type=text", rendered);
+        Assert.Contains("action=/new", rendered);
+        Assert.Contains("set=changed", rendered);
+        Assert.Contains("area=typed", rendered);
+        Assert.Contains("checked=true", rendered);
+    }
+
+    // innerText and a comment's textContent, both read without a guard: a cart badge does
+    // `"count--".concat(el.innerText.length)`, and Svelte hydration finds its boundaries by walking childNodes
+    // for `8 === n.nodeType && n.textContent.trim() === marker`.
+    [Theory]
+    [InlineData(JsEngine.Jint)]
+    [InlineData(JsEngine.V8)]
+    public async Task JsMode_InnerTextAndCommentTextContent_AnswerWithTheirText(JsEngine engine)
+    {
+        if (engine == JsEngine.V8)
+            Assert.SkipUnless(V8Support.IsAvailable, V8Support.UnavailableReason);
+
+        const string html = """
+            <html><body><div id="t"><!-- HTML_TAG_START --><span>12</span></div>
+            <script>
+            var host = document.getElementById('t');
+            var span = host.querySelector('span');
+            var comment = host.childNodes[0];
+            span.innerText = span.innerText + '3';
+            var a = document.createElement('a');
+            a.setAttribute('href', '/probe?len=' + span.innerText.length
+              + '&node=' + comment.nodeType + '&text=' + comment.textContent.trim());
+            document.body.appendChild(a);
+            </script>
+            </body></html>
+            """;
+
+        var renderer = CreateJsRenderer(engine);
+        var result = await renderer.RenderAsync(Encoding.UTF8.GetBytes(html), "http://localhost:5000/", new HttpClient(), CancellationToken.None);
+        var rendered = Encoding.UTF8.GetString(result);
+
+        Assert.Contains("len=3", rendered);
+        Assert.Contains("node=8", rendered);
+        Assert.Contains("text=HTML_TAG_START", rendered);
+    }
+
+    // An attribute name is a string however it arrives — a framework that computes one and gets undefined
+    // leaves an attribute a browser calls "undefined", and the next walk of el.attributes reads its .name.
+    // The same walk goes through Array.prototype.slice, which asks whether each index is there before reading
+    // it, so the map's index trap has to answer for the ones its getter serves.
+    [Theory]
+    [InlineData(JsEngine.Jint)]
+    [InlineData(JsEngine.V8)]
+    public async Task JsMode_AttributeNamesAreStringsAndTheMapCopiesThroughSlice(JsEngine engine)
+    {
+        if (engine == JsEngine.V8)
+            Assert.SkipUnless(V8Support.IsAvailable, V8Support.UnavailableReason);
+
+        const string html = """
+            <html><body><div id="t" data-keep="1"></div>
+            <script>
+            var host = document.getElementById('t');
+            host.setAttribute(undefined, 'x');
+            var names = [];
+            for (var i = 0; i < host.attributes.length; i++) names.push(host.attributes[i].name);
+            var copied = Array.prototype.slice.call(host.attributes).map(function (n) { return n.name; });
+            var a = document.createElement('a');
+            a.setAttribute('href', '/probe?walked=' + names.join('|') + '&copied=' + copied.join('|'));
+            document.body.appendChild(a);
+            </script>
+            </body></html>
+            """;
+
+        var renderer = CreateJsRenderer(engine);
+        var result = await renderer.RenderAsync(Encoding.UTF8.GetBytes(html), "http://localhost:5000/", new HttpClient(), CancellationToken.None);
+        var rendered = Encoding.UTF8.GetString(result);
+
+        Assert.Contains("walked=id|data-keep|undefined", rendered);
+        Assert.Contains("copied=id|data-keep|undefined", rendered);
+    }
+
+    // Configuration-on-the-tag: an embedded widget reads its whole setup off its own script element. A
+    // stand-in carrying only the src answers null for every data-* attribute, and the JSON.parse below it
+    // throws before the widget exists.
+    [Theory]
+    [InlineData(JsEngine.Jint)]
+    [InlineData(JsEngine.V8)]
+    public async Task JsMode_CurrentScriptIsThePagesOwnElement(JsEngine engine)
+    {
+        if (engine == JsEngine.V8)
+            Assert.SkipUnless(V8Support.IsAvailable, V8Support.UnavailableReason);
+
+        const string html = """
+            <html><body>
+            <script data-app="%7B%22key%22%3A%22ok%22%7D">
+            var config = JSON.parse(decodeURIComponent(document.currentScript.getAttribute('data-app')));
+            var a = document.createElement('a');
+            a.setAttribute('href', '/probe?key=' + config.key + '&tag=' + document.currentScript.localName);
+            document.body.appendChild(a);
+            </script>
+            </body></html>
+            """;
+
+        var renderer = CreateJsRenderer(engine);
+        var result = await renderer.RenderAsync(Encoding.UTF8.GetBytes(html), "http://localhost:5000/", new HttpClient(), CancellationToken.None);
+        var rendered = Encoding.UTF8.GetString(result);
+
+        Assert.Contains("key=ok", rendered);
+        Assert.Contains("tag=script", rendered);
+    }
 }

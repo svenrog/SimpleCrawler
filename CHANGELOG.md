@@ -45,6 +45,23 @@ Entries before 4.0.0 are condensed to what changed; the reasoning behind each is
 - `Node.replaceChildren`, and an iterable `element.attributes` — both are read by reference before they are
   called (`host.replaceChildren.apply(host, …)`, `[...el.attributes]`), so each gap was a throw rather than a
   skipped update.
+- The event constructors a page builds its own interactions from — `UIEvent`, `MouseEvent`, `PointerEvent`,
+  `KeyboardEvent`, `FocusEvent`, `InputEvent`, `WheelEvent` — each carrying the init members its handlers
+  read, and the pre-constructor spelling beside them: `document.createEvent` answers a real `Event` or
+  `CustomEvent` with `initEvent`/`initCustomEvent` rather than an object with one no-op method.
+- `CDATASection`, `ProcessingInstruction`, `ShadowRoot` and `CustomElementRegistry` as globals. An HTML parse
+  produces none of the first two, but the shadow-DOM polyfill patches the character-data types by name and
+  dereferences each one's prototype unchecked — one absent global costs the entire polyfill, and everything
+  the page had parked behind it.
+- `Node.contains`, which lived on `Element`. `document.contains(node)` is the guard Cloudflare's deferred
+  script loader runs before activating anything it parked, so a document that could not answer it lost every
+  script on the page.
+- `element.innerText`, `CharacterData.textContent` (only `Text` carried it, so a comment's read back
+  undefined and Svelte hydration — which finds its boundaries by looking for a marker comment's trimmed text
+  — threw on every page of one CMS), and the form controls: `input`/`textarea` were marker classes with no
+  `value`, `checked`, `type`, `name` or owner `form`, and a page that measures `field.value.length` or
+  retargets `input.form.action` needs all of them. `form` reflects `action`/`method`/`name` and answers
+  `elements`, so a retarget lands on the attribute instead of on an expando nothing serializes.
 - An iframe carries a same-origin blank document on `contentWindow.document`/`contentDocument`, which is what
   a frame with no `src` is in a browser. A RUM beacon builds its loader by writing into it and reads
   `.open()` off it unguarded. Nothing written there is executed or serialized. Everything the frame's window
@@ -65,6 +82,20 @@ Entries before 4.0.0 are condensed to what changed; the reasoning behind each is
   requests off the network, not to lose four constructors a form widget builds its payload in. Only
   `fetch`/`XMLHttpRequest`/`__http` remain gated, and the shim still reinstalls its own copies so a fetched
   response and the global a page tests it against stay the same class.
+- The global inherits from `Window.prototype`, which inherits from `EventTarget.prototype` — the chain a
+  browser gives the window. The realm's global belongs to the engine and was flat, so a patch installed on
+  either prototype was unreachable from `window`; the shadow-DOM polyfill installs the native methods it then
+  calls off `window` onto exactly those prototypes. An engine that refuses to reparent its global keeps the
+  flat shape.
+- The selector engine understands combinators and pseudo-classes. It matched only the rightmost compound of
+  a selector, so `.a > .b` answered every `.b` in the document and a query on an element could answer with
+  that element itself; and its tokenizer read `:first-child` as a type selector, so any compound carrying a
+  pseudo-class matched nothing and `querySelector` returned null where a browser finds an element — which a
+  page then dereferences. Selector lists, the four combinators matched right-to-left, the structural and
+  logical pseudo-classes (`:nth-*(an+b)`, `:not`, `:is`/`:where`, `:has`, …), case-insensitive attribute
+  matching and escaped identifiers are all honoured; anything still unrepresentable matches nothing rather
+  than throwing, as do the pseudo-elements and the interaction pseudo-classes a single-pass render can never
+  be in.
 - `classList` returns a real `DOMTokenList` instance, one per element, instead of a fresh object literal per
   read — so identity tests and `DOMTokenList.prototype` patches both work. The token operations are unchanged.
 
@@ -77,6 +108,20 @@ Entries before 4.0.0 are condensed to what changed; the reasoning behind each is
   location/viewport setup, the script collection, the drain loop, and the finalize that reads the settled
   tree) and discard a render that had already run. A page is still abandoned once it has spent several script
   ceilings, which is what bounds the total.
+- An `async` or `defer` external script runs after the document's own inline code rather than where its tag
+  sits. Every classic script ran in document order, which a browser cannot do for one it fetched: the parser
+  is long past the tag by the time the network answers. The standard vendor shape — a loader tag followed by
+  the inline snippet that creates the global it writes into — therefore ran backwards and threw on the first
+  statement.
+- `document.currentScript` is the page's own element, not a stand-in carrying only the authored `src`. A
+  widget configured through `data-*` attributes on its tag (`JSON.parse(currentScript.getAttribute(…))`) read
+  null off every one of them. The literal-`src`-versus-resolved-`.src` split is unchanged — the real element
+  has the real attribute.
+- An attribute name is coerced to a string on every path that takes one. A framework passing a computed name
+  that came out `undefined` left the map keyed on the value rather than on `"undefined"`, so the attribute's
+  own `.name` read back undefined and the next walk of `el.attributes` threw on it. That walk also goes
+  through `Array.prototype.slice`, which asks whether each index exists before reading it, so the
+  `attributes` map answers the index and key queries its getter already served.
 - A `<script type="module">` appended at runtime runs through the module loader instead of the classic-script
   entry, so its imports resolve. The initial markup was already split by type; the runtime path never was.
 - Two inline `<script type="module">` blocks on one page both run. They shared a specifier — the page URL —

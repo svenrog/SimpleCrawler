@@ -207,7 +207,17 @@ public sealed class JsRenderer
         var bundleExecutionTime = RenderProfiler.Start();
         foreach (var script in regularScripts)
         {
-            RunRegularJs(context, script);
+            if (!script.Deferred)
+                RunRegularJs(context, script);
+        }
+
+        // async/defer, then modules — everything the parser handed to the network runs after the document's
+        // own inline code, which is the order a browser produces and the order page code is written against:
+        // an async loader that reads a global the inline snippet below it defines finds it defined.
+        foreach (var script in regularScripts)
+        {
+            if (script.Deferred)
+                RunRegularJs(context, script);
         }
 
         foreach (var module in moduleEntries)
@@ -277,6 +287,8 @@ public sealed class JsRenderer
         {
             var isModule = entry.TryGetProperty("module", out var moduleProp) && moduleProp.ValueKind == JsonValueKind.True;
             var external = entry.TryGetProperty("external", out var externalProp) && externalProp.ValueKind == JsonValueKind.True;
+            var deferred = entry.TryGetProperty("deferred", out var deferredProp) && deferredProp.ValueKind == JsonValueKind.True;
+            var index = entry.TryGetProperty("index", out var indexProp) && indexProp.ValueKind == JsonValueKind.Number ? indexProp.GetInt32() : -1;
             var src = entry.TryGetProperty("src", out var srcProp) && srcProp.ValueKind == JsonValueKind.String ? srcProp.GetString()! : "";
             var text = entry.TryGetProperty("text", out var textProp) && textProp.ValueKind == JsonValueKind.String ? textProp.GetString()! : "";
 
@@ -292,7 +304,7 @@ public sealed class JsRenderer
                 if (isModule)
                     modules.Add(new ModuleScript(absolute.ToString(), source, External: true));
                 else
-                    regular.Add(new RegularScript(source, absolute.ToString(), src, External: true));
+                    regular.Add(new RegularScript(source, absolute.ToString(), src, External: true, Deferred: deferred, Index: index));
             }
             else
             {
@@ -302,7 +314,7 @@ public sealed class JsRenderer
                 if (isModule)
                     modules.Add(new ModuleScript(InlineModuleSpecifier(context.PageUrl, modules.Count), text, External: false));
                 else
-                    regular.Add(new RegularScript(text, context.PageUrl, string.Empty, External: false));
+                    regular.Add(new RegularScript(text, context.PageUrl, string.Empty, External: false, Deferred: false, Index: index));
             }
         }
 
@@ -320,7 +332,7 @@ public sealed class JsRenderer
 
     private static void RunRegularJs(RenderingContext context, RegularScript script)
     {
-        SetCurrentScript(context, script.External ? script.RawSrc : "");
+        SetCurrentScript(context, script.Index >= 0 ? script.Index : script.External ? script.RawSrc : "");
         try
         {
             context.Isolation.Run("Bundle execution", () =>
@@ -342,15 +354,15 @@ public sealed class JsRenderer
     /// auto-public-path (and Next's instanceof-HTMLScriptElement invariant over it) reads that during chunk
     /// evaluation, so it must be set around each execution and cleared after — exactly as a browser does.
     /// <para>
-    /// <paramref name="src"/> is the <c>src</c> attribute as authored, not the URL this host resolved and
-    /// fetched. The synthetic node stores it as the attribute, so getAttribute("src") returns the literal
-    /// string a browser would and the .src property resolves it back to absolute for webpack — feeding the
-    /// resolved URL in collapses that distinction and breaks Turbopack's chunk identity (see
-    /// HTMLScriptElement.src).
+    /// <paramref name="script"/> is the collected script's index, which names the page's own element — the one
+    /// whose data-* attributes a widget reads its configuration from, and whose <c>src</c> attribute is the
+    /// literal a browser hands back rather than the URL this host resolved and fetched (feeding the resolved
+    /// URL in breaks Turbopack's chunk identity — see HTMLScriptElement.src). A string is the authored
+    /// <c>src</c> for a script the collector never reported, and stands a node up for it.
     /// </para>
     /// </summary>
-    private static void SetCurrentScript(RenderingContext context, string? src)
-        => context.Isolation.Run("currentScript update", () => context.Engine.CallGlobal("__crawlerSetCurrentScript", src));
+    private static void SetCurrentScript(RenderingContext context, object? script)
+        => context.Isolation.Run("currentScript update", () => context.Engine.CallGlobal("__crawlerSetCurrentScript", script));
 
     private async Task DrainJsAsync(RenderingContext context)
     {

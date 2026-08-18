@@ -1,5 +1,5 @@
 import { Element } from "./Element";
-import { DocumentFragment } from "./DocumentFragment";
+import { ShadowRoot } from "./ShadowRoot";
 import { customElements } from "./customElements";
 import { hideOwnFields } from "./utils";
 
@@ -35,9 +35,9 @@ export class HTMLElement extends Element {
 
     attachShadow(init?: { mode?: string }): any {
         if (this.shadowRoot) return this.shadowRoot;
-        const root = new DocumentFragment();
-        (root as any).host = this;
-        (root as any).mode = init && init.mode ? init.mode : "open";
+        const root = new ShadowRoot();
+        root.host = this;
+        root.mode = init && init.mode ? init.mode : "open";
         this.shadowRoot = root;
         return root;
     }

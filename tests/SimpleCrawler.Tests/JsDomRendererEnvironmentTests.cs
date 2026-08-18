@@ -548,4 +548,81 @@ public class JsDomRendererEnvironmentTests : JsDomRendererTestBase, IClassFixtur
         Assert.Contains("count=0", rendered);
         Assert.Contains("status=loaded", rendered);
     }
+
+    // The event families a page constructs to drive its own UI, and the pre-constructor spelling a shim
+    // built on document.createEvent still uses. Each name is read at module scope, where an absent
+    // constructor is `X is not defined` for the whole chunk rather than a feature that quietly does nothing.
+    [Theory]
+    [InlineData(JsEngine.Jint)]
+    [InlineData(JsEngine.V8)]
+    public async Task JsMode_EventConstructorsAndTheLegacyInitializers_AreBothAvailable(JsEngine engine)
+    {
+        if (engine == JsEngine.V8)
+            Assert.SkipUnless(V8Support.IsAvailable, V8Support.UnavailableReason);
+
+        const string html = """
+            <html><body><div id="t"></div>
+            <script>
+            var click = new MouseEvent('click', { bubbles: true, clientX: 12 });
+            var key = new KeyboardEvent('keydown', { key: 'Escape' });
+            var legacy = document.createEvent('CustomEvent');
+            legacy.initCustomEvent('ready', true, false, { id: 7 });
+            var seen = '';
+            document.getElementById('t').addEventListener('ready', function (e) { seen = e.type + ':' + e.detail.id; });
+            document.getElementById('t').dispatchEvent(legacy);
+            var a = document.createElement('a');
+            a.setAttribute('href', '/probe?click=' + click.type + click.clientX + '&key=' + key.key
+              + '&legacy=' + seen + '&isEvent=' + (legacy instanceof Event));
+            document.body.appendChild(a);
+            </script>
+            </body></html>
+            """;
+
+        var renderer = CreateJsRenderer(engine);
+        var result = await renderer.RenderAsync(Encoding.UTF8.GetBytes(html), "http://localhost:5000/", new HttpClient(), CancellationToken.None);
+        var rendered = Encoding.UTF8.GetString(result);
+
+        Assert.Contains("click=click12", rendered);
+        Assert.Contains("key=Escape", rendered);
+        Assert.Contains("legacy=ready:7", rendered);
+        Assert.Contains("isEvent=true", rendered);
+    }
+
+    // `document.contains(node)` — the guard a deferred-script loader runs before activating anything it
+    // parked. It lived on Element, so the document could not answer it and every parked script was lost.
+    // The character-data and shadow types are named the same way: a polyfill reads `.prototype` off each by
+    // name before it does anything, and one absent global costs the whole polyfill.
+    [Theory]
+    [InlineData(JsEngine.Jint)]
+    [InlineData(JsEngine.V8)]
+    public async Task JsMode_TheDocumentAnswersContains_AndTheNodeTypeGlobalsExist(JsEngine engine)
+    {
+        if (engine == JsEngine.V8)
+            Assert.SkipUnless(V8Support.IsAvailable, V8Support.UnavailableReason);
+
+        const string html = """
+            <html><body><div id="t"></div>
+            <script>
+            var host = document.getElementById('t');
+            var detached = document.createElement('span');
+            var named = ['Text', 'Comment', 'CDATASection', 'ProcessingInstruction', 'ShadowRoot',
+                         'CustomElementRegistry'].filter(function (n) { return !window[n] || !window[n].prototype; });
+            var a = document.createElement('a');
+            a.setAttribute('href', '/probe?in=' + document.contains(host) + '&out=' + document.contains(detached)
+              + '&missing=' + (named.length ? named.join(',') : 'none')
+              + '&shadow=' + (host.attachShadow({ mode: 'open' }) instanceof ShadowRoot));
+            document.body.appendChild(a);
+            </script>
+            </body></html>
+            """;
+
+        var renderer = CreateJsRenderer(engine);
+        var result = await renderer.RenderAsync(Encoding.UTF8.GetBytes(html), "http://localhost:5000/", new HttpClient(), CancellationToken.None);
+        var rendered = Encoding.UTF8.GetString(result);
+
+        Assert.Contains("in=true", rendered);
+        Assert.Contains("out=false", rendered);
+        Assert.Contains("missing=none", rendered);
+        Assert.Contains("shadow=true", rendered);
+    }
 }

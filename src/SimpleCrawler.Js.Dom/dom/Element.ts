@@ -13,6 +13,14 @@ import { Animatable } from "./Animatable";
 import { Animation } from "./Animation";
 import { HTMLCollection } from "./HTMLCollection";
 
+// Every attribute name a browser takes is coerced to a string first, so `el.setAttribute(undefined, v)` — a
+// framework passing a name it failed to compute — stores it under "undefined" rather than under the value
+// undefined. Keying the map on a non-string leaves an attribute whose own `.name` reads back undefined, and
+// the next walk of `el.attributes` throws on it.
+function attrKey(name: unknown): string {
+    return typeof name === "string" ? name : String(name);
+}
+
 function attrNode(name: string, value: string, owner: Element): any {
     return { name, value, localName: name, namespaceURI: null, ownerElement: owner };
 }
@@ -52,15 +60,16 @@ export class Element extends Node implements Animatable {
     // property it is guarding re-enters its own wrapper otherwise, and that recursion spends the whole stack
     // before the page has run. A browser is immune because its setter never calls the method.
     setAttributeInternal(name: string, value: unknown): void {
-        this.attrs.set(name, value == null ? "" : String(value));
+        this.attrs.set(attrKey(name), value == null ? "" : String(value));
     }
 
     getAttributeInternal(name: string): string | null {
-        return this.attrs.has(name) ? this.attrs.get(name)! : null;
+        const key = attrKey(name);
+        return this.attrs.has(key) ? this.attrs.get(key)! : null;
     }
 
     removeAttributeInternal(name: string): void {
-        this.attrs.delete(name);
+        this.attrs.delete(attrKey(name));
     }
 
     setAttribute(name: string, value: unknown): void {
@@ -80,21 +89,22 @@ export class Element extends Node implements Animatable {
     }
 
     removeAttributeNS(_ns: string | null, name: string): void {
-        this.attrs.delete(name);
+        this.attrs.delete(attrKey(name));
     }
 
     hasAttribute(name: string): boolean {
-        return this.attrs.has(name);
+        return this.attrs.has(attrKey(name));
     }
 
     toggleAttribute(name: string, force?: boolean): boolean {
-        const present = this.attrs.has(name);
+        const key = attrKey(name);
+        const present = this.attrs.has(key);
         const add = force === undefined ? !present : force;
         if (add) {
-            if (!present) this.attrs.set(name, "");
+            if (!present) this.attrs.set(key, "");
             return true;
         }
-        this.attrs.delete(name);
+        this.attrs.delete(key);
         return false;
     }
 
@@ -127,11 +137,35 @@ export class Element extends Node implements Animatable {
                 if (/^\d+$/.test(prop)) return nthAttrNode(el.attrs, Number(prop), el);
                 return el.attrs.has(prop) ? attrNode(prop, el.attrs.get(prop)!, el) : undefined;
             },
+            // Array.prototype.slice.call(el.attributes) — how a widget copies an element's attributes onto
+            // another — asks whether each index is present before reading it, and a bare target answers no,
+            // leaving an array of holes. The index and key traps have to agree with the getter.
+            has(_t, prop) {
+                if (prop === "length" || prop === "item" || prop === "getNamedItem" || prop === Symbol.iterator) return true;
+                if (typeof prop !== "string") return false;
+                return /^\d+$/.test(prop) ? Number(prop) < el.attrs.size : el.attrs.has(prop);
+            },
+            ownKeys() {
+                const keys: string[] = [];
+                for (let i = 0; i < el.attrs.size; i++) keys.push(String(i));
+                for (const name of el.attrs.keys()) keys.push(name);
+                keys.push("length");
+                return keys;
+            },
+            getOwnPropertyDescriptor(_t, prop) {
+                if (prop === "length") return { value: el.attrs.size, writable: false, enumerable: false, configurable: true };
+                if (typeof prop !== "string") return undefined;
+                const value = /^\d+$/.test(prop)
+                    ? nthAttrNode(el.attrs, Number(prop), el)
+                    : el.attrs.has(prop) ? attrNode(prop, el.attrs.get(prop)!, el) : undefined;
+                return value === undefined ? undefined : { value, writable: false, enumerable: true, configurable: true };
+            },
         });
     }
 
     getAttributeNode(name: string): any {
-        return this.attrs.has(name) ? attrNode(name, this.attrs.get(name)!, this) : null;
+        const key = attrKey(name);
+        return this.attrs.has(key) ? attrNode(key, this.attrs.get(key)!, this) : null;
     }
 
     setAttributeNode(attr: any): any {
@@ -257,15 +291,6 @@ export class Element extends Node implements Animatable {
             addEventListener() { },
             removeEventListener() { },
         };
-    }
-
-    contains(n: Node | null): boolean {
-        let cur: Node | null = n;
-        while (cur) {
-            if (cur === this) return true;
-            cur = cur.parentNode;
-        }
-        return false;
     }
 
     get relList(): any {
@@ -457,6 +482,17 @@ export class Element extends Node implements Animatable {
         this.childNodes = [];
         this.cachedInnerHTML = null;
         if (v != null && v !== "") this.appendChild(new Text(v));
+    }
+
+    // A browser's innerText is the *rendered* text, which a layout-free render cannot compute; the
+    // concatenated text is the closest honest answer. It has to exist at all because page code reads
+    // `.length`/`.trim()` straight off the lookup, and undefined there throws instead of measuring nothing.
+    get innerText(): string {
+        return textOf(this);
+    }
+
+    set innerText(v: unknown) {
+        this.textContent = v;
     }
 
     get outerHTML(): string {

@@ -12,27 +12,38 @@ import { HTMLScriptElement } from "../dom/HTMLScriptElement";
 import type { ScriptDescriptor } from "../types/internal";
 import { NodeType } from "../types/NodeType";
 
+// The document's own <script> nodes, in the order collectScripts reported them: the host names one by index
+// when it runs it, so document.currentScript is the element the page actually wrote. A widget reads its
+// configuration off its own tag (`JSON.parse(currentScript.getAttribute("data-app"))`), which a stand-in
+// carrying only the src cannot answer.
+let _scriptNodes: any[] = [];
+
 // The host sets document.currentScript around each classic script execution (and clears it after) so
 // webpack's auto-public-path — which reads document.currentScript.src and, under Next, asserts the value is
-// `instanceof HTMLScriptElement` — sees a real script element instead of undefined. A fresh JS instance is
-// required: only a genuine HTMLScriptElement satisfies the instanceof check on both engines.
-function setCurrentScript(src: unknown): void {
-    if (src == null) {
+// `instanceof HTMLScriptElement` — sees a real script element instead of undefined.
+function setCurrentScript(script: unknown): void {
+    if (script == null) {
         doc.currentScript = null;
         return;
     }
-    const script = new HTMLScriptElement();
-    const s = String(src);
-    if (s) script.src = s;
-    // A real currentScript is attached to the document, and bundles self-remove with
-    // currentScript.parentNode.removeChild(currentScript). Point parentNode at a live container (never adding
-    // the synthetic node to its childNodes) so that call resolves to a harmless no-op instead of throwing on null.
-    script.parentNode = (doc.head || doc.body || doc.documentElement) as any;
-    doc.currentScript = script as any;
+    if (typeof script === "number") {
+        doc.currentScript = _scriptNodes[script] || null;
+        return;
+    }
+    // A src the collector never reported (a host running a script of its own): stand one up. Only a genuine
+    // HTMLScriptElement satisfies the instanceof check on both engines, so it is a fresh JS instance, and its
+    // parentNode points at a live container — bundles self-remove with
+    // currentScript.parentNode.removeChild(currentScript), which must resolve to a no-op rather than throw.
+    const node = new HTMLScriptElement();
+    const s = String(script);
+    if (s) node.src = s;
+    node.parentNode = (doc.head || doc.body || doc.documentElement) as any;
+    doc.currentScript = node as any;
 }
 
 function collectScripts(): ScriptDescriptor[] {
     const out: ScriptDescriptor[] = [];
+    _scriptNodes = [];
     if (!doc.documentElement) return out;
     function walk(n: any): void {
         for (const c of n.childNodes) {
@@ -43,11 +54,14 @@ function collectScripts(): ScriptDescriptor[] {
                     walk(c);
                     continue;
                 }
+                const external = !!c.getAttributeInternal("src");
                 out.push({
                     module: type === "module",
-                    external: !!c.getAttributeInternal("src"),
+                    external,
                     src: c.getAttributeInternal("src") || "",
                     text: c.textContent,
+                    deferred: external && (c.hasAttribute("async") || c.hasAttribute("defer")),
+                    index: _scriptNodes.push(c) - 1,
                 });
             }
             walk(c);

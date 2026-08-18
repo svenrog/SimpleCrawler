@@ -57,6 +57,13 @@ public class JsBrowsingContextGlobalsTests : IClassFixture<JsRendererFixture>
           window.__documentIsInstance = document instanceof Window;
           window.__brand = Object.prototype.toString.call(window);
           // jQuery's isPlainObject, in the shape 3.x ships it.
+          // The chain a browser gives the window, and what a polyfill relies on when it installs the natives
+          // it later calls off `window` onto one of those prototypes.
+          window.__protoIsWindow = Object.getPrototypeOf(window) === Window.prototype;
+          window.__eventTargetInChain = Object.getPrototypeOf(Window.prototype) === EventTarget.prototype;
+          Window.prototype.__patchedByAPolyfill = function () { return 'reached'; };
+          window.__patchReaches = typeof window.__patchedByAPolyfill === 'function'
+            ? window.__patchedByAPolyfill() : 'missing';
           window.__windowIsPlain = (function (obj) {
             var proto, Ctor, hasOwn = Object.prototype.hasOwnProperty, fnToString = hasOwn.toString;
             if (!obj || Object.prototype.toString.call(obj) !== '[object Object]') return false;
@@ -87,7 +94,10 @@ public class JsBrowsingContextGlobalsTests : IClassFixture<JsRendererFixture>
               windowIsInstance: window.__windowIsInstance,
               documentIsInstance: window.__documentIsInstance,
               brand: window.__brand,
-              windowIsPlain: window.__windowIsPlain
+              windowIsPlain: window.__windowIsPlain,
+              protoIsWindow: window.__protoIsWindow,
+              eventTargetInChain: window.__eventTargetInChain,
+              patchReaches: window.__patchReaches
             })
             """),
     ]);
@@ -191,5 +201,23 @@ public class JsBrowsingContextGlobalsTests : IClassFixture<JsRendererFixture>
 
         Assert.Equal("[object Window]", ctx.GetProperty("brand").GetString());
         Assert.False(ctx.GetProperty("windowIsPlain").GetBoolean());
+    }
+
+    // The window's prototype chain: `window` → `Window.prototype` → `EventTarget.prototype`, as a browser
+    // builds it. The realm's global is the engine's, so it was flat — and the shadow-DOM polyfill installs
+    // the native methods it then calls off `window` onto exactly those prototypes, finding nothing.
+    [Theory]
+    [InlineData(JsEngine.Jint)]
+    [InlineData(JsEngine.V8)]
+    public async Task ATopLevelContext_InheritsFromWindowPrototype(JsEngine engine)
+    {
+        if (engine == JsEngine.V8)
+            Assert.SkipUnless(V8Support.IsAvailable, V8Support.UnavailableReason);
+
+        var ctx = await CollectAsync(engine);
+
+        Assert.True(ctx.GetProperty("protoIsWindow").GetBoolean());
+        Assert.True(ctx.GetProperty("eventTargetInChain").GetBoolean());
+        Assert.Equal("reached", ctx.GetProperty("patchReaches").GetString());
     }
 }

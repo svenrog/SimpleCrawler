@@ -129,6 +129,16 @@
       const doc2 = this.ownerDocument;
       return doc2 ? doc2.baseURI : "";
     }
+    // Node's, not Element's — `document.contains(el)` is the guard a deferred-script loader runs before it
+    // activates anything, and a document that cannot answer it loses every script behind the loader.
+    contains(n) {
+      let cur = n;
+      while (cur) {
+        if (cur === this) return true;
+        cur = cur.parentNode;
+      }
+      return false;
+    }
     appendChild(child) {
       return this.insertBefore(child, null);
     }
@@ -301,6 +311,24 @@
     set nodeValue(v) {
       this.data = v == null ? "" : String(v);
     }
+    // Text carried this alone, which left a comment's textContent undefined — and hydration finds its
+    // boundaries by walking childNodes for `8 === n.nodeType && n.textContent.trim() === marker`.
+    get textContent() {
+      return this.data;
+    }
+    set textContent(v) {
+      this.data = v == null ? "" : String(v);
+    }
+    get length() {
+      return this.data.length;
+    }
+    appendData(v) {
+      this.data += v == null ? "" : String(v);
+    }
+    substringData(offset, count) {
+      const start = Math.max(0, Number(offset) || 0);
+      return this.data.slice(start, start + Math.max(0, Number(count) || 0));
+    }
   };
 
   // dom/Text.ts
@@ -311,12 +339,6 @@
     }
     get nodeName() {
       return "#text";
-    }
-    get textContent() {
-      return this.data;
-    }
-    set textContent(v) {
-      this.data = v == null ? "" : String(v);
     }
     // Splits at `offset`, keeping the head and returning the tail as the next sibling. Hydration walks a
     // server-rendered text run and splits it where the client tree expects a boundary; without this the
@@ -393,85 +415,232 @@
   };
 
   // selector/querySelector.ts
+  var _cache = /* @__PURE__ */ new Map();
   function querySelectorAll(root, sel) {
-    const el = root.documentElement || root;
     const out = new NodeList();
-    const s = String(sel).trim();
-    walk(el);
+    const list = parseList(String(sel));
+    if (!list) return out;
+    const scope = root.nodeType === 1 /* Element */ ? root : null;
+    const documentElement = root.documentElement;
+    if (documentElement) walk(documentElement);
+    else for (const c of root.childNodes) walk(c);
     return out;
     function walk(n) {
-      if (n.nodeType === 1 /* Element */ && matchesSelector(n, s)) out.push(n);
+      if (n.nodeType === 1 /* Element */ && matchesAny(n, list, scope)) out.push(n);
       for (const c of n.childNodes) walk(c);
     }
   }
   function matchesSelector(el, selector) {
-    const s = String(selector).trim();
-    if (!s) return false;
-    for (const part of s.split(",")) {
-      const compound = rightmostCompound(part);
-      if (compound && matchesCompound(el, compound)) return true;
+    const list = parseList(String(selector));
+    return !!list && matchesAny(el, list, null);
+  }
+  function matchesAny(el, list, scope) {
+    for (const complex of list) {
+      if (matchComplex(el, complex, complex.length - 1, scope)) return true;
     }
     return false;
   }
-  function rightmostCompound(part) {
-    const s = part.trim();
-    let start = 0;
-    let depth = 0;
-    let quote = "";
-    for (let i = 0; i < s.length; i++) {
-      const ch = s[i];
-      if (quote) {
-        if (ch === quote) quote = "";
+  function matchComplex(el, steps, index, scope) {
+    if (!matchCompound(el, steps[index].compound, scope)) return false;
+    if (index === 0) return true;
+    const combinator = steps[index].combinator;
+    if (combinator === ">") {
+      const p = el.parentNode;
+      return !!p && p.nodeType === 1 /* Element */ && matchComplex(p, steps, index - 1, scope);
+    }
+    if (combinator === "+") {
+      const s = previousElement(el);
+      return !!s && matchComplex(s, steps, index - 1, scope);
+    }
+    if (combinator === "~") {
+      for (let s = previousElement(el); s; s = previousElement(s)) {
+        if (matchComplex(s, steps, index - 1, scope)) return true;
+      }
+      return false;
+    }
+    for (let p = el.parentNode; p && p.nodeType === 1 /* Element */; p = p.parentNode) {
+      if (matchComplex(p, steps, index - 1, scope)) return true;
+    }
+    return false;
+  }
+  function matchCompound(el, compound, scope) {
+    for (const simple of compound) {
+      if (!matchSimple(el, simple, scope)) return false;
+    }
+    return compound.length > 0;
+  }
+  function matchSimple(el, simple, scope) {
+    switch (simple.kind) {
+      case "universal":
+        return true;
+      case "type":
+        return el.localName === simple.name;
+      case "id":
+        return el.getAttributeInternal("id") === simple.name;
+      case "class":
+        return hasClass(el, simple.name);
+      case "attr":
+        return matchesAttr(el, simple);
+      default:
+        return matchesPseudo(el, simple, scope);
+    }
+  }
+  function matchesPseudo(el, simple, scope) {
+    switch (simple.name) {
+      case "not":
+        return !matchesAny(el, simple.list, scope);
+      case "is":
+      case "where":
+      case "matches":
+      case "-webkit-any":
+      case "-moz-any":
+        return matchesAny(el, simple.list, scope);
+      case "has":
+        return matchesHas(el, simple.list);
+      case "scope":
+        return scope ? el === scope : el === rootElement(el);
+      case "root":
+        return el === rootElement(el);
+      case "empty":
+        return isEmpty(el);
+      case "first-child":
+        return childIndex(el, false) === 1;
+      case "last-child":
+        return childIndex(el, true) === 1;
+      case "only-child":
+        return childIndex(el, false) === 1 && childIndex(el, true) === 1;
+      case "first-of-type":
+        return typeIndex(el, false) === 1;
+      case "last-of-type":
+        return typeIndex(el, true) === 1;
+      case "only-of-type":
+        return typeIndex(el, false) === 1 && typeIndex(el, true) === 1;
+      case "nth-child":
+        return matchesStep(childIndex(el, false), simple.step) && matchesOf(el, simple, scope);
+      case "nth-last-child":
+        return matchesStep(childIndex(el, true), simple.step) && matchesOf(el, simple, scope);
+      case "nth-of-type":
+        return matchesStep(typeIndex(el, false), simple.step);
+      case "nth-last-of-type":
+        return matchesStep(typeIndex(el, true), simple.step);
+      case "checked":
+        return el.hasAttribute("checked") || el.hasAttribute("selected") || el.checked === true;
+      case "disabled":
+        return el.hasAttribute("disabled");
+      case "enabled":
+        return !el.hasAttribute("disabled");
+      case "required":
+        return el.hasAttribute("required");
+      case "optional":
+        return !el.hasAttribute("required");
+      case "read-only":
+        return el.hasAttribute("readonly") || el.hasAttribute("disabled");
+      case "read-write":
+        return !el.hasAttribute("readonly") && !el.hasAttribute("disabled");
+      case "any-link":
+      case "link":
+        return (el.localName === "a" || el.localName === "area") && el.hasAttribute("href");
+      case "defined":
+        return true;
+      // Everything a single-pass render can never be in: no pointer, no focus, no navigation — and the
+      // pseudo-elements, which match no element anywhere. A browser answers false to all of these too.
+      default:
+        return false;
+    }
+  }
+  function matchesOf(el, simple, scope) {
+    return !simple.list || matchesAny(el, simple.list, scope);
+  }
+  function matchesHas(el, list) {
+    for (const complex of list) {
+      const relation = complex[0].combinator;
+      if (relation === "+" || relation === "~") {
+        for (let s = nextElement(el); s; s = nextElement(s)) {
+          if (matchComplex(s, complex, complex.length - 1, el)) return true;
+          if (relation === "+") break;
+        }
         continue;
       }
-      if (ch === '"' || ch === "'") quote = ch;
-      else if (ch === "[") depth++;
-      else if (ch === "]") {
-        if (depth > 0) depth--;
-      } else if (depth === 0 && (ch === ">" || ch === "+" || ch === "~" || /\s/.test(ch))) start = i + 1;
+      if (descendantMatches(el, complex, el)) return true;
     }
-    return s.slice(start);
+    return false;
   }
-  function matchesCompound(el, compound) {
-    const re = /[#.]?[\w-]+|\[[^\]]*\]|\*/g;
-    let m;
-    let matched = 0;
-    while (m = re.exec(compound)) {
-      matched++;
-      const tok = m[0];
-      const c = tok[0];
-      if (tok === "*") continue;
-      if (c === "#") {
-        if (el.getAttributeInternal("id") !== tok.slice(1)) return false;
-      } else if (c === ".") {
-        if (!hasClass(el, tok.slice(1))) return false;
-      } else if (c === "[") {
-        if (!matchesAttr(el, tok)) return false;
-      } else if (el.localName !== tok.toLowerCase()) {
-        return false;
-      }
+  function descendantMatches(el, complex, scope) {
+    for (const c of el.childNodes) {
+      if (c.nodeType !== 1 /* Element */) continue;
+      if (matchComplex(c, complex, complex.length - 1, scope)) return true;
+      if (descendantMatches(c, complex, scope)) return true;
     }
-    return matched > 0;
+    return false;
+  }
+  function rootElement(el) {
+    let cur = el;
+    while (cur.parentNode && cur.parentNode.nodeType === 1 /* Element */) cur = cur.parentNode;
+    return cur;
+  }
+  function isEmpty(el) {
+    for (const c of el.childNodes) {
+      if (c.nodeType === 1 /* Element */) return false;
+      if (c.nodeType === 3 /* Text */ && String(c.data || "").length > 0) return false;
+    }
+    return true;
+  }
+  function previousElement(el) {
+    let n = el.previousSibling;
+    while (n && n.nodeType !== 1 /* Element */) n = n.previousSibling;
+    return n || null;
+  }
+  function nextElement(el) {
+    let n = el.nextSibling;
+    while (n && n.nodeType !== 1 /* Element */) n = n.nextSibling;
+    return n || null;
+  }
+  function childIndex(el, fromEnd) {
+    const p = el.parentNode;
+    if (!p) return 0;
+    let index = 0;
+    let found = 0;
+    for (const c of p.childNodes) {
+      if (c.nodeType !== 1 /* Element */) continue;
+      index++;
+      if (c === el) found = index;
+    }
+    return found === 0 ? 0 : fromEnd ? index - found + 1 : found;
+  }
+  function typeIndex(el, fromEnd) {
+    const p = el.parentNode;
+    if (!p) return 0;
+    let index = 0;
+    let found = 0;
+    for (const c of p.childNodes) {
+      if (c.nodeType !== 1 /* Element */ || c.localName !== el.localName) continue;
+      index++;
+      if (c === el) found = index;
+    }
+    return found === 0 ? 0 : fromEnd ? index - found + 1 : found;
+  }
+  function matchesStep(position, step) {
+    if (position === 0) return false;
+    if (step.a === 0) return position === step.b;
+    const n = (position - step.b) / step.a;
+    return n >= 0 && Number.isInteger(n);
   }
   function hasClass(el, name) {
     const cls = el.getAttributeInternal("class");
     if (!cls) return false;
     return cls.split(/\s+/).indexOf(name) >= 0;
   }
-  function matchesAttr(el, token) {
-    const m = token.match(/^\[([\w-]+)(?:([~|^$*]?=)["']?([^"'\]]*)["']?)?\]$/);
-    if (!m) return false;
-    const name = m[1];
-    if (!el.hasAttribute(name)) return false;
-    const op = m[2];
-    if (!op) return true;
-    const expected = m[3] ?? "";
-    const actual = el.getAttributeInternal(name) ?? "";
-    switch (op) {
+  function matchesAttr(el, simple) {
+    if (!el.hasAttribute(simple.name)) return false;
+    if (!simple.op) return true;
+    const expected = simple.insensitive ? simple.value.toLowerCase() : simple.value;
+    const raw = el.getAttributeInternal(simple.name) ?? "";
+    const actual = simple.insensitive ? raw.toLowerCase() : raw;
+    switch (simple.op) {
       case "=":
         return actual === expected;
       case "~=":
-        return actual.split(/\s+/).indexOf(expected) >= 0;
+        return expected !== "" && actual.split(/\s+/).indexOf(expected) >= 0;
       case "|=":
         return actual === expected || actual.startsWith(expected + "-");
       case "^=":
@@ -483,6 +652,233 @@
       default:
         return true;
     }
+  }
+  function parseList(selector) {
+    const cached = _cache.get(selector);
+    if (cached !== void 0) return cached;
+    let parsed;
+    try {
+      parsed = parseSelectorList(selector);
+    } catch {
+      parsed = null;
+    }
+    if (_cache.size < 4096) _cache.set(selector, parsed);
+    return parsed;
+  }
+  function parseSelectorList(selector) {
+    const out = [];
+    for (const part of splitTopLevel(selector, ",")) {
+      const complex = parseComplex(part);
+      if (!complex) return null;
+      out.push(complex);
+    }
+    return out.length ? out : null;
+  }
+  function splitTopLevel(input, sep) {
+    const out = [];
+    let depth = 0;
+    let quote = "";
+    let start = 0;
+    for (let i = 0; i < input.length; i++) {
+      const ch = input[i];
+      if (ch === "\\") {
+        i++;
+        continue;
+      }
+      if (quote) {
+        if (ch === quote) quote = "";
+        continue;
+      }
+      if (ch === '"' || ch === "'") quote = ch;
+      else if (ch === "[" || ch === "(") depth++;
+      else if (ch === "]" || ch === ")") {
+        if (depth > 0) depth--;
+      } else if (depth === 0 && ch === sep) {
+        out.push(input.slice(start, i));
+        start = i + 1;
+      }
+    }
+    out.push(input.slice(start));
+    return out;
+  }
+  function parseComplex(part) {
+    const s = part.trim();
+    if (!s) return null;
+    const steps = [];
+    let combinator = "";
+    let i = 0;
+    while (i < s.length) {
+      let spaced = false;
+      while (i < s.length && /\s/.test(s[i])) {
+        i++;
+        spaced = true;
+      }
+      if (i >= s.length) break;
+      const ch = s[i];
+      if (ch === ">" || ch === "+" || ch === "~") {
+        combinator = ch;
+        i++;
+        continue;
+      }
+      if (spaced && combinator === "" && steps.length) combinator = " ";
+      const end = compoundEnd(s, i);
+      const compound = parseCompound(s.slice(i, end));
+      if (!compound) return null;
+      steps.push({ compound, combinator: steps.length === 0 ? combinator : combinator || " " });
+      combinator = "";
+      i = end;
+    }
+    return steps.length ? steps : null;
+  }
+  function compoundEnd(s, from) {
+    let depth = 0;
+    let quote = "";
+    for (let i = from; i < s.length; i++) {
+      const ch = s[i];
+      if (ch === "\\") {
+        i++;
+        continue;
+      }
+      if (quote) {
+        if (ch === quote) quote = "";
+        continue;
+      }
+      if (ch === '"' || ch === "'") quote = ch;
+      else if (ch === "[" || ch === "(") depth++;
+      else if (ch === "]" || ch === ")") {
+        if (depth > 0) depth--;
+      } else if (depth === 0 && (/\s/.test(ch) || ch === ">" || ch === "+" || ch === "~")) return i;
+    }
+    return s.length;
+  }
+  function parseCompound(text) {
+    const out = [];
+    let i = 0;
+    while (i < text.length) {
+      const ch = text[i];
+      if (ch === "*") {
+        out.push({ kind: "universal", name: "*" });
+        i++;
+        continue;
+      }
+      if (ch === "#" || ch === ".") {
+        const start2 = ++i;
+        i = identEnd(text, i);
+        if (i === start2) return null;
+        out.push({ kind: ch === "#" ? "id" : "class", name: unescapeIdent(text.slice(start2, i)) });
+        continue;
+      }
+      if (ch === "[") {
+        const close = closingIndex(text, i, "[", "]");
+        if (close < 0) return null;
+        const attr = parseAttr(text.slice(i + 1, close));
+        if (!attr) return null;
+        out.push(attr);
+        i = close + 1;
+        continue;
+      }
+      if (ch === ":") {
+        let start2 = i + 1;
+        const doubled = text[start2] === ":";
+        if (doubled) start2++;
+        let end = identEnd(text, start2);
+        if (end === start2) return null;
+        const name = text.slice(start2, end).toLowerCase();
+        let arg = "";
+        if (text[end] === "(") {
+          const close = closingIndex(text, end, "(", ")");
+          if (close < 0) return null;
+          arg = text.slice(end + 1, close);
+          end = close + 1;
+        }
+        i = end;
+        const pseudo = parsePseudo(doubled ? "__never" : name, arg);
+        if (!pseudo) return null;
+        out.push(pseudo);
+        continue;
+      }
+      const start = i;
+      i = identEnd(text, i);
+      if (i === start) return null;
+      out.push({ kind: "type", name: unescapeIdent(text.slice(start, i)).toLowerCase() });
+    }
+    return out.length ? out : null;
+  }
+  function parsePseudo(name, arg) {
+    if (name === "not" || name === "is" || name === "where" || name === "matches" || name === "has" || name === "-webkit-any" || name === "-moz-any") {
+      const list = parseSelectorList(arg);
+      if (!list) return null;
+      return { kind: "pseudo", name, list };
+    }
+    if (name === "nth-child" || name === "nth-last-child" || name === "nth-of-type" || name === "nth-last-of-type") {
+      const parts = splitTopLevel(arg, " ").map((p) => p.trim()).filter((p) => p.length > 0);
+      const step = parseStep(parts[0] || "");
+      if (!step) return null;
+      const of = parts.length >= 3 && parts[1].toLowerCase() === "of" ? parseSelectorList(parts.slice(2).join(" ")) : null;
+      return of ? { kind: "pseudo", name, step, list: of } : { kind: "pseudo", name, step };
+    }
+    return { kind: "pseudo", name, value: arg };
+  }
+  function parseStep(text) {
+    const s = text.trim().toLowerCase().replace(/\s+/g, "");
+    if (s === "odd") return { a: 2, b: 1 };
+    if (s === "even") return { a: 2, b: 0 };
+    const m = s.match(/^([+-]?\d*)n([+-]\d+)?$/);
+    if (m) {
+      const a = m[1] === "" || m[1] === "+" ? 1 : m[1] === "-" ? -1 : Number(m[1]);
+      return { a, b: m[2] ? Number(m[2]) : 0 };
+    }
+    if (/^[+-]?\d+$/.test(s)) return { a: 0, b: Number(s) };
+    return null;
+  }
+  function parseAttr(text) {
+    const m = text.match(/^\s*([^\s~^$*|=\]]+)\s*(?:([~^$*|]?=)\s*(?:"([^"]*)"|'([^']*)'|([^\s\]]*))\s*([iIsS])?\s*)?$/);
+    if (!m) return null;
+    return {
+      kind: "attr",
+      name: unescapeIdent(m[1]),
+      op: m[2],
+      value: m[3] ?? m[4] ?? m[5] ?? "",
+      insensitive: !!m[6] && m[6].toLowerCase() === "i"
+    };
+  }
+  function closingIndex(text, from, open, close) {
+    let depth = 0;
+    let quote = "";
+    for (let i = from; i < text.length; i++) {
+      const ch = text[i];
+      if (ch === "\\") {
+        i++;
+        continue;
+      }
+      if (quote) {
+        if (ch === quote) quote = "";
+        continue;
+      }
+      if (ch === '"' || ch === "'") quote = ch;
+      else if (ch === open) depth++;
+      else if (ch === close) {
+        depth--;
+        if (depth === 0) return i;
+      }
+    }
+    return -1;
+  }
+  function identEnd(text, from) {
+    let i = from;
+    while (i < text.length) {
+      const ch = text[i];
+      if (ch === "\\") {
+        i += 2;
+        continue;
+      }
+      if (ch === "#" || ch === "." || ch === "[" || ch === "]" || ch === ":" || ch === "(" || ch === ")" || ch === "*" || ch === "," || ch === ">" || ch === "+" || ch === "~" || /\s/.test(ch)) break;
+      i++;
+    }
+    return Math.min(i, text.length);
+  }
+  function unescapeIdent(text) {
+    return text.indexOf("\\") < 0 ? text : text.replace(/\\(.)/g, "$1");
   }
 
   // constants.ts
@@ -561,6 +957,13 @@
     }
     stopImmediatePropagation() {
       this._stoppedImmediate = true;
+    }
+    // The pre-constructor spelling, still how a polyfill built on document.createEvent names its event —
+    // and it names it *after* creating it, so the type cannot be readonly.
+    initEvent(type, bubbles, cancelable) {
+      this.type = String(type);
+      this.bubbles = !!bubbles;
+      this.cancelable = !!cancelable;
     }
   };
 
@@ -910,6 +1313,9 @@
   };
 
   // dom/Element.ts
+  function attrKey(name) {
+    return typeof name === "string" ? name : String(name);
+  }
   function attrNode(name, value, owner) {
     return { name, value, localName: name, namespaceURI: null, ownerElement: owner };
   }
@@ -939,13 +1345,14 @@
     // property it is guarding re-enters its own wrapper otherwise, and that recursion spends the whole stack
     // before the page has run. A browser is immune because its setter never calls the method.
     setAttributeInternal(name, value) {
-      this.attrs.set(name, value == null ? "" : String(value));
+      this.attrs.set(attrKey(name), value == null ? "" : String(value));
     }
     getAttributeInternal(name) {
-      return this.attrs.has(name) ? this.attrs.get(name) : null;
+      const key = attrKey(name);
+      return this.attrs.has(key) ? this.attrs.get(key) : null;
     }
     removeAttributeInternal(name) {
-      this.attrs.delete(name);
+      this.attrs.delete(attrKey(name));
     }
     setAttribute(name, value) {
       this.setAttributeInternal(name, value);
@@ -960,19 +1367,20 @@
       this.removeAttributeInternal(name);
     }
     removeAttributeNS(_ns, name) {
-      this.attrs.delete(name);
+      this.attrs.delete(attrKey(name));
     }
     hasAttribute(name) {
-      return this.attrs.has(name);
+      return this.attrs.has(attrKey(name));
     }
     toggleAttribute(name, force) {
-      const present = this.attrs.has(name);
+      const key = attrKey(name);
+      const present = this.attrs.has(key);
       const add = force === void 0 ? !present : force;
       if (add) {
-        if (!present) this.attrs.set(name, "");
+        if (!present) this.attrs.set(key, "");
         return true;
       }
-      this.attrs.delete(name);
+      this.attrs.delete(key);
       return false;
     }
     getAttributeNames() {
@@ -1000,11 +1408,33 @@
           if (typeof prop !== "string") return void 0;
           if (/^\d+$/.test(prop)) return nthAttrNode(el.attrs, Number(prop), el);
           return el.attrs.has(prop) ? attrNode(prop, el.attrs.get(prop), el) : void 0;
+        },
+        // Array.prototype.slice.call(el.attributes) — how a widget copies an element's attributes onto
+        // another — asks whether each index is present before reading it, and a bare target answers no,
+        // leaving an array of holes. The index and key traps have to agree with the getter.
+        has(_t, prop) {
+          if (prop === "length" || prop === "item" || prop === "getNamedItem" || prop === Symbol.iterator) return true;
+          if (typeof prop !== "string") return false;
+          return /^\d+$/.test(prop) ? Number(prop) < el.attrs.size : el.attrs.has(prop);
+        },
+        ownKeys() {
+          const keys = [];
+          for (let i = 0; i < el.attrs.size; i++) keys.push(String(i));
+          for (const name of el.attrs.keys()) keys.push(name);
+          keys.push("length");
+          return keys;
+        },
+        getOwnPropertyDescriptor(_t, prop) {
+          if (prop === "length") return { value: el.attrs.size, writable: false, enumerable: false, configurable: true };
+          if (typeof prop !== "string") return void 0;
+          const value = /^\d+$/.test(prop) ? nthAttrNode(el.attrs, Number(prop), el) : el.attrs.has(prop) ? attrNode(prop, el.attrs.get(prop), el) : void 0;
+          return value === void 0 ? void 0 : { value, writable: false, enumerable: true, configurable: true };
         }
       });
     }
     getAttributeNode(name) {
-      return this.attrs.has(name) ? attrNode(name, this.attrs.get(name), this) : null;
+      const key = attrKey(name);
+      return this.attrs.has(key) ? attrNode(key, this.attrs.get(key), this) : null;
     }
     setAttributeNode(attr) {
       if (attr && attr.name != null) this.attrs.set(String(attr.name), attr.value == null ? "" : String(attr.value));
@@ -1126,14 +1556,6 @@
         removeEventListener() {
         }
       };
-    }
-    contains(n) {
-      let cur = n;
-      while (cur) {
-        if (cur === this) return true;
-        cur = cur.parentNode;
-      }
-      return false;
     }
     get relList() {
       return {
@@ -1303,6 +1725,15 @@
       this.cachedInnerHTML = null;
       if (v != null && v !== "") this.appendChild(new Text(v));
     }
+    // A browser's innerText is the *rendered* text, which a layout-free render cannot compute; the
+    // concatenated text is the closest honest answer. It has to exist at all because page code reads
+    // `.length`/`.trim()` straight off the lookup, and undefined there throws instead of measuring nothing.
+    get innerText() {
+      return textOf(this);
+    }
+    set innerText(v) {
+      this.textContent = v;
+    }
     get outerHTML() {
       return serializeNode(this);
     }
@@ -1396,6 +1827,18 @@
     }
     _shallowClone() {
       return new _DocumentFragment();
+    }
+  };
+
+  // dom/ShadowRoot.ts
+  var ShadowRoot = class extends DocumentFragment {
+    constructor() {
+      super(...arguments);
+      this.host = null;
+      this.mode = "open";
+    }
+    get nodeName() {
+      return "#document-fragment";
     }
   };
 
@@ -1519,7 +1962,7 @@
     }
     attachShadow(init) {
       if (this.shadowRoot) return this.shadowRoot;
-      const root = new DocumentFragment();
+      const root = new ShadowRoot();
       root.host = this;
       root.mode = init && init.mode ? init.mode : "open";
       this.shadowRoot = root;
@@ -2274,6 +2717,136 @@
     }
   };
 
+  // dom/HTMLInputElement.ts
+  var HTMLInputElement = class extends HTMLElement {
+    constructor(tag) {
+      super(tag || "input");
+      this._value = null;
+      this._checked = null;
+    }
+    get value() {
+      if (this._value !== null) return this._value;
+      return this.getAttributeInternal("value") ?? "";
+    }
+    set value(v) {
+      this._value = v == null ? "" : String(v);
+    }
+    get defaultValue() {
+      return this.getAttributeInternal("value") ?? "";
+    }
+    set defaultValue(v) {
+      this.setAttributeInternal("value", v == null ? "" : String(v));
+    }
+    get checked() {
+      return this._checked !== null ? this._checked : this.hasAttribute("checked");
+    }
+    set checked(v) {
+      this._checked = !!v;
+    }
+    get defaultChecked() {
+      return this.hasAttribute("checked");
+    }
+    set defaultChecked(v) {
+      if (v) this.setAttributeInternal("checked", "");
+      else this.removeAttributeInternal("checked");
+    }
+    get type() {
+      return (this.getAttributeInternal("type") ?? "text").toLowerCase();
+    }
+    set type(v) {
+      this.setAttributeInternal("type", v == null ? "" : String(v));
+    }
+    get name() {
+      return this.getAttributeInternal("name") ?? "";
+    }
+    set name(v) {
+      this.setAttributeInternal("name", v == null ? "" : String(v));
+    }
+    get disabled() {
+      return this.hasAttribute("disabled");
+    }
+    set disabled(v) {
+      if (v) this.setAttributeInternal("disabled", "");
+      else this.removeAttributeInternal("disabled");
+    }
+    // The form this control submits with: the one its owner attribute names, else the nearest ancestor form.
+    // Page code retargets a search box with `input.form.action = …`, which needs the element, not null.
+    get form() {
+      const owner = this.getAttributeInternal("form");
+      if (owner) return documentRef.current ? documentRef.current.getElementById(owner) : null;
+      for (let n = this.parentNode; n; n = n.parentNode) {
+        if (n.localName === "form") return n;
+      }
+      return null;
+    }
+    get placeholder() {
+      return this.getAttributeInternal("placeholder") ?? "";
+    }
+    set placeholder(v) {
+      this.setAttributeInternal("placeholder", v == null ? "" : String(v));
+    }
+    select() {
+    }
+    setSelectionRange() {
+    }
+  };
+
+  // dom/HTMLTextAreaElement.ts
+  var HTMLTextAreaElement = class extends HTMLInputElement {
+    constructor() {
+      super("textarea");
+    }
+    get value() {
+      const own = super.value;
+      return own !== "" ? own : this.textContent;
+    }
+    set value(v) {
+      super.value = v;
+    }
+  };
+
+  // dom/HTMLFormElement.ts
+  var HTMLFormElement = class extends HTMLElement {
+    constructor() {
+      super("form");
+    }
+    get action() {
+      const raw = this.getAttributeInternal("action");
+      if (raw == null) return "";
+      try {
+        return new URL(raw).href;
+      } catch {
+        return raw;
+      }
+    }
+    set action(value) {
+      this.setAttributeInternal("action", value == null ? "" : String(value));
+    }
+    get method() {
+      return (this.getAttributeInternal("method") ?? "get").toLowerCase();
+    }
+    set method(value) {
+      this.setAttributeInternal("method", value == null ? "" : String(value));
+    }
+    get name() {
+      return this.getAttributeInternal("name") ?? "";
+    }
+    set name(value) {
+      this.setAttributeInternal("name", value == null ? "" : String(value));
+    }
+    get elements() {
+      return this.querySelectorAll("input, select, textarea, button");
+    }
+    // Nothing navigates in a single-pass render; the methods exist so a submit handler's own call does not
+    // throw partway through the work it does around it.
+    submit() {
+    }
+    requestSubmit() {
+    }
+    reset() {
+    }
+  };
+
   // dom/reflectedElements.ts
   var reflectedElementFactories = {
     a: () => new HTMLAnchorElement(),
@@ -2287,7 +2860,10 @@
     audio: () => new HTMLAudioElement(),
     dialog: () => new HTMLDialogElement(),
     canvas: () => new HTMLCanvasElement(),
-    meta: () => new HTMLMetaElement()
+    meta: () => new HTMLMetaElement(),
+    input: () => new HTMLInputElement(),
+    textarea: () => new HTMLTextAreaElement(),
+    form: () => new HTMLFormElement()
   };
 
   // html/entities.ts
@@ -2847,6 +3423,18 @@
     return set;
   }
 
+  // browser/CustomEvent.ts
+  var CustomEvent = class extends Event {
+    constructor(type, init) {
+      super(type, init);
+      this.detail = init && init.detail !== void 0 ? init.detail : null;
+    }
+    initCustomEvent(type, bubbles, cancelable, detail) {
+      this.initEvent(type, bubbles, cancelable);
+      this.detail = detail === void 0 ? null : detail;
+    }
+  };
+
   // dom/Document.ts
   function withinViewport(x, y) {
     const px = Number(x);
@@ -3043,9 +3631,12 @@
     querySelectorAll(sel) {
       return querySelectorAll(this, sel);
     }
-    createEvent() {
-      return { initEvent() {
-      } };
+    // The pre-constructor construction path: create it untyped, then name it through initEvent /
+    // initCustomEvent. An analytics shim builds every event this way and reads nothing back, so what matters
+    // is that the object it gets is a real Event carrying the initializer the family it asked for defines.
+    createEvent(kind) {
+      const family = String(kind || "Event").toLowerCase();
+      return family.startsWith("custom") ? new CustomEvent("") : new Event("");
     }
     // jQuery's UMD factory feature-detects against `implementation.createHTMLDocument` during init; a missing
     // implementation threw before the global was assigned, so later bundles saw "jQuery is not defined".
@@ -3097,6 +3688,35 @@
     }
   };
 
+  // dom/CDATASection.ts
+  var CDATASection = class _CDATASection extends CharacterData {
+    constructor(data) {
+      super(4 /* CdataSection */, data);
+      hideOwnFields(this);
+    }
+    get nodeName() {
+      return "#cdata-section";
+    }
+    _shallowClone() {
+      return new _CDATASection(this.data);
+    }
+  };
+
+  // dom/ProcessingInstruction.ts
+  var ProcessingInstruction = class _ProcessingInstruction extends CharacterData {
+    constructor(target, data) {
+      super(7 /* ProcessingInstruction */, data);
+      this.target = String(target ?? "");
+      hideOwnFields(this);
+    }
+    get nodeName() {
+      return this.target;
+    }
+    _shallowClone() {
+      return new _ProcessingInstruction(this.target, this.data);
+    }
+  };
+
   // dom/Animation.ts
   var Animation = class extends EventTarget {
   };
@@ -3133,13 +3753,7 @@
     SVGElement: () => SVGElement,
     SVGSVGElement: () => SVGSVGElement
   });
-  var HTMLInputElement = class extends HTMLElement {
-  };
-  var HTMLTextAreaElement = class extends HTMLElement {
-  };
   var HTMLButtonElement = class extends HTMLElement {
-  };
-  var HTMLFormElement = class extends HTMLElement {
   };
   var HTMLStyleElement = class extends HTMLElement {
   };
@@ -3277,11 +3891,78 @@
     global.cancelAnimationFrame = (id) => cancel(id);
   }
 
-  // browser/CustomEvent.ts
-  var CustomEvent = class extends Event {
+  // browser/UIEvents.ts
+  var UIEvent = class extends Event {
     constructor(type, init) {
       super(type, init);
-      this.detail = init && init.detail !== void 0 ? init.detail : null;
+      this.detail = init && init.detail ? Number(init.detail) : 0;
+      this.view = init && init.view !== void 0 ? init.view : null;
+    }
+  };
+  var MouseEvent = class extends UIEvent {
+    constructor(type, init) {
+      super(type, init);
+      const i = init || {};
+      this.button = Number(i.button) || 0;
+      this.buttons = Number(i.buttons) || 0;
+      this.clientX = Number(i.clientX) || 0;
+      this.clientY = Number(i.clientY) || 0;
+      this.screenX = Number(i.screenX) || 0;
+      this.screenY = Number(i.screenY) || 0;
+      this.pageX = Number(i.pageX) || this.clientX;
+      this.pageY = Number(i.pageY) || this.clientY;
+      this.altKey = !!i.altKey;
+      this.ctrlKey = !!i.ctrlKey;
+      this.metaKey = !!i.metaKey;
+      this.shiftKey = !!i.shiftKey;
+      this.relatedTarget = i.relatedTarget !== void 0 ? i.relatedTarget : null;
+    }
+  };
+  var PointerEvent = class extends MouseEvent {
+    constructor(type, init) {
+      super(type, init);
+      const i = init || {};
+      this.pointerId = Number(i.pointerId) || 0;
+      this.pointerType = i.pointerType ? String(i.pointerType) : "";
+      this.isPrimary = !!i.isPrimary;
+    }
+  };
+  var KeyboardEvent = class extends UIEvent {
+    constructor(type, init) {
+      super(type, init);
+      const i = init || {};
+      this.key = i.key ? String(i.key) : "";
+      this.code = i.code ? String(i.code) : "";
+      this.keyCode = Number(i.keyCode) || 0;
+      this.which = Number(i.which) || this.keyCode;
+      this.repeat = !!i.repeat;
+      this.altKey = !!i.altKey;
+      this.ctrlKey = !!i.ctrlKey;
+      this.metaKey = !!i.metaKey;
+      this.shiftKey = !!i.shiftKey;
+    }
+  };
+  var FocusEvent = class extends UIEvent {
+    constructor(type, init) {
+      super(type, init);
+      this.relatedTarget = init && init.relatedTarget !== void 0 ? init.relatedTarget : null;
+    }
+  };
+  var InputEvent = class extends UIEvent {
+    constructor(type, init) {
+      super(type, init);
+      const i = init || {};
+      this.data = i.data !== void 0 ? String(i.data) : null;
+      this.inputType = i.inputType ? String(i.inputType) : "";
+    }
+  };
+  var WheelEvent = class extends MouseEvent {
+    constructor(type, init) {
+      super(type, init);
+      const i = init || {};
+      this.deltaX = Number(i.deltaX) || 0;
+      this.deltaY = Number(i.deltaY) || 0;
+      this.deltaMode = Number(i.deltaMode) || 0;
     }
   };
 
@@ -4350,6 +5031,11 @@
     for (const method of ["addEventListener", "removeEventListener", "dispatchEvent"]) {
       Window.prototype[method] = global[method];
     }
+    try {
+      Object.setPrototypeOf(Window.prototype, EventTarget.prototype);
+      Object.setPrototypeOf(global, Window.prototype);
+    } catch {
+    }
     for (const on of [
       "onresize",
       "onscroll",
@@ -4449,6 +5135,8 @@
     global.DocumentType = DocumentType;
     global.Text = Text;
     global.Comment = Comment;
+    global.CDATASection = CDATASection;
+    global.ProcessingInstruction = ProcessingInstruction;
     global.DocumentFragment = DocumentFragment;
     global.HTMLElement = HTMLElement;
     global.HTMLTemplateElement = HTMLTemplateElement;
@@ -4456,9 +5144,18 @@
     global.Image = HTMLImageElement;
     for (const name in htmlInterfaces_exports) global[name] = htmlInterfaces_exports[name];
     global.customElements = customElements;
+    global.CustomElementRegistry = CustomElementRegistry;
+    global.ShadowRoot = ShadowRoot;
     customElements.setDocument(doc);
     global.Event = Event;
     global.CustomEvent = CustomEvent;
+    global.UIEvent = UIEvent;
+    global.MouseEvent = MouseEvent;
+    global.PointerEvent = PointerEvent;
+    global.KeyboardEvent = KeyboardEvent;
+    global.FocusEvent = FocusEvent;
+    global.InputEvent = InputEvent;
+    global.WheelEvent = WheelEvent;
     global.PromiseRejectionEvent = global.PromiseRejectionEvent || PromiseRejectionEvent;
     global.DOMRect = global.DOMRect || DOMRect;
     global.DOMRectReadOnly = global.DOMRectReadOnly || DOMRectReadOnly;
@@ -4742,19 +5439,25 @@
   }
 
   // crawler/api.ts
-  function setCurrentScript(src) {
-    if (src == null) {
+  var _scriptNodes = [];
+  function setCurrentScript(script) {
+    if (script == null) {
       doc.currentScript = null;
       return;
     }
-    const script = new HTMLScriptElement();
-    const s = String(src);
-    if (s) script.src = s;
-    script.parentNode = doc.head || doc.body || doc.documentElement;
-    doc.currentScript = script;
+    if (typeof script === "number") {
+      doc.currentScript = _scriptNodes[script] || null;
+      return;
+    }
+    const node = new HTMLScriptElement();
+    const s = String(script);
+    if (s) node.src = s;
+    node.parentNode = doc.head || doc.body || doc.documentElement;
+    doc.currentScript = node;
   }
   function collectScripts() {
     const out = [];
+    _scriptNodes = [];
     if (!doc.documentElement) return out;
     function walk(n) {
       for (const c of n.childNodes) {
@@ -4765,11 +5468,14 @@
             walk(c);
             continue;
           }
+          const external = !!c.getAttributeInternal("src");
           out.push({
             module: type === "module",
-            external: !!c.getAttributeInternal("src"),
+            external,
             src: c.getAttributeInternal("src") || "",
-            text: c.textContent
+            text: c.textContent,
+            deferred: external && (c.hasAttribute("async") || c.hasAttribute("defer")),
+            index: _scriptNodes.push(c) - 1
           });
         }
         walk(c);

@@ -26,6 +26,17 @@ export abstract class Node extends EventTarget {
         return doc ? doc.baseURI : "";
     }
 
+    // Node's, not Element's — `document.contains(el)` is the guard a deferred-script loader runs before it
+    // activates anything, and a document that cannot answer it loses every script behind the loader.
+    contains(n: Node | null): boolean {
+        let cur: Node | null = n;
+        while (cur) {
+            if (cur === this) return true;
+            cur = cur.parentNode;
+        }
+        return false;
+    }
+
     appendChild(child: Node): Node {
         return this.insertBefore(child, null);
     }

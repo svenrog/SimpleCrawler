@@ -11,6 +11,9 @@ import { HTMLAudioElement } from "./HTMLAudioElement";
 import { HTMLDialogElement } from "./HTMLDialogElement";
 import { HTMLCanvasElement } from "./HTMLCanvasElement";
 import { HTMLMetaElement } from "./HTMLMetaElement";
+import { HTMLInputElement } from "./HTMLInputElement";
+import { HTMLTextAreaElement } from "./HTMLTextAreaElement";
+import { HTMLFormElement } from "./HTMLFormElement";
 
 // tag → factory for the element subclasses that reflect properties (anchor href, script/img src, select
 // options, ...). Shared by the string parser, the tree builder and document.createElement so every
@@ -28,4 +31,7 @@ export const reflectedElementFactories: Record<string, () => Element> = {
     dialog: () => new HTMLDialogElement(),
     canvas: () => new HTMLCanvasElement(),
     meta: () => new HTMLMetaElement(),
+    input: () => new HTMLInputElement(),
+    textarea: () => new HTMLTextAreaElement(),
+    form: () => new HTMLFormElement(),
 };

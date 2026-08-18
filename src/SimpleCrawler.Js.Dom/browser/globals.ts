@@ -6,6 +6,8 @@ import { Element } from "../dom/Element";
 import { CharacterData } from "../dom/CharacterData";
 import { Text } from "../dom/Text";
 import { Comment } from "../dom/Comment";
+import { CDATASection } from "../dom/CDATASection";
+import { ProcessingInstruction } from "../dom/ProcessingInstruction";
 import { DocumentType } from "../dom/DocumentType";
 import { DocumentFragment } from "../dom/DocumentFragment";
 import { HTMLElement } from "../dom/HTMLElement";
@@ -13,7 +15,8 @@ import { HTMLImageElement } from "../dom/HTMLImageElement";
 import { HTMLTemplateElement } from "../dom/HTMLTemplateElement";
 import { CSSTransition } from "../dom/CSSTransition";
 import * as htmlInterfaces from "../dom/htmlInterfaces";
-import { customElements } from "../dom/customElements";
+import { customElements, CustomElementRegistry } from "../dom/customElements";
+import { ShadowRoot } from "../dom/ShadowRoot";
 import { navigator } from "./navigator";
 import { createLocation } from "./location";
 import { createHistory } from "./history";
@@ -22,6 +25,7 @@ import { URL } from "../url/URL";
 import { URLSearchParams } from "../url/URLSearchParams";
 import { Event } from "./Event";
 import { CustomEvent } from "./CustomEvent";
+import { UIEvent, MouseEvent, PointerEvent, KeyboardEvent, FocusEvent, InputEvent, WheelEvent } from "./UIEvents";
 import { PromiseRejectionEvent } from "./PromiseRejectionEvent";
 import { DOMRect, DOMRectReadOnly } from "./DOMRect";
 import { OffscreenCanvas } from "../dom/OffscreenCanvas";
@@ -103,10 +107,19 @@ export function installDOM(global: any): void {
     // The same three functions on the interface object's prototype, which is where a browser keeps them. The
     // realm's global belongs to the engine, so its methods are its own and `Window.prototype` carried none —
     // an accessibility overlay that copies the descriptor off it to wrap listener registration read undefined
-    // and threw at defineProperty. A patch made there does not reach this global; surviving the read is the
-    // point, and a library that patches the instance instead is unaffected either way.
+    // and threw at defineProperty.
     for (const method of ["addEventListener", "removeEventListener", "dispatchEvent"]) {
         (Window.prototype as any)[method] = global[method];
+    }
+    // …and the global inherits from it, the way a browser's window does — `window` → `Window.prototype` →
+    // `EventTarget.prototype`. Without the chain a patch made on either prototype is unreachable from the
+    // global, and the shadow-DOM polyfill installs the natives it then calls off `window` exactly there. An
+    // engine that refuses to reparent its global keeps the flat shape, which is what this was before.
+    try {
+        Object.setPrototypeOf(Window.prototype, EventTarget.prototype);
+        Object.setPrototypeOf(global, Window.prototype);
+    } catch {
+        // The engine owns the global; a refusal is not something the render can act on.
     }
     // Handler props declared null so `'onX' in window` feature-detection passes and bundle assignments stick;
     // events never fire in the single-pass render, so the assigned handlers are only ever stored.
@@ -204,6 +217,8 @@ export function installDOM(global: any): void {
     global.DocumentType = DocumentType;
     global.Text = Text;
     global.Comment = Comment;
+    global.CDATASection = CDATASection;
+    global.ProcessingInstruction = ProcessingInstruction;
     global.DocumentFragment = DocumentFragment;
     global.HTMLElement = HTMLElement;
     global.HTMLTemplateElement = HTMLTemplateElement;
@@ -211,9 +226,18 @@ export function installDOM(global: any): void {
     global.Image = HTMLImageElement;
     for (const name in htmlInterfaces) global[name] = (htmlInterfaces as any)[name];
     global.customElements = customElements;
+    global.CustomElementRegistry = CustomElementRegistry;
+    global.ShadowRoot = ShadowRoot;
     customElements.setDocument(doc);
     global.Event = Event;
     global.CustomEvent = CustomEvent;
+    global.UIEvent = UIEvent;
+    global.MouseEvent = MouseEvent;
+    global.PointerEvent = PointerEvent;
+    global.KeyboardEvent = KeyboardEvent;
+    global.FocusEvent = FocusEvent;
+    global.InputEvent = InputEvent;
+    global.WheelEvent = WheelEvent;
     // A callable PromiseRejectionEvent keeps core-js from force-replacing the native Promise with a polyfill
     // whose finally/allSettled/withResolvers a bundle may have tree-shaken (native in real browsers).
     global.PromiseRejectionEvent = global.PromiseRejectionEvent || PromiseRejectionEvent;
