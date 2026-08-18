@@ -100,9 +100,9 @@ function getBaseHref(): string {
     return found;
 }
 
-// The page's own import map: the text of the first <script type="importmap">, or "" when it ships none.
-// The host resolves bare module specifiers through it, because a browser resolves them nowhere else — the
-// collector skips the tag itself, since a map is data rather than a script to run.
+// The page's own import map: the text of the first <script type="importmap">, or "" when it ships none. The
+// host resolves bare module specifiers through it, because a browser resolves them nowhere else; the script
+// collector skips the tag, a map being data rather than something to run.
 function getImportMap(): string {
     if (!doc.documentElement) return "";
     let found = "";

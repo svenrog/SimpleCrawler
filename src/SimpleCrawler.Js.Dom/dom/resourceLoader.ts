@@ -10,8 +10,8 @@ import { reportSwallowed } from "../diagnostics";
 interface PendingResource {
     id: number;
     node: any;
-    // The source of a src the render holds itself (an object URL), read when the node is connected because
-    // that is when a browser starts the fetch — the page may revoke the token on the next line.
+    // The source behind an object-URL src, read when the node is connected: that is when a browser starts
+    // the fetch, and the page may revoke the token on the next line.
     held: string | null;
 }
 
@@ -57,8 +57,8 @@ export function registerResource(node: any): void {
     if (_seen.has(node)) return;
     _seen.add(node);
     const id = ++_counter;
-    const src = tag === "script" ? node.getAttributeInternal("src") : null;
-    _pending.push({ id, node, held: src ? objectUrlSource(String(src)) : null });
+    const src = tag === "script" ? String(node.getAttributeInternal("src") || "") : "";
+    _pending.push({ id, node, held: src.indexOf("blob:") === 0 ? objectUrlSource(src) : null });
     _byId.set(id, node);
 }
 

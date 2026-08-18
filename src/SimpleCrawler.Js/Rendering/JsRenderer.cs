@@ -267,18 +267,6 @@ public sealed class JsRenderer
     /// not the page URL — matching the browser. Without this, a &lt;base href="/"&gt; page served from a nested
     /// path fetches the site's HTML fallback for every relative &lt;script src&gt;, and the engine aborts on it.
     /// </summary>
-    /// <summary>
-    /// The page's import map, read off the parsed document. Addresses in it are relative to the document
-    /// base, as the spec has them — a map next to a <c>&lt;base href&gt;</c> means what the page meant by it.
-    /// </summary>
-    private static ImportMap? ReadImportMap(RenderingContext context)
-    {
-        var json = context.Isolation.Run(
-            "Import map read", () => context.Engine.Evaluate<string>("__crawlerGetImportMap()"), string.Empty);
-
-        return ImportMap.Parse(json, context.DocumentBaseUri);
-    }
-
     private static Uri ResolveDocumentBase(IJsEngine engine, RenderIsolation isolation, Uri pageUri)
     {
         var baseHref = isolation.Run("Base href read", () => engine.Evaluate<string>("__crawlerGetBaseHref()"), string.Empty);
@@ -286,6 +274,18 @@ public sealed class JsRenderer
             return baseUri;
 
         return pageUri;
+    }
+
+    /// <summary>
+    /// The page's import map. Its addresses resolve against the document base, so a map on a page carrying a
+    /// <c>&lt;base href&gt;</c> means what the page meant by it.
+    /// </summary>
+    private static ImportMap? ReadImportMap(RenderingContext context)
+    {
+        var json = context.Isolation.Run(
+            "Import map read", () => context.Engine.Evaluate<string>("__crawlerGetImportMap()"), string.Empty);
+
+        return ImportMap.Parse(json, context.DocumentBaseUri);
     }
 
     private async Task<(IReadOnlyList<RegularScript> Regular, IReadOnlyList<ModuleScript> Modules)> CollectScriptsFromJsAsync(RenderingContext context)
@@ -473,27 +473,24 @@ public sealed class JsRenderer
             return;
         }
 
-        // A src the page built from its own bytes with URL.createObjectURL. The blob never left the render,
-        // so the prelude sent the source along with the queue entry and there is nothing to fetch — a scheme
-        // no HttpClient can answer would otherwise cost the page a module shim's whole chunk graph.
-        if (!string.IsNullOrEmpty(resource.Text))
-        {
-            var heldRan = RunHeldScript(context, resource);
-            FireResourceEvent(context, resource, heldRan ? "load" : "error");
-            return;
-        }
-
         if (!Uri.TryCreate(context.DocumentBaseUri, resource.Src, out var absolute))
         {
             FireResourceEvent(context, resource, "error");
             return;
         }
 
-        // A scheme no fetch can answer — an object URL this render was not handed, so nothing holds its
-        // bytes — is the node's error rather than a cross-origin script left pending: no later turn can
-        // load it, and the page is waiting on the event either way.
+        // A scheme no fetch can answer. The page built one of these itself with URL.createObjectURL and the
+        // prelude sends its source along when it still holds it; what is left is a source nothing can supply,
+        // and that is the node's error, not a cross-origin script to leave pending — no later turn loads one.
         if (absolute.Scheme != Uri.UriSchemeHttp && absolute.Scheme != Uri.UriSchemeHttps)
         {
+            if (!string.IsNullOrEmpty(resource.Text))
+            {
+                var heldRan = RunHeldScript(context, resource);
+                FireResourceEvent(context, resource, heldRan ? "load" : "error");
+                return;
+            }
+
             _logger.LogWarning("Script source '{url}' is not fetchable over HTTP.", absolute);
             FireResourceEvent(context, resource, "error");
             return;
@@ -531,7 +528,7 @@ public sealed class JsRenderer
         SetCurrentScript(context, string.Empty);
         try
         {
-            return context.Isolation.Run("Inline script execution", () => context.Engine.Execute(source));
+            return context.Isolation.Run("Chunk execution", () => context.Engine.Execute(source));
         }
         finally
         {
@@ -540,20 +537,24 @@ public sealed class JsRenderer
     }
 
     /// <summary>
-    /// A script whose source the render already holds, run under its own <c>src</c> as its specifier: a module
-    /// one resolves its relative imports against that, as it would in a browser, and a classic one becomes the
-    /// <c>document.currentScript</c> the same way a fetched chunk does.
+    /// A script whose source the render already holds, run under its own <c>src</c> as its specifier so two
+    /// object URLs are two modules. An object URL carries no path, so what a module built from one resolves
+    /// its own imports against is the page — see <see cref="ModuleSpecifier.ReferrerOrBase"/>.
     /// </summary>
     private static bool RunHeldScript(RenderingContext context, PendingResource resource)
     {
         var source = resource.Text!;
+
+        // Neither half is cached: an object URL is minted per page, so a parsed form filed under one is an
+        // AST held for the rest of the crawl that nothing can ever hit again — the same reason an inline
+        // module's is not cached under the page URL it borrows.
         if (string.Equals(resource.Type, "module", StringComparison.OrdinalIgnoreCase))
-            return RunModule(context, new ModuleScript(resource.Src!, source, External: true));
+            return RunModule(context, new ModuleScript(resource.Src!, source, External: false));
 
         SetCurrentScript(context, resource.Src);
         try
         {
-            return context.Isolation.Run("Chunk execution", () => context.Engine.ExecuteCached(resource.Src!, source));
+            return context.Isolation.Run("Inline script execution", () => context.Engine.Execute(source));
         }
         finally
         {

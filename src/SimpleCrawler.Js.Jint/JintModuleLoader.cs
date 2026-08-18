@@ -35,7 +35,8 @@ internal sealed class JintModuleLoader : IModuleLoader
         if (location == null)
             return _baseUri;
 
-        return UriHelper.TryCreateHttpAbsolute(location, out var absolute) ? absolute : new Uri(_baseUri, location);
+        var referrer = UriHelper.TryCreateHttpAbsolute(location, out var absolute) ? absolute : new Uri(_baseUri, location);
+        return ModuleSpecifier.ReferrerOrBase(referrer, _baseUri);
     }
 
     public Module LoadModule(global::Jint.Engine engine, ResolvedSpecifier resolved)

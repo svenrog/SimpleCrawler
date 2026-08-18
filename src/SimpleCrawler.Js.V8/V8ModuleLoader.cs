@@ -55,7 +55,9 @@ internal sealed class V8ModuleLoader : DocumentLoader
 
     private Uri Resolve(DocumentInfo? sourceInfo, string specifier)
     {
-        var referrer = sourceInfo?.Uri is { IsAbsoluteUri: true } source ? source : _baseUri;
+        var referrer = ModuleSpecifier.ReferrerOrBase(
+            sourceInfo?.Uri is { IsAbsoluteUri: true } source ? source : null, _baseUri);
+
         return ModuleSpecifier.Resolve(specifier, referrer, _fetcher.ImportMap);
     }
 }

@@ -1,16 +1,13 @@
-using SimpleCrawler.Core.Helpers;
 using System.Text.Json;
 
 namespace SimpleCrawler.Js.Abstractions;
 
 /// <summary>
-/// The page's own answer to "where does this module specifier live" — a <c>&lt;script type="importmap"&gt;</c>
-/// read off the shell. Without one a bare specifier resolves nowhere: a browser refuses it rather than
-/// treating it as a path, so fetching <c>&lt;page&gt;/@scope/pkg</c> asks the target for something no browser
-/// ever asks it for and answers the render a 404 page.
+/// The page's own answer to where a bare module specifier lives — a <c>&lt;script type="importmap"&gt;</c> read
+/// off the shell. A browser resolves a bare specifier through this or not at all, never as a path.
 /// <para>
-/// Only the <c>imports</c> map is read. <c>scopes</c> and <c>integrity</c> address a per-referrer override and
-/// a hash check, neither of which changes what a single-pass render can collect.
+/// Only the <c>imports</c> member is read: <c>scopes</c> and <c>integrity</c> are a per-referrer override and a
+/// hash check, neither of which changes what a single-pass render collects.
 /// </para>
 /// </summary>
 public sealed class ImportMap
@@ -56,7 +53,9 @@ public sealed class ImportMap
                 if (string.IsNullOrEmpty(specifier) || string.IsNullOrEmpty(address))
                     continue;
 
-                if (!TryResolveAddress(address, baseUri, out var target))
+                // An address that is neither a URL nor a path is invalid, and a browser drops the entry
+                // rather than reading it as one more bare specifier.
+                if (!ModuleSpecifier.TryResolveAddress(address, baseUri, out var target))
                     continue;
 
                 // A key ending in '/' maps a whole subtree, and the spec requires its address to end in one
@@ -98,21 +97,14 @@ public sealed class ImportMap
             if (!specifier.StartsWith(prefix.Key, StringComparison.Ordinal))
                 continue;
 
-            if (Uri.TryCreate(prefix.Value, specifier[prefix.Key.Length..], out var mapped))
+            // The remainder is appended, so a "../" in it must not walk out of the subtree the page mapped.
+            if (Uri.TryCreate(prefix.Value, specifier[prefix.Key.Length..], out var mapped)
+                && mapped.AbsoluteUri.StartsWith(prefix.Value.AbsoluteUri, StringComparison.Ordinal))
+            {
                 return mapped;
+            }
         }
 
         return null;
-    }
-
-    private static bool TryResolveAddress(string address, Uri baseUri, out Uri target)
-    {
-        if (UriHelper.TryCreateHttpAbsolute(address, out var absolute))
-        {
-            target = absolute;
-            return true;
-        }
-
-        return Uri.TryCreate(baseUri, address, out target!);
     }
 }

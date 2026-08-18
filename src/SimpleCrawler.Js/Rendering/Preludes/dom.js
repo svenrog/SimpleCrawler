@@ -1225,24 +1225,130 @@
     }
   };
 
+  // browser/TextEncoder.ts
+  var TextEncoder = class {
+    constructor() {
+      this.encoding = "utf-8";
+    }
+    encode(input) {
+      const s = input == null ? "" : String(input);
+      const out = [];
+      for (let i = 0; i < s.length; ) {
+        const c = s.charCodeAt(i++);
+        if (c < 128) {
+          out.push(c);
+        } else if (c < 2048) {
+          out.push(192 | c >> 6, 128 | c & 63);
+        } else if (c >= 55296 && c <= 56319 && i < s.length) {
+          const c2 = s.charCodeAt(i++);
+          const cp = 65536 + ((c & 1023) << 10) + (c2 & 1023);
+          out.push(240 | cp >> 18, 128 | cp >> 12 & 63, 128 | cp >> 6 & 63, 128 | cp & 63);
+        } else {
+          out.push(224 | c >> 12, 128 | c >> 6 & 63, 128 | c & 63);
+        }
+      }
+      return new Uint8Array(out);
+    }
+  };
+
+  // browser/TextDecoder.ts
+  var TextDecoder = class {
+    constructor() {
+      this.encoding = "utf-8";
+    }
+    decode(input) {
+      if (input == null) return "";
+      if (typeof input === "string") return input;
+      const bytes = input;
+      let out = "";
+      let i = 0;
+      const len = bytes.length;
+      while (i < len) {
+        const b1 = bytes[i++];
+        if (b1 < 128) {
+          out += String.fromCharCode(b1);
+        } else if (b1 < 224) {
+          const b2 = bytes[i++];
+          out += String.fromCharCode((b1 & 31) << 6 | b2 & 63);
+        } else if (b1 < 240) {
+          const b2 = bytes[i++];
+          const b3 = bytes[i++];
+          out += String.fromCharCode((b1 & 15) << 12 | (b2 & 63) << 6 | b3 & 63);
+        } else {
+          const b2 = bytes[i++];
+          const b3 = bytes[i++];
+          const b4 = bytes[i++];
+          const cp = (b1 & 7) << 18 | (b2 & 63) << 12 | (b3 & 63) << 6 | b4 & 63;
+          const adj = cp - 65536;
+          out += String.fromCharCode(55296 | adj >> 10, 56320 | adj & 63);
+        }
+      }
+      return out;
+    }
+  };
+
+  // browser/Blob.ts
+  var _encoder = new TextEncoder();
+  var _decoder = new TextDecoder();
+  function partBytes(part) {
+    if (part instanceof Blob) return part._bytes();
+    if (part instanceof Uint8Array) return part;
+    if (part instanceof ArrayBuffer) return new Uint8Array(part);
+    if (part && ArrayBuffer.isView(part)) return new Uint8Array(part.buffer, part.byteOffset, part.byteLength);
+    return _encoder.encode(part == null ? "" : String(part));
+  }
+  var Blob = class _Blob {
+    constructor(parts, options) {
+      this._parts = (parts || []).map(partBytes);
+      this.type = options && options.type != null ? String(options.type).toLowerCase() : "";
+    }
+    get size() {
+      let n = 0;
+      for (const p of this._parts) n += p.length;
+      return n;
+    }
+    _bytes() {
+      const out = new Uint8Array(this.size);
+      let at = 0;
+      for (const p of this._parts) {
+        out.set(p, at);
+        at += p.length;
+      }
+      return out;
+    }
+    arrayBuffer() {
+      return Promise.resolve(this._bytes().buffer);
+    }
+    text() {
+      return Promise.resolve(this._text());
+    }
+    _text() {
+      return _decoder.decode(this._bytes());
+    }
+    slice(start, end, contentType) {
+      const bytes = this._bytes();
+      const b = new _Blob([bytes.slice(start, end)]);
+      b.type = contentType == null ? "" : String(contentType).toLowerCase();
+      return b;
+    }
+  };
+
   // browser/objectUrl.ts
   var _held = /* @__PURE__ */ new Map();
+  var _scriptTypes = ["", "text/javascript", "application/javascript", "text/ecmascript", "application/ecmascript", "module"];
   function createObjectUrl(source) {
     const url = "blob:" + Math.random().toString(36).slice(2);
-    if (source && typeof source._text === "function") {
-      try {
-        _held.set(url, source._text());
-      } catch {
-      }
-    }
+    if (source instanceof Blob) _held.set(url, source);
     return url;
   }
   function revokeObjectUrl(url) {
     _held.delete(String(url));
   }
   function objectUrlSource(url) {
-    const held = _held.get(url);
-    return held === void 0 ? null : held;
+    const blob = _held.get(url);
+    if (!blob) return null;
+    const type = String(blob.type || "").split(";")[0].trim().toLowerCase();
+    return _scriptTypes.indexOf(type) === -1 ? null : blob._text();
   }
 
   // diagnostics.ts
@@ -1289,8 +1395,8 @@
     if (_seen.has(node)) return;
     _seen.add(node);
     const id = ++_counter;
-    const src = tag === "script" ? node.getAttributeInternal("src") : null;
-    _pending.push({ id, node, held: src ? objectUrlSource(String(src)) : null });
+    const src = tag === "script" ? String(node.getAttributeInternal("src") || "") : "";
+    _pending.push({ id, node, held: src.indexOf("blob:") === 0 ? objectUrlSource(src) : null });
     _byId.set(id, node);
   }
   function takeResources() {
@@ -4606,68 +4712,6 @@
     }
   };
 
-  // browser/TextEncoder.ts
-  var TextEncoder = class {
-    constructor() {
-      this.encoding = "utf-8";
-    }
-    encode(input) {
-      const s = input == null ? "" : String(input);
-      const out = [];
-      for (let i = 0; i < s.length; ) {
-        const c = s.charCodeAt(i++);
-        if (c < 128) {
-          out.push(c);
-        } else if (c < 2048) {
-          out.push(192 | c >> 6, 128 | c & 63);
-        } else if (c >= 55296 && c <= 56319 && i < s.length) {
-          const c2 = s.charCodeAt(i++);
-          const cp = 65536 + ((c & 1023) << 10) + (c2 & 1023);
-          out.push(240 | cp >> 18, 128 | cp >> 12 & 63, 128 | cp >> 6 & 63, 128 | cp & 63);
-        } else {
-          out.push(224 | c >> 12, 128 | c >> 6 & 63, 128 | c & 63);
-        }
-      }
-      return new Uint8Array(out);
-    }
-  };
-
-  // browser/TextDecoder.ts
-  var TextDecoder = class {
-    constructor() {
-      this.encoding = "utf-8";
-    }
-    decode(input) {
-      if (input == null) return "";
-      if (typeof input === "string") return input;
-      const bytes = input;
-      let out = "";
-      let i = 0;
-      const len = bytes.length;
-      while (i < len) {
-        const b1 = bytes[i++];
-        if (b1 < 128) {
-          out += String.fromCharCode(b1);
-        } else if (b1 < 224) {
-          const b2 = bytes[i++];
-          out += String.fromCharCode((b1 & 31) << 6 | b2 & 63);
-        } else if (b1 < 240) {
-          const b2 = bytes[i++];
-          const b3 = bytes[i++];
-          out += String.fromCharCode((b1 & 15) << 12 | (b2 & 63) << 6 | b3 & 63);
-        } else {
-          const b2 = bytes[i++];
-          const b3 = bytes[i++];
-          const b4 = bytes[i++];
-          const cp = (b1 & 7) << 18 | (b2 & 63) << 12 | (b3 & 63) << 6 | b4 & 63;
-          const adj = cp - 65536;
-          out += String.fromCharCode(55296 | adj >> 10, 56320 | adj & 63);
-        }
-      }
-      return out;
-    }
-  };
-
   // browser/crypto.ts
   function randomByte() {
     return Math.floor(Math.random() * 256);
@@ -5122,52 +5166,6 @@
     }
     dispatchEvent() {
       return false;
-    }
-  };
-
-  // browser/Blob.ts
-  var _encoder = new TextEncoder();
-  var _decoder = new TextDecoder();
-  function partBytes(part) {
-    if (part instanceof Blob) return part._bytes();
-    if (part instanceof Uint8Array) return part;
-    if (part instanceof ArrayBuffer) return new Uint8Array(part);
-    if (part && ArrayBuffer.isView(part)) return new Uint8Array(part.buffer, part.byteOffset, part.byteLength);
-    return _encoder.encode(part == null ? "" : String(part));
-  }
-  var Blob = class _Blob {
-    constructor(parts, options) {
-      this._parts = (parts || []).map(partBytes);
-      this.type = options && options.type != null ? String(options.type).toLowerCase() : "";
-    }
-    get size() {
-      let n = 0;
-      for (const p of this._parts) n += p.length;
-      return n;
-    }
-    _bytes() {
-      const out = new Uint8Array(this.size);
-      let at = 0;
-      for (const p of this._parts) {
-        out.set(p, at);
-        at += p.length;
-      }
-      return out;
-    }
-    arrayBuffer() {
-      return Promise.resolve(this._bytes().buffer);
-    }
-    text() {
-      return Promise.resolve(this._text());
-    }
-    _text() {
-      return _decoder.decode(this._bytes());
-    }
-    slice(start, end, contentType) {
-      const bytes = this._bytes();
-      const b = new _Blob([bytes.slice(start, end)]);
-      b.type = contentType == null ? "" : String(contentType).toLowerCase();
-      return b;
     }
   };
 
