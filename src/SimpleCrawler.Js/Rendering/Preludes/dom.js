@@ -208,6 +208,13 @@
       const ref = this.firstChild;
       for (const n of nodes) this.insertBefore(asNode(n), ref);
     }
+    // Read before it is called — a consent banner swaps its markup in with
+    // `host.replaceChildren.apply(host, Array.from(tmp.childNodes))` — so the gap is a throw inside that
+    // banner's init, not a skipped update.
+    replaceChildren(...nodes) {
+      for (const c of this.childNodes.slice()) this.removeChild(c);
+      for (const n of nodes) this.appendChild(asNode(n));
+    }
     cloneNode(deep) {
       const clone = this._shallowClone();
       if (deep) for (const c of this.childNodes) clone.appendChild(c.cloneNode(true));
@@ -877,6 +884,23 @@
     });
   }
 
+  // dom/HTMLCollection.ts
+  var HTMLCollection = class extends Array {
+    item(index) {
+      return this[index] ?? null;
+    }
+    // Browsers key this on id first, then on the name attribute for the elements that carry one.
+    namedItem(name) {
+      const key = String(name);
+      for (const node of this) {
+        const el = node;
+        if (!el || typeof el.getAttributeInternal !== "function") continue;
+        if (el.getAttributeInternal("id") === key || el.getAttributeInternal("name") === key) return node;
+      }
+      return null;
+    }
+  };
+
   // dom/Element.ts
   function attrNode(name, value, owner) {
     return { name, value, localName: name, namespaceURI: null, ownerElement: owner };
@@ -960,6 +984,11 @@
           if (prop === "length") return el.attrs.size;
           if (prop === "item") return (i) => nthAttrNode(el.attrs, i, el);
           if (prop === "getNamedItem") return (name) => el.getAttributeNode(name);
+          if (prop === Symbol.iterator) {
+            return function* () {
+              for (const name of Array.from(el.attrs.keys())) yield el.getAttributeNode(name);
+            };
+          }
           if (typeof prop !== "string") return void 0;
           if (/^\d+$/.test(prop)) return nthAttrNode(el.attrs, Number(prop), el);
           return el.attrs.has(prop) ? attrNode(prop, el.attrs.get(prop), el) : void 0;
@@ -978,7 +1007,7 @@
       return attr;
     }
     getElementsByTagName(tag) {
-      const out = [];
+      const out = new HTMLCollection();
       collectByTag(this, String(tag).toLowerCase(), out);
       return out;
     }
@@ -1213,7 +1242,9 @@
       return classListFor(this);
     }
     get children() {
-      return this.childNodes.filter((n) => n.nodeType === 1 /* Element */);
+      const out = new HTMLCollection();
+      for (const n of this.childNodes) if (n.nodeType === 1 /* Element */) out.push(n);
+      return out;
     }
     get childElementCount() {
       return this.children.length;
@@ -1243,7 +1274,7 @@
       return n || null;
     }
     getElementsByClassName(className) {
-      const out = [];
+      const out = new HTMLCollection();
       collectByClass(this, String(className), out);
       return out;
     }
@@ -1257,7 +1288,7 @@
       this.childNodes = [];
       const html = v == null ? "" : String(v);
       const parse = parserRef.parseFragment;
-      if (parse) for (const node of parse(html)) this.appendChild(node);
+      if (parse) for (const node of parse(html, this.localName)) this.appendChild(node);
       this.cachedInnerHTML = html;
     }
     get textContent() {
@@ -1279,7 +1310,7 @@
       if (!parent) return;
       const html = v == null ? "" : String(v);
       const parse = parserRef.parseFragment;
-      const nodes = parse ? parse(html) : [];
+      const nodes = parse ? parse(html, parent.localName) : [];
       for (const node of nodes) parent.insertBefore(node, this);
       parent.removeChild(this);
     }
@@ -1831,7 +1862,11 @@
     get contentWindow() {
       let win = this._contentWindow;
       if (!win) {
+        const frame = this;
         win = {
+          get document() {
+            return frame.contentDocument;
+          },
           postMessage() {
           },
           close() {
@@ -1846,7 +1881,12 @@
       return win;
     }
     get contentDocument() {
-      return null;
+      let doc2 = this._contentDocument;
+      if (!doc2) {
+        doc2 = documentRef.current.implementation.createHTMLDocument("");
+        Object.defineProperty(this, "_contentDocument", { value: doc2, enumerable: false });
+      }
+      return doc2;
     }
   };
 
@@ -2491,10 +2531,11 @@
     wireDocument(doc2, root, head, body);
     return root;
   }
-  function parseFragment(html) {
+  function parseFragment(html, context) {
     const scratch = {};
     parseHTML(scratch, html);
-    const kids = scratch.body.childNodes.slice();
+    const host = context === "html" ? scratch.documentElement : scratch.body;
+    const kids = host.childNodes.slice();
     for (const k of kids) k.parentNode = null;
     return kids;
   }
@@ -2785,7 +2826,29 @@
     }
   };
 
+  // browser/fonts.ts
+  function createFontFaceSet() {
+    const set = /* @__PURE__ */ new Set();
+    set.ready = Promise.resolve(set);
+    set.status = "loaded";
+    set.check = () => true;
+    set.load = () => Promise.resolve([]);
+    set.addEventListener = () => {
+    };
+    set.removeEventListener = () => {
+    };
+    set.onloading = null;
+    set.onloadingdone = null;
+    set.onloadingerror = null;
+    return set;
+  }
+
   // dom/Document.ts
+  function withinViewport(x, y) {
+    const px = Number(x);
+    const py = Number(y);
+    return px >= 0 && py >= 0 && px <= viewportWidth() && py <= viewportHeight();
+  }
   var Document = class _Document extends Node {
     constructor(defaultView) {
       super(9 /* Document */);
@@ -2801,7 +2864,10 @@
       // nothing left "loading" — frameworks that gate on readyState (Next's Flight stream close among them)
       // see "complete" immediately instead of stalling behind a state that never advances.
       this.readyState = "complete";
+      this.visibilityState = "visible";
+      this.hidden = false;
       this._cookies = /* @__PURE__ */ new Map();
+      this._fonts = null;
       this.defaultView = defaultView || null;
       hideOwnFields(this);
     }
@@ -2917,7 +2983,7 @@
     // init and costs every global it would have registered.
     getElementsByTagName(tag) {
       const name = String(tag).toLowerCase();
-      const out = [];
+      const out = new HTMLCollection();
       if (this.documentElement) {
         if (name === "*" || this.documentElement.localName === name) out.push(this.documentElement);
         collectByTag(this.documentElement, name, out);
@@ -2925,7 +2991,7 @@
       return out;
     }
     getElementsByClassName(className) {
-      const out = [];
+      const out = new HTMLCollection();
       if (this.documentElement) {
         if (this.documentElement.classList.contains(String(className))) out.push(this.documentElement);
         collectByClass(this.documentElement, String(className), out);
@@ -2934,7 +3000,7 @@
     }
     getElementsByName(name) {
       const matches2 = (e) => e.getAttributeInternal("name") === name;
-      const out = [];
+      const out = new HTMLCollection();
       if (this.documentElement) {
         if (matches2(this.documentElement)) out.push(this.documentElement);
         collectByPredicate(this.documentElement, matches2, out);
@@ -2943,6 +3009,28 @@
     }
     get scripts() {
       return this.getElementsByTagName("script");
+    }
+    // The foreground answers: the tab is visible, it has focus, and nothing is focused past the body. Bot
+    // management and session recorders read these during init and dereference what they get, so a missing one
+    // throws instead of taking the backgrounded branch it was written for.
+    hasFocus() {
+      return true;
+    }
+    get activeElement() {
+      return this.body || this.documentElement;
+    }
+    // No layout, so nothing truly occupies a point. A recorder hit-testing its own cursor trail gets the
+    // element a browser would always have under one, and null outside the viewport — the answer it guards
+    // for already, since a browser returns null there too.
+    elementFromPoint(x, y) {
+      return withinViewport(x, y) ? this.body || this.documentElement : null;
+    }
+    elementsFromPoint(x, y) {
+      if (!withinViewport(x, y)) return [];
+      return [this.body, this.documentElement].filter((e) => e !== null);
+    }
+    get fonts() {
+      return this._fonts || (this._fonts = createFontFaceSet());
     }
     querySelector(sel) {
       const r = querySelectorAll(this, sel);
@@ -4247,6 +4335,7 @@
     global.top = global;
     global.parent = global;
     if (!("length" in global)) global.length = 0;
+    if (typeof global.name !== "string") global.name = "";
     Object.defineProperty(global, Symbol.toStringTag, { value: "Window", configurable: true });
     global.navigator = navigator;
     global.location = createLocation();
@@ -4341,6 +4430,7 @@
     global.EventTarget = EventTarget;
     global.Node = Node;
     global.NodeList = NodeList;
+    global.HTMLCollection = HTMLCollection;
     global.Element = Element;
     global.CharacterData = CharacterData;
     global.DOMTokenList = DOMTokenList;

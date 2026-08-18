@@ -30,6 +30,24 @@ Entries before 4.0.0 are condensed to what changed; the reasoning behind each is
   delegates the properties to its host, so it read back `undefined`, and a loader doing
   `new URL(import.meta.url)` to find where its own chunks live threw before fetching any of them. The V8
   backend answers `undefined` here too (measured on ClearScript 7.5.1) and is not addressed by this.
+- `window.name` — the browsing context's own name, empty and writable. Matomo splits it (`window.name
+  .split("###")`) while constructing its tracker, with no guard, so an undefined there cost the tracker and
+  everything built on it; it was the single most common execution error in the surveyed corpus.
+- `HTMLCollection`, answered by `getElementsByTagName`/`getElementsByClassName`/`getElementsByName` and
+  `children` in place of the plain arrays they returned. Pre-`querySelector` code indexes a collection through
+  `item()`/`namedItem()`, which an array has no answer for.
+- The foreground answers a page asks before deciding whether anyone is looking: `document.hasFocus()`,
+  `activeElement`, `visibilityState`/`hidden`, and `elementFromPoint`/`elementsFromPoint` (the body for a
+  point inside the viewport, null outside — no layout means nothing else can be under one). Bot management
+  and session recorders read them unguarded during init.
+- `document.fonts`, an empty but iterable `FontFaceSet` whose `ready` resolves. A chat widget enumerates the
+  families it may use through `fonts.ready.then(set => Array.from(set))` before it renders anything.
+- `Node.replaceChildren`, and an iterable `element.attributes` — both are read by reference before they are
+  called (`host.replaceChildren.apply(host, …)`, `[...el.attributes]`), so each gap was a throw rather than a
+  skipped update.
+- An iframe carries a same-origin blank document on `contentWindow.document`/`contentDocument`, which is what
+  a frame with no `src` is in a browser. A RUM beacon builds its loader by writing into it and reads
+  `.open()` off it unguarded. Nothing written there is executed or serialized.
 
 ### Changed
 
@@ -65,6 +83,11 @@ Entries before 4.0.0 are condensed to what changed; the reasoning behind each is
   called the method straight back, and the recursion spent the stack before the page ran. A browser is immune
   because its setters never call the method. Every internal read and write in the DOM — the parser, the
   serializer, selector matching, `classList`, resource registration — now takes the same internal path.
+- Fragment parsing takes its insertion mode from the context element: in `<html>` context the implied `head`
+  and `body` are part of the result, instead of being stripped as the parser scaffolding they are everywhere
+  else. DOMPurify feature-tests itself by replacing a scratch document's body and then looking the body up
+  again, so the stripped wrapper left it dereferencing `undefined` — the sanitizer never defined its global,
+  and every script that then named `DOMPurify` failed after it.
 - `document.getElementsByTagName`/`getElementsByClassName`/`getElementsByName` include the root element,
   which they searched strictly below. jQuery resolves a tag-only `$("html")` through the first of those, so
   a CMS bundle reading `$("html").attr("lang")` at init got undefined and threw. An *element's* own search

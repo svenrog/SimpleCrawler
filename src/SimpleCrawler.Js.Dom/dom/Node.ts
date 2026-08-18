@@ -120,6 +120,14 @@ export abstract class Node extends EventTarget {
         for (const n of nodes) this.insertBefore(asNode(n), ref);
     }
 
+    // Read before it is called — a consent banner swaps its markup in with
+    // `host.replaceChildren.apply(host, Array.from(tmp.childNodes))` — so the gap is a throw inside that
+    // banner's init, not a skipped update.
+    replaceChildren(...nodes: any[]): void {
+        for (const c of this.childNodes.slice()) this.removeChild(c);
+        for (const n of nodes) this.appendChild(asNode(n));
+    }
+
     cloneNode(deep?: boolean): Node {
         const clone = this._shallowClone();
         if (deep) for (const c of this.childNodes) clone.appendChild(c.cloneNode(true));

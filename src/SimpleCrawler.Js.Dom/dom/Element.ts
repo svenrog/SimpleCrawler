@@ -11,6 +11,7 @@ import { DOMTokenList, classListFor } from "./DOMTokenList";
 import { viewportWidth, viewportHeight } from "../browser/viewport";
 import { Animatable } from "./Animatable";
 import { Animation } from "./Animation";
+import { HTMLCollection } from "./HTMLCollection";
 
 function attrNode(name: string, value: string, owner: Element): any {
     return { name, value, localName: name, namespaceURI: null, ownerElement: owner };
@@ -115,6 +116,13 @@ export class Element extends Node implements Animatable {
                 if (prop === "length") return el.attrs.size;
                 if (prop === "item") return (i: number) => nthAttrNode(el.attrs, i, el);
                 if (prop === "getNamedItem") return (name: string) => el.getAttributeNode(name);
+                // A NamedNodeMap is iterable, and a widget copying an element's attributes spreads it
+                // (`[...el.attributes]`); answering undefined here is "is not iterable" thrown at the trap.
+                if (prop === Symbol.iterator) {
+                    return function* () {
+                        for (const name of Array.from(el.attrs.keys())) yield el.getAttributeNode(name);
+                    };
+                }
                 if (typeof prop !== "string") return undefined;
                 if (/^\d+$/.test(prop)) return nthAttrNode(el.attrs, Number(prop), el);
                 return el.attrs.has(prop) ? attrNode(prop, el.attrs.get(prop)!, el) : undefined;
@@ -137,7 +145,7 @@ export class Element extends Node implements Animatable {
     }
 
     getElementsByTagName(tag: string): Element[] {
-        const out: Node[] = [];
+        const out = new HTMLCollection<Node>();
         collectByTag(this, String(tag).toLowerCase(), out);
         return out as unknown as Element[];
     }
@@ -387,7 +395,9 @@ export class Element extends Node implements Animatable {
     }
 
     get children(): Element[] {
-        return this.childNodes.filter((n) => n.nodeType === NodeType.Element) as unknown as Element[];
+        const out = new HTMLCollection<Node>();
+        for (const n of this.childNodes) if (n.nodeType === NodeType.Element) out.push(n);
+        return out as unknown as Element[];
     }
 
     get childElementCount(): number {
@@ -424,7 +434,7 @@ export class Element extends Node implements Animatable {
     }
 
     getElementsByClassName(className: string): Element[] {
-        const out: Node[] = [];
+        const out = new HTMLCollection<Node>();
         collectByClass(this, String(className), out);
         return out as unknown as Element[];
     }
@@ -440,7 +450,7 @@ export class Element extends Node implements Animatable {
         this.childNodes = [];
         const html = v == null ? "" : String(v);
         const parse = parserRef.parseFragment;
-        if (parse) for (const node of parse(html)) this.appendChild(node);
+        if (parse) for (const node of parse(html, this.localName)) this.appendChild(node);
         this.cachedInnerHTML = html;
     }
 
@@ -466,7 +476,7 @@ export class Element extends Node implements Animatable {
         if (!parent) return;
         const html = v == null ? "" : String(v);
         const parse = parserRef.parseFragment;
-        const nodes = parse ? parse(html) : [];
+        const nodes = parse ? parse(html, (parent as any).localName) : [];
         for (const node of nodes) parent.insertBefore(node, this);
         parent.removeChild(this);
     }

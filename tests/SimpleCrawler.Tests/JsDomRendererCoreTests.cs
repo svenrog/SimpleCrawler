@@ -662,4 +662,123 @@ public class JsDomRendererCoreTests : JsDomRendererTestBase, IClassFixture<JsRen
         Assert.Contains("base=http://localhost:5000/assets/", rendered);
         Assert.Contains("node=true", rendered);
     }
+
+    // Every getElementsBy*/children answers with an HTMLCollection, not a bare array: pre-querySelector code
+    // indexes one through item(), and a Magento inline script clears its cached menu classes with
+    // `nav.getElementsByTagName("li").item(i)` — an array has no such method, so the read is a TypeError that
+    // costs the rest of that script. The attribute map is iterable for the same reason: a widget copying an
+    // element's attributes spreads it, and a NamedNodeMap that answers no iterator throws "is not iterable".
+    [Theory]
+    [InlineData(JsEngine.Jint)]
+    [InlineData(JsEngine.V8)]
+    public async Task JsMode_CollectionsAnswerItemAndAttributesSpread(JsEngine engine)
+    {
+        if (engine == JsEngine.V8)
+            Assert.SkipUnless(V8Support.IsAvailable, V8Support.UnavailableReason);
+
+        const string html = """
+            <!doctype html><html><head></head><body>
+            <ul id="nav" data-role="menu" class="top"><li id="first">a</li><li name="second">b</li></ul>
+            <script>
+            var nav = document.getElementById('nav');
+            var items = nav.getElementsByTagName('li');
+            var spread = [].concat.apply([], [Array.from(nav.attributes)]);
+            var l = document.createElement('a');
+            l.setAttribute('href', '/c?item=' + items.item(1).textContent +
+                                   '&past=' + items.item(9) +
+                                   '&named=' + items.namedItem('first').textContent +
+                                   '&byName=' + items.namedItem('second').textContent +
+                                   '&children=' + nav.children.item(0).id +
+                                   '&isCollection=' + (items instanceof HTMLCollection) +
+                                   '&attrs=' + spread.map(function (a) { return a.name; }).sort().join('.'));
+            document.body.appendChild(l);
+            </script>
+            </body></html>
+            """;
+
+        var renderer = CreateJsRenderer(engine);
+        var result = await renderer.RenderAsync(Encoding.UTF8.GetBytes(html), "http://localhost:5000/", new HttpClient(), CancellationToken.None);
+        var rendered = Encoding.UTF8.GetString(result);
+
+        Assert.Contains("item=b", rendered);
+        Assert.Contains("past=null", rendered);
+        Assert.Contains("named=a", rendered);
+        Assert.Contains("byName=b", rendered);
+        Assert.Contains("children=first", rendered);
+        Assert.Contains("isCollection=true", rendered);
+        Assert.Contains("attrs=class.data-role.id", rendered);
+    }
+
+    // replaceChildren is reached by reference before it is called — a consent banner mounts its markup with
+    // `host.replaceChildren.apply(host, Array.from(tmp.childNodes))` — so its absence throws inside the
+    // banner's own init instead of leaving the host element merely unchanged.
+    [Theory]
+    [InlineData(JsEngine.Jint)]
+    [InlineData(JsEngine.V8)]
+    public async Task JsMode_ReplaceChildren_SwapsTheWholeSubtree(JsEngine engine)
+    {
+        if (engine == JsEngine.V8)
+            Assert.SkipUnless(V8Support.IsAvailable, V8Support.UnavailableReason);
+
+        const string html = """
+            <!doctype html><html><head></head><body>
+            <div id="host"><span id="old">old</span></div>
+            <script>
+            var host = document.getElementById('host');
+            var tmp = document.createElement('div');
+            tmp.innerHTML = '<a href="/mounted">m</a>';
+            host.replaceChildren.apply(host, Array.from(tmp.childNodes));
+            host.appendChild(document.createTextNode('!'));
+            </script>
+            </body></html>
+            """;
+
+        var renderer = CreateJsRenderer(engine);
+        var result = await renderer.RenderAsync(Encoding.UTF8.GetBytes(html), "http://localhost:5000/", new HttpClient(), CancellationToken.None);
+        var rendered = Encoding.UTF8.GetString(result);
+
+        Assert.Contains("href=\"/mounted\"", rendered);
+        Assert.DoesNotContain("id=\"old\"", rendered);
+    }
+
+    // Fragment parsing takes its insertion mode from the context element: replacing the body of a scratch
+    // document leaves that document with a body again, because <html> context implies head and body. DOMPurify
+    // feature-tests itself exactly this way — createHTMLDocument, drop the head, `body.outerHTML = "<svg…>"`,
+    // then look the body up again — and a stripped wrapper left it dereferencing undefined, so the sanitizer
+    // never defined its global and every script depending on it failed after it.
+    [Theory]
+    [InlineData(JsEngine.Jint)]
+    [InlineData(JsEngine.V8)]
+    public async Task JsMode_FragmentParsedInHtmlContext_KeepsTheImpliedBody(JsEngine engine)
+    {
+        if (engine == JsEngine.V8)
+            Assert.SkipUnless(V8Support.IsAvailable, V8Support.UnavailableReason);
+
+        const string html = """
+            <!doctype html><html><head></head><body><div id="t"></div>
+            <script>
+            var scratch = document.implementation.createHTMLDocument('');
+            var body = scratch.body;
+            body.parentNode.removeChild(body.parentNode.firstElementChild);
+            body.outerHTML = '<svg><g></g></svg>';
+            var found = document.getElementsByTagName.call(scratch, 'body')[0];
+            var host = document.createElement('div');
+            host.innerHTML = '<p id="kept">p</p>';
+            var a = document.createElement('a');
+            a.setAttribute('href', '/p?body=' + (found ? found.tagName : 'none') +
+                                   '&svg=' + (found ? !!found.querySelector('svg') : false) +
+                                   '&plain=' + host.childNodes.length + host.firstChild.id);
+            document.getElementById('t').appendChild(a);
+            </script>
+            </body></html>
+            """;
+
+        var renderer = CreateJsRenderer(engine);
+        var result = await renderer.RenderAsync(Encoding.UTF8.GetBytes(html), "http://localhost:5000/", new HttpClient(), CancellationToken.None);
+        var rendered = Encoding.UTF8.GetString(result);
+
+        Assert.Contains("body=BODY", rendered);
+        Assert.Contains("svg=true", rendered);
+        Assert.Contains("plain=1kept", rendered);
+    }
 }

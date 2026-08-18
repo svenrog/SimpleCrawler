@@ -1,6 +1,7 @@
 import { Document } from "../dom/Document";
 import { Node } from "../dom/Node";
 import { NodeList } from "../dom/NodeList";
+import { HTMLCollection } from "../dom/HTMLCollection";
 import { Element } from "../dom/Element";
 import { CharacterData } from "../dom/CharacterData";
 import { Text } from "../dom/Text";
@@ -81,6 +82,10 @@ export function installDOM(global: any): void {
     global.top = global;
     global.parent = global;
     if (!("length" in global)) global.length = 0;
+    // The browsing context's name: empty for a window nothing opened, and a string every time. Matomo's
+    // tracker stores its overlay session in it and reads `window.name.split("###")` unguarded at construction,
+    // so an undefined here costs the whole tracker — the single most common analytics script in the corpus.
+    if (typeof global.name !== "string") global.name = "";
     // A browser brands the global as Window, and the brand is what keeps it out of a deep clone: jQuery's
     // isPlainObject asks Object.prototype.toString first, and an engine whose global answers "[object Object]"
     // has it clone the window instead of copying the reference. window.window/self/top/parent/frames make that
@@ -179,6 +184,7 @@ export function installDOM(global: any): void {
     global.EventTarget = EventTarget;
     global.Node = Node;
     global.NodeList = NodeList;
+    global.HTMLCollection = HTMLCollection;
     global.Element = Element;
     global.CharacterData = CharacterData;
     global.DOMTokenList = DOMTokenList;

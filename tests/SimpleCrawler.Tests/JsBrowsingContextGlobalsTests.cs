@@ -40,6 +40,11 @@ public class JsBrowsingContextGlobalsTests : IClassFixture<JsRendererFixture>
           window.__topIsWindow = window.top === window;
           window.__parentIsWindow = window.parent === window;
           window.__length = window.length;
+          // Matomo's tracker keeps its overlay session in window.name and splits it at construction.
+          window.__nameType = typeof window.name;
+          window.__nameParts = window.name.split('###').length;
+          window.name = 'Matomo_Overlay###day###today###';
+          window.__nameRoundTrip = window.name.split('###').length;
           try {
             window.__locator = !!(window.frames['__tcfapiLocator']);
             window.__probeThrew = false;
@@ -72,6 +77,9 @@ public class JsBrowsingContextGlobalsTests : IClassFixture<JsRendererFixture>
               topIsWindow: window.__topIsWindow,
               parentIsWindow: window.__parentIsWindow,
               length: window.__length,
+              nameType: window.__nameType,
+              nameParts: window.__nameParts,
+              nameRoundTrip: window.__nameRoundTrip,
               locator: window.__locator,
               probeThrew: window.__probeThrew,
               stubInstalled: !!window.__stubInstalled,
@@ -113,6 +121,24 @@ public class JsBrowsingContextGlobalsTests : IClassFixture<JsRendererFixture>
         Assert.True(ctx.GetProperty("topIsWindow").GetBoolean());
         Assert.True(ctx.GetProperty("parentIsWindow").GetBoolean());
         Assert.Equal(0, ctx.GetProperty("length").GetInt32());
+    }
+
+    // The context's name: a string always, empty for a window nothing opened, and writable. Matomo reads
+    // `window.name.split("###")` unguarded while constructing its tracker, so an undefined there costs the
+    // tracker and every global it would have registered — the most common analytics script in the corpus.
+    [Theory]
+    [InlineData(JsEngine.Jint)]
+    [InlineData(JsEngine.V8)]
+    public async Task ATopLevelContext_CarriesAnEmptyWritableName(JsEngine engine)
+    {
+        if (engine == JsEngine.V8)
+            Assert.SkipUnless(V8Support.IsAvailable, V8Support.UnavailableReason);
+
+        var ctx = await CollectAsync(engine);
+
+        Assert.Equal("string", ctx.GetProperty("nameType").GetString());
+        Assert.Equal(1, ctx.GetProperty("nameParts").GetInt32());
+        Assert.Equal(4, ctx.GetProperty("nameRoundTrip").GetInt32());
     }
 
     [Theory]

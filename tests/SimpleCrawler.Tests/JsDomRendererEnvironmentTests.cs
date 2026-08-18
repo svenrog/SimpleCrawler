@@ -498,4 +498,54 @@ public class JsDomRendererEnvironmentTests : JsDomRendererTestBase, IClassFixtur
         Assert.DoesNotContain("href=\"/give-up\"", rendered);
         Assert.DoesNotContain("href=\"/cancelled\"", rendered);
     }
+
+    // What a script asks before it decides whether anyone is looking: the tab is visible and focused, the
+    // body is what has focus, and a point inside the viewport has an element under it. A session recorder
+    // hit-tests its own cursor trail and a bot-management bundle calls document.hasFocus() unguarded, so a
+    // missing answer is a throw rather than the backgrounded branch each was written to take. document.fonts
+    // is the same shape: a chat widget enumerates families through `fonts.ready.then(s => Array.from(s))`.
+    [Theory]
+    [InlineData(JsEngine.Jint)]
+    [InlineData(JsEngine.V8)]
+    public async Task JsMode_TheDocumentReportsAForegroundPageAndAnswersHitTests(JsEngine engine)
+    {
+        if (engine == JsEngine.V8)
+            Assert.SkipUnless(V8Support.IsAvailable, V8Support.UnavailableReason);
+
+        const string html = """
+            <html><body><div id="t"></div>
+            <script>
+            var hit = document.elementFromPoint(10, 10);
+            var l = document.createElement('a');
+            l.setAttribute('href', '/f?focus=' + document.hasFocus() +
+                                   '&active=' + document.activeElement.tagName +
+                                   '&visible=' + document.visibilityState +
+                                   '&hidden=' + document.hidden +
+                                   '&hit=' + (hit ? hit.tagName : 'none') +
+                                   '&outside=' + document.elementFromPoint(-1, 999999) +
+                                   '&stack=' + document.elementsFromPoint(10, 10).length);
+            document.body.appendChild(l);
+            document.fonts.ready.then(function (set) {
+              var f = document.createElement('a');
+              f.setAttribute('href', '/fonts?count=' + Array.from(set).length + '&status=' + document.fonts.status);
+              document.body.appendChild(f);
+            });
+            </script>
+            </body></html>
+            """;
+
+        var renderer = CreateJsRenderer(engine);
+        var result = await renderer.RenderAsync(Encoding.UTF8.GetBytes(html), "http://localhost:5000/", new HttpClient(), CancellationToken.None);
+        var rendered = Encoding.UTF8.GetString(result);
+
+        Assert.Contains("focus=true", rendered);
+        Assert.Contains("active=BODY", rendered);
+        Assert.Contains("visible=visible", rendered);
+        Assert.Contains("hidden=false", rendered);
+        Assert.Contains("hit=BODY", rendered);
+        Assert.Contains("outside=null", rendered);
+        Assert.Contains("stack=2", rendered);
+        Assert.Contains("count=0", rendered);
+        Assert.Contains("status=loaded", rendered);
+    }
 }

@@ -175,11 +175,16 @@ export function parseHTML(doc: Document, input: unknown): Element {
 }
 
 // Parse a markup fragment (e.g. an innerHTML or <template> body) into detached nodes. The full-document
-// parser nests everything under html/head/body, so the fragment's nodes are the resulting body's children.
-export function parseFragment(html: unknown): Node[] {
+// parser nests everything under html/head/body, so the fragment's nodes are the resulting body's children —
+// except in <html> context, where the implied head and body are themselves what the fragment parses to. A
+// sanitizer feature-tests itself by replacing a scratch document's body (`body.outerHTML = "<svg>…"`) and
+// then looking the body up again; stripping the wrapper there leaves it looking at nothing and the whole
+// library never registers.
+export function parseFragment(html: unknown, context?: string): Node[] {
     const scratch: any = {};
     parseHTML(scratch as Document, html);
-    const kids = (scratch.body as Element).childNodes.slice();
+    const host = (context === "html" ? scratch.documentElement : scratch.body) as Element;
+    const kids = host.childNodes.slice();
     for (const k of kids) k.parentNode = null;
     return kids;
 }

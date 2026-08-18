@@ -162,6 +162,50 @@ public class JsDomRendererElementsTests : JsDomRendererTestBase, IClassFixture<J
         Assert.Contains("href=\"/iframe\"", rendered);
     }
 
+    // The frame is same-origin, so it carries a blank document: a RUM beacon builds its loader by writing
+    // into `frame.contentWindow.document` and reads `.open()` off it with no guard, which is a throw that
+    // ends the page's whole inline block when the frame answers no document. Nothing written there is
+    // executed or serialized.
+    [Theory]
+    [InlineData(JsEngine.Jint)]
+    [InlineData(JsEngine.V8)]
+    public async Task JsMode_IframeCarriesAWritableBlankDocument(JsEngine engine)
+    {
+        if (engine == JsEngine.V8)
+            Assert.SkipUnless(V8Support.IsAvailable, V8Support.UnavailableReason);
+
+        const string html = """
+            <html><body><div id="t"></div>
+            <script>
+            var frame = document.createElement('iframe');
+            document.body.appendChild(frame);
+            var inner = frame.contentWindow.document;
+            var threw = 'none';
+            try {
+              inner.open()._l = function () { };
+              inner.write('<bo' + 'dy>');
+              inner.close();
+            } catch (e) { threw = e.message; }
+            var a = document.createElement('a');
+            a.setAttribute('href', '/f?same=' + (inner === frame.contentDocument) +
+                                   '&body=' + !!inner.body +
+                                   '&kept=' + (frame.contentWindow.document === inner) +
+                                   '&threw=' + threw);
+            document.getElementById('t').appendChild(a);
+            </script>
+            </body></html>
+            """;
+
+        var renderer = CreateJsRenderer(engine);
+        var result = await renderer.RenderAsync(Encoding.UTF8.GetBytes(html), "http://localhost:5000/", new HttpClient(), CancellationToken.None);
+        var rendered = Encoding.UTF8.GetString(result);
+
+        Assert.Contains("same=true", rendered);
+        Assert.Contains("body=true", rendered);
+        Assert.Contains("kept=true", rendered);
+        Assert.Contains("threw=none", rendered);
+    }
+
     // Canvas animation libraries (lottie, confetti) mount by grabbing a 2D context synchronously and calling
     // draw methods on it — `canvas.getContext('2d')` then fillRect/measureText/... — so a <canvas> must be a
     // real HTMLCanvasElement with getContext returning a no-op context, not the plain HTMLElement it used to

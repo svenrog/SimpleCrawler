@@ -16,6 +16,15 @@ import { TreeWalker } from "./TreeWalker";
 import { NodeIterator } from "./NodeIterator";
 import { parserRef } from "../html/parserRef";
 import { resolveUrl } from "../url/resolve";
+import { HTMLCollection } from "./HTMLCollection";
+import { createFontFaceSet } from "../browser/fonts";
+import { viewportWidth, viewportHeight } from "../browser/viewport";
+
+function withinViewport(x: unknown, y: unknown): boolean {
+    const px = Number(x);
+    const py = Number(y);
+    return px >= 0 && py >= 0 && px <= viewportWidth() && py <= viewportHeight();
+}
 
 export class Document extends Node {
     documentElement: Element | null = null;
@@ -31,7 +40,10 @@ export class Document extends Node {
     // nothing left "loading" — frameworks that gate on readyState (Next's Flight stream close among them)
     // see "complete" immediately instead of stalling behind a state that never advances.
     readyState: string = "complete";
+    visibilityState: string = "visible";
+    hidden: boolean = false;
     private _cookies = new Map<string, string>();
+    private _fonts: any = null;
 
     constructor(defaultView?: any) {
         super(NodeType.Document);
@@ -172,7 +184,7 @@ export class Document extends Node {
     // init and costs every global it would have registered.
     getElementsByTagName(tag: string): Element[] {
         const name = String(tag).toLowerCase();
-        const out: Node[] = [];
+        const out = new HTMLCollection<Node>();
         if (this.documentElement) {
             if (name === "*" || this.documentElement.localName === name) out.push(this.documentElement);
             collectByTag(this.documentElement, name, out);
@@ -181,7 +193,7 @@ export class Document extends Node {
     }
 
     getElementsByClassName(className: string): Element[] {
-        const out: Node[] = [];
+        const out = new HTMLCollection<Node>();
         if (this.documentElement) {
             if ((this.documentElement as any).classList.contains(String(className))) out.push(this.documentElement);
             collectByClass(this.documentElement, String(className), out);
@@ -191,7 +203,7 @@ export class Document extends Node {
 
     getElementsByName(name: string): Element[] {
         const matches = (e: any): boolean => e.getAttributeInternal("name") === name;
-        const out: Node[] = [];
+        const out = new HTMLCollection<Node>();
         if (this.documentElement) {
             if (matches(this.documentElement)) out.push(this.documentElement);
             collectByPredicate(this.documentElement, matches, out);
@@ -201,6 +213,33 @@ export class Document extends Node {
 
     get scripts(): Element[] {
         return this.getElementsByTagName("script");
+    }
+
+    // The foreground answers: the tab is visible, it has focus, and nothing is focused past the body. Bot
+    // management and session recorders read these during init and dereference what they get, so a missing one
+    // throws instead of taking the backgrounded branch it was written for.
+    hasFocus(): boolean {
+        return true;
+    }
+
+    get activeElement(): Element | null {
+        return this.body || this.documentElement;
+    }
+
+    // No layout, so nothing truly occupies a point. A recorder hit-testing its own cursor trail gets the
+    // element a browser would always have under one, and null outside the viewport — the answer it guards
+    // for already, since a browser returns null there too.
+    elementFromPoint(x: unknown, y: unknown): Element | null {
+        return withinViewport(x, y) ? (this.body || this.documentElement) : null;
+    }
+
+    elementsFromPoint(x: unknown, y: unknown): Element[] {
+        if (!withinViewport(x, y)) return [];
+        return [this.body, this.documentElement].filter((e) => e !== null) as Element[];
+    }
+
+    get fonts(): any {
+        return this._fonts || (this._fonts = createFontFaceSet());
     }
 
     querySelector(sel: string): Element | null {
