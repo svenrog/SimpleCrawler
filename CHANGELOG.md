@@ -23,6 +23,11 @@ Entries before 4.0.0 are condensed to what changed; the reasoning behind each is
   `Window` and `File` constructors.
 - `JsPageTimeoutException`, a `TimeoutException` named for the scope it bounds: a ceiling over the whole page
   has to end the render, while one over a single execution call must not.
+- `BroadcastChannel`, whose peers are the other channels the same render opened on that name. A page keeps a
+  cart, a consent choice or a session in step across tabs through one and constructs it unguarded at module
+  scope, so its absence cost the chunk and everything the chunk defined.
+- `:open` as a real answer, and the rest of the CSS pseudo-classes a single-pass render can never be in
+  (`:hover`, `:focus`, `:valid`, the pseudo-elements) as names that parse and match nothing.
 - The `CSS` namespace object (`CSS.escape`, `CSS.supports`, `CSS.registerProperty`), `insertAdjacentHTML`
   with its element and text siblings, and `document.implementation.createDocument` — each named bare by a
   bundle that never feature-tests it, so each was a certain error inside somebody's init.
@@ -172,6 +177,28 @@ Entries before 4.0.0 are condensed to what changed; the reasoning behind each is
   longer parses as JavaScript. The parser never decoded entities inside these elements, so escaping on the
   way out corrupted what they hold rather than round-tripping it.
 
+- A selector the CSS grammar rejects now throws a `SyntaxError`, where the engine used to match nothing.
+  jQuery decides whether it can use `querySelectorAll` at all by handing it deliberate garbage (`*,:x`,
+  `[s!='']:x`) and watching for the exception; an empty list told it the native engine was buggy, and it fell
+  back to its own for every selector carrying a comma and a colon — which then rejected the plain CSS this
+  engine supports, reported as `unsupported pseudo: hover` from inside the page's own library. The two halves
+  are deliberate: a name outside CSS is invalid, while a pseudo-class that is valid CSS but unsatisfiable
+  here parses and matches nothing, and the names a library defines for itself (`:first`, `:visible`,
+  `:contains`) are rejected so the query goes back to the engine that implements them.
+- A scheme-relative reference (`//host/path`) keeps its own authority and borrows only the base's scheme,
+  instead of being pasted onto the page's origin as a path. A loader that derives its CDN prefix as
+  `"//" + anchor.host` was fetching every chunk from the page's own server, which 404s.
+- `URL` is a live object rather than a snapshot: every component is settable, `searchParams` reports its
+  mutations back into the URL that owns it, and `URLSearchParams` accepts a record, a sequence of pairs and
+  another params list as well as a query string. A page that builds a request as
+  `u.searchParams.set(k, v)` — or from `new URLSearchParams({...})` — was sending the URL it started with, or
+  one with an empty query, and nothing threw to say so. Form-encoding (`+` for a space) is handled on both
+  sides, and an undecodable percent sequence comes back as itself.
+- `element.style` and the `style` attribute are one property, read and written from both directions. They
+  were two disconnected stores: a read of `el.style.display` on an element the markup styled answered `""`,
+  and a write was invisible to `getAttribute("style")` and to the serialized page. An IDL name and a CSS name
+  now resolve to the same property, and a declaration splits on semicolons outside parentheses so a
+  `url(data:...;base64,...)` value no longer truncates the rest.
 - `document.getElementsByTagName`/`getElementsByClassName`/`getElementsByName` include the root element,
   which they searched strictly below. jQuery resolves a tag-only `$("html")` through the first of those, so
   a CMS bundle reading `$("html").attr("lang")` at init got undefined and threw. An *element's* own search

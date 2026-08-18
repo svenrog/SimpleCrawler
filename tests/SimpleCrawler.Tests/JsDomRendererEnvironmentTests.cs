@@ -211,6 +211,60 @@ public class JsDomRendererEnvironmentTests : JsDomRendererTestBase, IClassFixtur
         Assert.Contains("href=\"/ok\"", rendered);
     }
 
+    // element.style and the style attribute are one property, read from both directions. A page reads
+    // `el.style.display` off markup it did not write to decide whether something is already open, and writes
+    // `el.style.height` expecting the attribute — and therefore the serialized page — to carry it. Two
+    // disconnected stores answer both without complaining: the read is "" whatever the markup says, and the
+    // write is invisible to everything that looks at the attribute.
+    [Theory]
+    [InlineData(JsEngine.Jint)]
+    [InlineData(JsEngine.V8)]
+    public async Task JsMode_StyleDeclarationAndTheStyleAttributeAreOneProperty(JsEngine engine)
+    {
+        if (engine == JsEngine.V8)
+            Assert.SkipUnless(V8Support.IsAvailable, V8Support.UnavailableReason);
+
+        const string html = """
+            <html><body>
+            <div id="from-markup" style="display:none;background-color:red">x</div>
+            <script>
+            var marked = document.getElementById('from-markup');
+            var fromMarkup = marked.style.display;
+            // The IDL name and the CSS name are the same property.
+            var camel = marked.style.backgroundColor;
+            marked.style.height = '3px';
+            var written = marked.getAttribute('style').indexOf('height: 3px') >= 0;
+            marked.setAttribute('style', 'left:2px');
+            var afterAttribute = marked.style.left;
+            // A value carrying its own semicolon is one declaration, not two.
+            var url = document.createElement('div');
+            url.setAttribute('style', 'background:url(data:image/svg+xml;base64,AAA);color:blue');
+            var probe = document.createElement('a');
+            probe.setAttribute('href', '/probe'
+              + '?fromMarkup=' + fromMarkup
+              + '&camel=' + camel
+              + '&written=' + written
+              + '&afterAttribute=' + afterAttribute
+              + '&afterSemicolon=' + url.style.color);
+            document.body.appendChild(probe);
+            </script>
+            </body></html>
+            """;
+
+        var renderer = CreateJsRenderer(engine);
+        var result = await renderer.RenderAsync(
+            Encoding.UTF8.GetBytes(html), "http://localhost:5000/", new HttpClient(), TestContext.Current.CancellationToken);
+        var rendered = Encoding.UTF8.GetString(result);
+
+        Assert.Contains("fromMarkup=none", rendered);
+        Assert.Contains("camel=red", rendered);
+        Assert.Contains("written=true", rendered);
+        Assert.Contains("afterAttribute=2px", rendered);
+        Assert.Contains("afterSemicolon=blue", rendered);
+        // The write reached the serialized page, not just the declaration.
+        Assert.Contains("left:2px", rendered);
+    }
+
     // Viewport: the JS DOM reports the configured screen size (default desktop 1920x1080) through
     // window.innerWidth/screen/documentElement.clientWidth, and matchMedia evaluates width queries against it
     // — so a responsive bundle takes its desktop branch. A mobile override flips every signal, proving both

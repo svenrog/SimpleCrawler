@@ -237,6 +237,48 @@ public class JsDomRendererSdkGlobalsTests : JsDomRendererTestBase, IClassFixture
         Assert.Contains("data-l=\"PING-1\"", rendered);
     }
 
+    // A page keeps its tabs in step over a BroadcastChannel — a cart, a consent choice, a signed-in session —
+    // and constructs one unguarded at module scope, so its absence is a ReferenceError that costs the chunk
+    // and everything it defines. One render is one context: the peers are the other channels this page opened
+    // on the same name, and delivery is asynchronous and never to the sender.
+    [Theory]
+    [InlineData(JsEngine.Jint)]
+    [InlineData(JsEngine.V8)]
+    public async Task JsMode_BroadcastChannel_DeliversToItsPeersAndNotToItself(JsEngine engine)
+    {
+        if (engine == JsEngine.V8)
+            Assert.SkipUnless(V8Support.IsAvailable, V8Support.UnavailableReason);
+
+        const string html = """
+            <html><body><div id="t"></div>
+            <script>
+            var t = document.getElementById('t');
+            try {
+              var sender = new BroadcastChannel('cart');
+              var peer = new BroadcastChannel('cart');
+              var other = new BroadcastChannel('consent');
+              sender.onmessage = function () { t.setAttribute('data-self', '1'); };
+              peer.addEventListener('message', function (e) { t.setAttribute('data-peer', String(e.data)); });
+              other.onmessage = function () { t.setAttribute('data-other', '1'); };
+              t.setAttribute('data-name', peer.name);
+              sender.postMessage('SYNC');
+            } catch (err) { t.setAttribute('data-threw', '1'); }
+            </script>
+            </body></html>
+            """;
+
+        var renderer = CreateJsRenderer(engine);
+        var result = await renderer.RenderAsync(
+            Encoding.UTF8.GetBytes(html), "http://localhost:5000/", new HttpClient(), CancellationToken.None);
+        var rendered = Encoding.UTF8.GetString(result);
+
+        Assert.DoesNotContain("data-threw=\"1\"", rendered);
+        Assert.Contains("data-peer=\"SYNC\"", rendered);
+        Assert.Contains("data-name=\"cart\"", rendered);
+        Assert.DoesNotContain("data-self=\"1\"", rendered);
+        Assert.DoesNotContain("data-other=\"1\"", rendered);
+    }
+
     // The quirksmode-descended browser sniffer chat and consent widgets still ship: it indexes
     // navigator.appVersion whenever userAgent yielded no version (always, here) and walks navigator.plugins by
     // index, both unguarded. A missing one is a TypeError that aborts the chunk carrying it — observed taking

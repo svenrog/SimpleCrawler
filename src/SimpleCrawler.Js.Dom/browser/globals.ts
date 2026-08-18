@@ -37,6 +37,7 @@ import { AbortSignal } from "../network/types/AbortSignal";
 import { XMLHttpRequestEventTarget } from "../network/XMLHttpRequestEventTarget";
 import { XMLHttpRequestStub } from "../network/XMLHttpRequestStub";
 import { fetchStub } from "../network/fetchStub";
+import { BroadcastChannel } from "./BroadcastChannel";
 import { MessageChannel, MessagePort } from "./MessageChannel";
 import { Storage, createStorage } from "./Storage";
 import { performance } from "./Performance";
@@ -255,6 +256,7 @@ export function installDOM(global: any): void {
     global.XMLHttpRequest = global.XMLHttpRequest || XMLHttpRequestStub;
     global.fetch = global.fetch || fetchStub;
     global.MessageChannel = global.MessageChannel || MessageChannel;
+    global.BroadcastChannel = global.BroadcastChannel || BroadcastChannel;
     global.MessagePort = global.MessagePort || MessagePort;
     // window.postMessage is called bare (unguarded) by SDKs handing a MessageChannel port to a peer — a
     // reCAPTCHA worker handshake does `postMessage(msg, [channel.port2])` during init, so its absence is a

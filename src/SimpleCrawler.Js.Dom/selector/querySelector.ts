@@ -1,6 +1,7 @@
 import type { Node } from "../dom/Node";
 import { NodeType } from "../types/NodeType";
 import { NodeList } from "../dom/NodeList";
+import { DOMException } from "../browser/DOMException";
 
 type SimpleKind = "type" | "universal" | "id" | "class" | "attr" | "pseudo";
 
@@ -26,15 +27,13 @@ interface Step {
 type Complex = Step[];
 
 // A selector string is parsed once and matched many times — event delegation runs the same `.matches('.x')`
-// against every node it walks — so the parse is memoized. `null` means a selector this engine cannot
-// represent; it matches nothing rather than throwing, because a page that guards nothing must not lose its
-// whole bundle to a selector we do not model.
+// against every node it walks — so the parse is memoized. `null` is a selector no CSS parser accepts, and
+// every entry point throws on it.
 const _cache = new Map<string, Complex[] | null>();
 
 export function querySelectorAll(root: Node, sel: string): Node[] {
     const out = new NodeList<Node>();
-    const list = parseList(String(sel));
-    if (!list) return out;
+    const list = parseOrThrow(String(sel));
 
     // The root is the query's :scope but never a candidate itself — a browser's qSA only ever answers
     // descendants, so an element whose own class matches must not come back from its own query.
@@ -46,7 +45,7 @@ export function querySelectorAll(root: Node, sel: string): Node[] {
     return out;
 
     function walk(n: Node): void {
-        if (n.nodeType === NodeType.Element && matchesAny(n as any, list!, scope)) out.push(n);
+        if (n.nodeType === NodeType.Element && matchesAny(n as any, list, scope)) out.push(n);
         for (const c of n.childNodes) walk(c);
     }
 }
@@ -55,8 +54,22 @@ export function querySelectorAll(root: Node, sel: string): Node[] {
 // are matched right-to-left from the candidate, so an ancestor or sibling clause is a real constraint rather
 // than the ignored prefix it used to be.
 export function matchesSelector(el: any, selector: string): boolean {
-    const list = parseList(String(selector));
-    return !!list && matchesAny(el, list, null);
+    return matchesAny(el, parseOrThrow(String(selector)), null);
+}
+
+// A selector outside CSS is a SyntaxError, and libraries read the throw as an answer: jQuery decides whether
+// it can trust querySelectorAll by handing it deliberate garbage ("*,:x", "[s!='']:x") and watching for the
+// exception. Answering those with an empty list instead tells it the native engine is broken, and it falls
+// back to its own — which then rejects the plain CSS this one supports. Matching nothing is reserved for
+// selectors that *are* valid CSS and simply cannot match here.
+function parseOrThrow(selector: string): Complex[] {
+    const list = parseList(selector);
+    if (!list) {
+        throw new DOMException(
+            "Failed to execute 'querySelectorAll': '" + selector + "' is not a valid selector.", "SyntaxError");
+    }
+
+    return list;
 }
 
 function matchesAny(el: any, list: Complex[], scope: any): boolean {
@@ -141,11 +154,38 @@ function matchesPseudo(el: any, simple: Simple, scope: any): boolean {
         case "any-link":
         case "link": return (el.localName === "a" || el.localName === "area") && el.hasAttribute("href");
         case "defined": return true;
-        // Everything a single-pass render can never be in: no pointer, no focus, no navigation — and the
-        // pseudo-elements, which match no element anywhere. A browser answers false to all of these too.
+        case "open": return el.hasAttribute("open");
+        // The rest of _validPseudos: valid CSS this render can never be in — no pointer, no focus, no
+        // navigation, no user input — and the pseudo-elements, which match no element anywhere.
         default: return false;
     }
 }
+
+// Every pseudo-class and pseudo-element this engine accepts. The ones matchesPseudo answers are above; the
+// rest are valid CSS that a single-pass render can never satisfy, so they parse and match nothing. A name
+// outside this list makes the whole selector invalid, which is what a browser does and what a library reads
+// as its answer — and it is why the names a library defines for *itself* (":first", ":visible",
+// ":contains", jQuery's positional set) are deliberately absent: rejecting them hands the query back to the
+// engine that implements them, where accepting them would answer an empty list a page believes.
+const _validPseudos = new Set([
+    // answered by matchesPseudo
+    "not", "is", "where", "matches", "-webkit-any", "-moz-any", "has", "scope", "root", "empty",
+    "first-child", "last-child", "only-child", "first-of-type", "last-of-type", "only-of-type",
+    "nth-child", "nth-last-child", "nth-of-type", "nth-last-of-type", "checked", "disabled", "enabled",
+    "required", "optional", "read-only", "read-write", "any-link", "link", "defined", "open",
+    // state this render is never in
+    "hover", "active", "focus", "focus-visible", "focus-within", "target", "target-within", "visited",
+    "local-link", "current", "past", "future", "playing", "paused", "seeking", "buffering", "stalled",
+    "muted", "volume-locked", "fullscreen", "modal", "popover-open", "picture-in-picture", "autofill",
+    "user-invalid", "user-valid", "valid", "invalid", "in-range", "out-of-range", "placeholder-shown",
+    "blank", "default", "indeterminate", "closed",
+    // valid, but describing a tree or a locale this engine does not model
+    "lang", "dir", "host", "host-context", "nth-col", "nth-last-col", "state", "popover", "has-slotted",
+    // pseudo-elements, including the four the CSS2 single-colon syntax still allows
+    "before", "after", "first-line", "first-letter", "backdrop", "placeholder", "marker", "selection",
+    "file-selector-button", "grammar-error", "spelling-error", "target-text", "highlight", "part",
+    "slotted", "cue", "cue-region", "view-transition", "details-content", "__never",
+]);
 
 function matchesOf(el: any, simple: Simple, scope: any): boolean {
     return !simple.list || matchesAny(el, simple.list, scope);
@@ -277,6 +317,10 @@ function parseList(selector: string): Complex[] | null {
 }
 
 function parseSelectorList(selector: string): Complex[] | null {
+    // A backslash escapes the next character, but a newline is not a character it can escape — the sequence
+    // is invalid, and a library probes with it to find out whether the engine says so.
+    if (/\\[\r\n\f]/.test(selector)) return null;
+
     const out: Complex[] = [];
     for (const part of splitTopLevel(selector, ",")) {
         const complex = parseComplex(part);
@@ -366,7 +410,7 @@ function parseCompound(text: string): Simple[] | null {
         if (ch === "#" || ch === ".") {
             const start = ++i;
             i = identEnd(text, i);
-            if (i === start) return null;
+            if (i === start || !isIdent(text.slice(start, i))) return null;
             out.push({ kind: ch === "#" ? "id" : "class", name: unescapeIdent(text.slice(start, i)) });
             continue;
         }
@@ -402,7 +446,7 @@ function parseCompound(text: string): Simple[] | null {
 
         const start = i;
         i = identEnd(text, i);
-        if (i === start) return null;
+        if (i === start || !isIdent(text.slice(start, i))) return null;
         out.push({ kind: "type", name: unescapeIdent(text.slice(start, i)).toLowerCase() });
     }
     return out.length ? out : null;
@@ -426,6 +470,9 @@ function parsePseudo(name: string, arg: string): Simple | null {
             : null;
         return of ? { kind: "pseudo", name, step, list: of } : { kind: "pseudo", name, step };
     }
+    // A vendor-prefixed name is whatever the engine that owns it says; treating the set as open-ended keeps a
+    // page that writes ":-moz-focusring" in a query from losing the query.
+    if (!_validPseudos.has(name) && name.charAt(0) !== "-") return null;
     return { kind: "pseudo", name, value: arg };
 }
 
@@ -444,7 +491,7 @@ function parseStep(text: string): { a: number; b: number } | null {
 
 function parseAttr(text: string): Simple | null {
     const m = text.match(/^\s*([^\s~^$*|=\]]+)\s*(?:([~^$*|]?=)\s*(?:"([^"]*)"|'([^']*)'|([^\s\]]*))\s*([iIsS])?\s*)?$/);
-    if (!m) return null;
+    if (!m || !isIdent(m[1])) return null;
     return {
         kind: "attr",
         name: unescapeIdent(m[1]),
@@ -483,6 +530,13 @@ function identEnd(text: string, from: number): number {
         i++;
     }
     return Math.min(i, text.length);
+}
+
+// A CSS identifier is word characters, hyphens, anything non-ASCII, a namespace bar, and an escape of any
+// single character. A run of anything else is not an identifier and the selector holding it is invalid —
+// which is the answer a library wants when it probes with a shape no parser accepts.
+function isIdent(raw: string): boolean {
+    return /^(?:[\w\u00A0-\uFFFF|-]|\\[\s\S])+$/.test(raw);
 }
 
 function unescapeIdent(text: string): string {

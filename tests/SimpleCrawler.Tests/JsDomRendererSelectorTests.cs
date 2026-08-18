@@ -94,14 +94,72 @@ public class JsDomRendererSelectorTests : JsDomRendererTestBase, IClassFixture<J
         Assert.Contains("scoped=2", rendered);
     }
 
-    private async Task<string> RenderAsync(JsEngine engine)
+    // What a selector engine answers to garbage is a feature test, not an edge case: jQuery decides whether to
+    // use querySelectorAll at all by handing it "*,:x" and watching for the throw, and reads an empty list as
+    // "this engine is broken" — after which every selector carrying a comma and a colon goes to its own
+    // matcher, which then rejects the plain CSS this one supports. The two halves have to hold together: a
+    // name outside CSS is a SyntaxError, and a pseudo-class that is real CSS but unsatisfiable here answers
+    // with nothing.
+    [Theory]
+    [InlineData(JsEngine.Jint)]
+    [InlineData(JsEngine.V8)]
+    public async Task JsMode_AnInvalidSelectorThrowsAndAnUnsatisfiableOneMatchesNothing(JsEngine engine)
+    {
+        const string html = """
+            <!doctype html><html><body>
+            <div class="wrap md:flex"><p class="a">1</p><details open><summary>s</summary></details></div>
+            <script>
+            function verdict(sel) {
+              try { return String(document.querySelectorAll(sel).length); } catch (e) { return e.name; }
+            }
+            var probe = document.createElement('a');
+            probe.setAttribute('href', '/probe'
+              + '?postComma=' + verdict('*,:x')
+              + '&unknownPseudo=' + verdict(':x')
+              + '&libraryPseudo=' + verdict(':contains(x)')
+              + '&notAnIdentifier=' + verdict('<<')
+              + '&escapedNewline=' + verdict('\\\f')
+              + '&hover=' + verdict(':hover')
+              + '&pseudoElement=' + verdict('p::before')
+              + '&vendor=' + verdict(':-moz-focusring')
+              + '&open=' + verdict('details:open')
+              + '&escapedColon=' + verdict('.md\\:flex')
+              + '&plain=' + verdict('.wrap > p.a')
+              + '&matches=' + (function () {
+                  try { return String(document.body.matches(':visible')); } catch (e) { return e.name; }
+                })());
+            document.body.appendChild(probe);
+            </script>
+            </body></html>
+            """;
+
+        var rendered = await RenderAsync(engine, html);
+
+        Assert.Contains("postComma=SyntaxError", rendered);
+        Assert.Contains("unknownPseudo=SyntaxError", rendered);
+        Assert.Contains("libraryPseudo=SyntaxError", rendered);
+        Assert.Contains("notAnIdentifier=SyntaxError", rendered);
+        Assert.Contains("escapedNewline=SyntaxError", rendered);
+        // Element.matches is the other half of the same probe, and jQuery blacklists it the same way.
+        Assert.Contains("matches=SyntaxError", rendered);
+        Assert.Contains("hover=0", rendered);
+        Assert.Contains("pseudoElement=0", rendered);
+        Assert.Contains("vendor=0", rendered);
+        Assert.Contains("open=1", rendered);
+        Assert.Contains("escapedColon=1", rendered);
+        Assert.Contains("plain=1", rendered);
+    }
+
+    private Task<string> RenderAsync(JsEngine engine) => RenderAsync(engine, _html);
+
+    private async Task<string> RenderAsync(JsEngine engine, string html)
     {
         if (engine == JsEngine.V8)
             Assert.SkipUnless(V8Support.IsAvailable, V8Support.UnavailableReason);
 
         var renderer = CreateJsRenderer(engine);
         var result = await renderer.RenderAsync(
-            Encoding.UTF8.GetBytes(_html), "https://example.test/", new HttpClient(), TestContext.Current.CancellationToken);
+            Encoding.UTF8.GetBytes(html), "https://example.test/", new HttpClient(), TestContext.Current.CancellationToken);
         return Encoding.UTF8.GetString(result);
     }
 }

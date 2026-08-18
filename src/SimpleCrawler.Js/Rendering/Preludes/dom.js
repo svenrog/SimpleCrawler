@@ -356,40 +356,113 @@
   };
 
   // css/CSSStyleDeclaration.ts
+  function canonical(name) {
+    const text = String(name);
+    if (text.slice(0, 2) === "--") return text;
+    return text.replace(/[A-Z]/g, (c) => "-" + c.toLowerCase());
+  }
+  function declarations(text) {
+    const out = [];
+    let depth = 0;
+    let quote = "";
+    let start = 0;
+    for (let i = 0; i < text.length; i++) {
+      const ch = text[i];
+      if (quote) {
+        if (ch === quote) quote = "";
+        continue;
+      }
+      if (ch === '"' || ch === "'") quote = ch;
+      else if (ch === "(") depth++;
+      else if (ch === ")") {
+        if (depth > 0) depth--;
+      } else if (ch === ";" && depth === 0) {
+        out.push(text.slice(start, i));
+        start = i + 1;
+      }
+    }
+    out.push(text.slice(start));
+    return out;
+  }
   function parseCss(text, store) {
-    const parts = String(text).split(";");
-    for (const part of parts) {
+    for (const part of declarations(String(text))) {
       const idx = part.indexOf(":");
-      if (idx > 0) store[part.slice(0, idx).trim()] = part.slice(idx + 1).trim();
+      if (idx > 0) store[canonical(part.slice(0, idx).trim())] = part.slice(idx + 1).trim();
     }
   }
-  function createStyleDeclaration() {
+  function createStyleDeclaration(owner) {
     const store = {};
+    let attribute = null;
+    const serialize = () => {
+      const out = [];
+      for (const p in store) if (Object.prototype.hasOwnProperty.call(store, p)) out.push(p + ": " + store[p]);
+      return out.join("; ");
+    };
+    const pull = () => {
+      if (!owner) return;
+      const current = owner.getAttributeInternal("style");
+      if (current === attribute) return;
+      for (const p in store) if (Object.prototype.hasOwnProperty.call(store, p)) delete store[p];
+      if (current) parseCss(current, store);
+      attribute = current;
+    };
+    const push = () => {
+      if (!owner) return;
+      const text = serialize();
+      attribute = text || null;
+      if (text) owner.setAttributeInternal("style", text);
+      else owner.removeAttributeInternal("style");
+    };
     const handler = {
       get: (_t, k) => {
         if (k === "setProperty") return (n, v2) => {
-          store[n] = v2;
+          pull();
+          store[canonical(n)] = String(v2);
+          push();
         };
         if (k === "removeProperty") return (n) => {
-          delete store[n];
+          pull();
+          delete store[canonical(n)];
+          push();
         };
-        if (k === "getPropertyValue") return (n) => store[n] || "";
-        if (k === "cssText") {
-          const out = [];
-          for (const p in store) if (Object.prototype.hasOwnProperty.call(store, p)) out.push(p + ": " + store[p]);
-          return out.join("; ");
+        if (k === "getPropertyValue") return (n) => {
+          pull();
+          return store[canonical(n)] || "";
+        };
+        if (k === "getPropertyPriority") return () => "";
+        if (k === "item") return (i) => {
+          pull();
+          return Object.keys(store)[i] || "";
+        };
+        if (k === "length") {
+          pull();
+          return Object.keys(store).length;
         }
-        if (k === "_store") return store;
-        const v = store[k];
+        if (k === "cssText") {
+          pull();
+          return serialize();
+        }
+        if (k === "_store") {
+          pull();
+          return store;
+        }
+        if (typeof k !== "string") return void 0;
+        pull();
+        const v = store[canonical(k)];
         return v != null ? v : "";
       },
       set: (_t, k, v) => {
+        if (typeof k !== "string") return true;
+        pull();
         if (k === "cssText") {
-          for (const p in store) delete store[p];
+          for (const p in store) if (Object.prototype.hasOwnProperty.call(store, p)) delete store[p];
           if (v) parseCss(v, store);
-          return true;
+        } else if (v == null || v === "") {
+          delete store[canonical(k)];
+        } else {
+          store[canonical(k)] = String(v);
         }
-        store[k] = v;
+        push();
         return true;
       },
       // A real style object answers `in` for every CSS property it supports, set or not, and for both the
@@ -402,7 +475,18 @@
       // for unknown names too, where a real browser answers false; that mirrors the get trap, which already
       // returns "" for any key rather than shipping a CSS-property table, and feature probes ask about real
       // (possibly prefixed/future) properties, never deliberate non-properties.
-      has: () => true
+      has: () => true,
+      ownKeys: () => {
+        pull();
+        return Object.keys(store);
+      },
+      getOwnPropertyDescriptor: (_t, k) => {
+        pull();
+        if (typeof k !== "string") return void 0;
+        const key = canonical(k);
+        if (!Object.prototype.hasOwnProperty.call(store, key)) return void 0;
+        return { value: store[key], writable: true, enumerable: true, configurable: true };
+      }
     };
     return new Proxy({}, handler);
   }
@@ -414,12 +498,68 @@
     }
   };
 
+  // browser/DOMException.ts
+  var _legacyCodes = {
+    IndexSizeError: 1,
+    HierarchyRequestError: 3,
+    WrongDocumentError: 4,
+    InvalidCharacterError: 5,
+    NoModificationAllowedError: 7,
+    NotFoundError: 8,
+    NotSupportedError: 9,
+    InUseAttributeError: 10,
+    InvalidStateError: 11,
+    SyntaxError: 12,
+    InvalidModificationError: 13,
+    NamespaceError: 14,
+    InvalidAccessError: 15,
+    SecurityError: 18,
+    NetworkError: 19,
+    AbortError: 20,
+    URLMismatchError: 21,
+    QuotaExceededError: 22,
+    TimeoutError: 23,
+    InvalidNodeTypeError: 24,
+    DataCloneError: 25
+  };
+  var DOMException = class extends Error {
+    constructor(message, name) {
+      super(message == null ? "" : String(message));
+      this.name = name == null ? "Error" : String(name);
+      this.code = _legacyCodes[this.name] || 0;
+    }
+  };
+  DOMException.INDEX_SIZE_ERR = 1;
+  DOMException.DOMSTRING_SIZE_ERR = 2;
+  DOMException.HIERARCHY_REQUEST_ERR = 3;
+  DOMException.WRONG_DOCUMENT_ERR = 4;
+  DOMException.INVALID_CHARACTER_ERR = 5;
+  DOMException.NO_DATA_ALLOWED_ERR = 6;
+  DOMException.NO_MODIFICATION_ALLOWED_ERR = 7;
+  DOMException.NOT_FOUND_ERR = 8;
+  DOMException.NOT_SUPPORTED_ERR = 9;
+  DOMException.INUSE_ATTRIBUTE_ERR = 10;
+  DOMException.INVALID_STATE_ERR = 11;
+  DOMException.SYNTAX_ERR = 12;
+  DOMException.INVALID_MODIFICATION_ERR = 13;
+  DOMException.NAMESPACE_ERR = 14;
+  DOMException.INVALID_ACCESS_ERR = 15;
+  DOMException.VALIDATION_ERR = 16;
+  DOMException.TYPE_MISMATCH_ERR = 17;
+  DOMException.SECURITY_ERR = 18;
+  DOMException.NETWORK_ERR = 19;
+  DOMException.ABORT_ERR = 20;
+  DOMException.URL_MISMATCH_ERR = 21;
+  DOMException.QUOTA_EXCEEDED_ERR = 22;
+  DOMException.TIMEOUT_ERR = 23;
+  DOMException.INVALID_NODE_TYPE_ERR = 24;
+  DOMException.DATA_CLONE_ERR = 25;
+
   // selector/querySelector.ts
   var _cache = /* @__PURE__ */ new Map();
   function querySelectorAll(root, sel) {
     const out = new NodeList();
-    const list = parseList(String(sel));
-    if (!list) return out;
+    const list = parseOrThrow(String(sel));
     const scope = root.nodeType === 1 /* Element */ ? root : null;
     const documentElement = root.documentElement;
     if (documentElement) walk(documentElement);
@@ -431,8 +571,17 @@
     }
   }
   function matchesSelector(el, selector) {
-    const list = parseList(String(selector));
-    return !!list && matchesAny(el, list, null);
+    return matchesAny(el, parseOrThrow(String(selector)), null);
+  }
+  function parseOrThrow(selector) {
+    const list = parseList(selector);
+    if (!list) {
+      throw new DOMException(
+        "Failed to execute 'querySelectorAll': '" + selector + "' is not a valid selector.",
+        "SyntaxError"
+      );
+    }
+    return list;
   }
   function matchesAny(el, list, scope) {
     for (const complex of list) {
@@ -542,12 +691,115 @@
         return (el.localName === "a" || el.localName === "area") && el.hasAttribute("href");
       case "defined":
         return true;
-      // Everything a single-pass render can never be in: no pointer, no focus, no navigation — and the
-      // pseudo-elements, which match no element anywhere. A browser answers false to all of these too.
+      case "open":
+        return el.hasAttribute("open");
+      // The rest of _validPseudos: valid CSS this render can never be in — no pointer, no focus, no
+      // navigation, no user input — and the pseudo-elements, which match no element anywhere.
       default:
         return false;
     }
   }
+  var _validPseudos = /* @__PURE__ */ new Set([
+    // answered by matchesPseudo
+    "not",
+    "is",
+    "where",
+    "matches",
+    "-webkit-any",
+    "-moz-any",
+    "has",
+    "scope",
+    "root",
+    "empty",
+    "first-child",
+    "last-child",
+    "only-child",
+    "first-of-type",
+    "last-of-type",
+    "only-of-type",
+    "nth-child",
+    "nth-last-child",
+    "nth-of-type",
+    "nth-last-of-type",
+    "checked",
+    "disabled",
+    "enabled",
+    "required",
+    "optional",
+    "read-only",
+    "read-write",
+    "any-link",
+    "link",
+    "defined",
+    "open",
+    // state this render is never in
+    "hover",
+    "active",
+    "focus",
+    "focus-visible",
+    "focus-within",
+    "target",
+    "target-within",
+    "visited",
+    "local-link",
+    "current",
+    "past",
+    "future",
+    "playing",
+    "paused",
+    "seeking",
+    "buffering",
+    "stalled",
+    "muted",
+    "volume-locked",
+    "fullscreen",
+    "modal",
+    "popover-open",
+    "picture-in-picture",
+    "autofill",
+    "user-invalid",
+    "user-valid",
+    "valid",
+    "invalid",
+    "in-range",
+    "out-of-range",
+    "placeholder-shown",
+    "blank",
+    "default",
+    "indeterminate",
+    "closed",
+    // valid, but describing a tree or a locale this engine does not model
+    "lang",
+    "dir",
+    "host",
+    "host-context",
+    "nth-col",
+    "nth-last-col",
+    "state",
+    "popover",
+    "has-slotted",
+    // pseudo-elements, including the four the CSS2 single-colon syntax still allows
+    "before",
+    "after",
+    "first-line",
+    "first-letter",
+    "backdrop",
+    "placeholder",
+    "marker",
+    "selection",
+    "file-selector-button",
+    "grammar-error",
+    "spelling-error",
+    "target-text",
+    "highlight",
+    "part",
+    "slotted",
+    "cue",
+    "cue-region",
+    "view-transition",
+    "details-content",
+    "__never"
+  ]);
   function matchesOf(el, simple, scope) {
     return !simple.list || matchesAny(el, simple.list, scope);
   }
@@ -666,6 +918,7 @@
     return parsed;
   }
   function parseSelectorList(selector) {
+    if (/\\[\r\n\f]/.test(selector)) return null;
     const out = [];
     for (const part of splitTopLevel(selector, ",")) {
       const complex = parseComplex(part);
@@ -764,7 +1017,7 @@
       if (ch === "#" || ch === ".") {
         const start2 = ++i;
         i = identEnd(text, i);
-        if (i === start2) return null;
+        if (i === start2 || !isIdent(text.slice(start2, i))) return null;
         out.push({ kind: ch === "#" ? "id" : "class", name: unescapeIdent(text.slice(start2, i)) });
         continue;
       }
@@ -799,7 +1052,7 @@
       }
       const start = i;
       i = identEnd(text, i);
-      if (i === start) return null;
+      if (i === start || !isIdent(text.slice(start, i))) return null;
       out.push({ kind: "type", name: unescapeIdent(text.slice(start, i)).toLowerCase() });
     }
     return out.length ? out : null;
@@ -817,6 +1070,7 @@
       const of = parts.length >= 3 && parts[1].toLowerCase() === "of" ? parseSelectorList(parts.slice(2).join(" ")) : null;
       return of ? { kind: "pseudo", name, step, list: of } : { kind: "pseudo", name, step };
     }
+    if (!_validPseudos.has(name) && name.charAt(0) !== "-") return null;
     return { kind: "pseudo", name, value: arg };
   }
   function parseStep(text) {
@@ -833,7 +1087,7 @@
   }
   function parseAttr(text) {
     const m = text.match(/^\s*([^\s~^$*|=\]]+)\s*(?:([~^$*|]?=)\s*(?:"([^"]*)"|'([^']*)'|([^\s\]]*))\s*([iIsS])?\s*)?$/);
-    if (!m) return null;
+    if (!m || !isIdent(m[1])) return null;
     return {
       kind: "attr",
       name: unescapeIdent(m[1]),
@@ -876,6 +1130,9 @@
       i++;
     }
     return Math.min(i, text.length);
+  }
+  function isIdent(raw) {
+    return /^(?:[\w\u00A0-\uFFFF|-]|\\[\s\S])+$/.test(raw);
   }
   function unescapeIdent(text) {
     return text.indexOf("\\") < 0 ? text : text.replace(/\\(.)/g, "$1");
@@ -1392,7 +1649,7 @@
       this.tagName = this.localName.toUpperCase();
       this.nodeName = this.tagName;
       this.namespaceURI = ns || "http://www.w3.org/1999/xhtml";
-      this.style = createStyleDeclaration();
+      this.style = createStyleDeclaration(this);
       hideOwnFields(this);
     }
     // Shadow DOM lives on Element, not on HTMLElement: a page that tests support reads
@@ -2063,20 +2320,18 @@
     const input = String(u ?? "");
     if (/^[a-zA-Z][\w+.-]*:\/\//.test(input)) return input;
     const b = String(base || currentLocation()?.href || "http://localhost/");
-    const bm = b.match(/^([a-zA-Z][\w+.-]*:\/\/[^/?#]*)([^?#]*)/) || [];
-    const origin = bm[1] || "http://localhost";
+    const bm = b.match(/^([a-zA-Z][\w+.-]*:)\/\/([^/?#]*)([^?#]*)/) || [];
+    const scheme = bm[1] || "http:";
+    const origin = bm[2] ? scheme + "//" + bm[2] : "http://localhost";
+    if (input.slice(0, 2) === "//") return scheme + input;
     if (input.charAt(0) === "/") return origin + input;
-    if (input.charAt(0) === "#" || input.charAt(0) === "?") return origin + (bm[2] || "/") + input;
-    const dir = (bm[2] || "/").replace(/[^/]*$/, "");
+    if (input.charAt(0) === "#" || input.charAt(0) === "?") return origin + (bm[3] || "/") + input;
+    const dir = (bm[3] || "/").replace(/[^/]*$/, "");
     return origin + dir + input;
   }
   function applyUrl(u) {
     try {
-      let abs = u;
-      if (u.indexOf("http") !== 0) {
-        const base = currentLocation()?.origin || "http://localhost";
-        abs = u.charAt(0) === "/" ? base + u : base + "/" + u;
-      }
+      const abs = resolveUrl(u);
       const m = abs.match(/^(https?:)\/\/([^/?#]+)([^?#]*)(\?[^#]*)?(#.*)?$/);
       if (!m) return;
       const loc = currentLocation();
@@ -2098,15 +2353,14 @@
   var URLSearchParams = class {
     constructor(init) {
       this.pairs = [];
-      let src = init;
-      if (typeof src === "string" && src.charAt(0) === "?") src = src.slice(1);
-      if (typeof src === "string" && src) {
-        src.split("&").forEach((p) => {
-          if (!p) return;
-          const i = p.indexOf("=");
-          this.pairs.push(i < 0 ? [decodeURIComponent(p), ""] : [decodeURIComponent(p.slice(0, i)), decodeURIComponent(p.slice(i + 1))]);
-        });
-      }
+      // Set by the URL that owns this list, so a mutation reaches the URL's own serialization. The spec calls
+      // these the update steps; without them `u.searchParams.set(k, v)` writes into an object nothing reads,
+      // and the request the page then makes carries the query it had before.
+      this.onchange = null;
+      this.reset(init);
+    }
+    get size() {
+      return this.pairs.length;
     }
     get(k) {
       for (const pair of this.pairs) if (pair[0] === k) return pair[1];
@@ -2119,22 +2373,41 @@
       return this.get(k) !== null;
     }
     set(k, v) {
-      this.delete(k);
-      this.pairs.push([k, String(v)]);
+      const key = String(k);
+      const out = [];
+      let replaced = false;
+      for (const pair of this.pairs) {
+        if (pair[0] !== key) out.push(pair);
+        else if (!replaced) {
+          out.push([key, String(v)]);
+          replaced = true;
+        }
+      }
+      if (!replaced) out.push([key, String(v)]);
+      this.pairs = out;
+      this.changed();
     }
     append(k, v) {
-      this.pairs.push([k, String(v)]);
+      this.pairs.push([String(k), String(v)]);
+      this.changed();
     }
     delete(k) {
-      this.pairs = this.pairs.filter((p) => p[0] !== k);
+      const key = String(k);
+      this.pairs = this.pairs.filter((p) => p[0] !== key);
+      this.changed();
     }
-    forEach(cb) {
-      this.pairs.forEach((p) => cb(p[1], p[0]));
+    sort() {
+      this.pairs.sort((a, b) => a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0);
+      this.changed();
+    }
+    forEach(cb, thisArg) {
+      this.pairs.slice().forEach((p) => cb.call(thisArg, p[1], p[0]));
     }
     entries() {
       let i = 0;
+      const snapshot = this.pairs.slice();
       const it = {
-        next: () => i < this.pairs.length ? { value: this.pairs[i++], done: false } : { value: void 0, done: true },
+        next: () => i < snapshot.length ? { value: snapshot[i++], done: false } : { value: void 0, done: true },
         [Symbol.iterator]() {
           return this;
         }
@@ -2148,31 +2421,150 @@
       return this.pairs.map((p) => p[1])[Symbol.iterator]();
     }
     toString() {
-      return this.pairs.map((p) => encodeURIComponent(p[0]) + "=" + encodeURIComponent(p[1])).join("&");
+      return this.pairs.map((p) => encode(p[0]) + "=" + encode(p[1])).join("&");
     }
     [Symbol.iterator]() {
       return this.entries();
     }
+    // Replaces the whole list without notifying — the owning URL calls this when its own query is assigned.
+    reset(init) {
+      this.pairs = parseInit(init);
+    }
+    observe(onchange) {
+      this.onchange = onchange;
+    }
+    changed() {
+      if (this.onchange) this.onchange(this.toString());
+    }
   };
+  function parseInit(init) {
+    if (init == null) return [];
+    if (init instanceof URLSearchParams) return Array.from(init);
+    if (typeof init === "string") return parseQuery(init);
+    if (typeof init[Symbol.iterator] === "function") {
+      const out = [];
+      for (const entry of init) {
+        if (entry == null) continue;
+        out.push([String(entry[0]), String(entry[1] == null ? "" : entry[1])]);
+      }
+      return out;
+    }
+    if (typeof init === "object") {
+      return Object.keys(init).map(
+        (k) => [k, String(init[k] == null ? "" : init[k])]
+      );
+    }
+    return parseQuery(String(init));
+  }
+  function parseQuery(text) {
+    const src = text.charAt(0) === "?" ? text.slice(1) : text;
+    const out = [];
+    if (!src) return out;
+    for (const part of src.split("&")) {
+      if (!part) continue;
+      const i = part.indexOf("=");
+      out.push(i < 0 ? [decode(part), ""] : [decode(part.slice(0, i)), decode(part.slice(i + 1))]);
+    }
+    return out;
+  }
+  function decode(text) {
+    try {
+      return decodeURIComponent(text.replace(/\+/g, " "));
+    } catch {
+      return text;
+    }
+  }
+  function encode(text) {
+    return encodeURIComponent(text).replace(/%20/g, "+");
+  }
 
   // url/URL.ts
   var URL = class {
     constructor(url, base) {
-      const abs = resolveUrl(url, base);
-      const m = abs.match(/^([a-zA-Z][\w+.-]*:)\/\/([^/?#]*)([^?#]*)(\?[^#]*)?(#.*)?$/) || [];
-      this.href = abs;
-      this.protocol = m[1] || "";
-      this.host = m[2] || "";
-      this.hostname = (m[2] || "").split(":")[0];
-      this.port = (m[2] || "").split(":")[1] || "";
-      this.pathname = m[3] || "/";
-      this.search = m[4] || "";
-      this.hash = m[5] || "";
-      this.origin = this.protocol + "//" + this.host;
-      this.searchParams = new URLSearchParams(this.search);
+      this._scheme = "";
+      this._host = "";
+      this._path = "/";
+      this._query = "";
+      this._fragment = "";
+      this.assign(resolveUrl(url, base));
+      this.searchParams = new URLSearchParams(this._query);
+      this.searchParams.observe((serialized) => {
+        this._query = serialized ? "?" + serialized : "";
+      });
+    }
+    get href() {
+      return this._scheme + "//" + this._host + this._path + this._query + this._fragment;
+    }
+    set href(value) {
+      this.assign(resolveUrl(value));
+      this.searchParams.reset(this._query);
+    }
+    get protocol() {
+      return this._scheme;
+    }
+    set protocol(value) {
+      const scheme = String(value ?? "").replace(/:*$/, "");
+      if (/^[a-zA-Z][\w+.-]*$/.test(scheme)) this._scheme = scheme + ":";
+    }
+    get host() {
+      return this._host;
+    }
+    set host(value) {
+      const host = String(value ?? "");
+      if (host) this._host = host;
+    }
+    get hostname() {
+      return this._host.split(":")[0];
+    }
+    set hostname(value) {
+      const name = String(value ?? "");
+      if (name) this._host = this.port ? name + ":" + this.port : name;
+    }
+    get port() {
+      return this._host.split(":")[1] || "";
+    }
+    set port(value) {
+      const port = String(value ?? "");
+      this._host = port ? this.hostname + ":" + port : this.hostname;
+    }
+    get pathname() {
+      return this._path;
+    }
+    set pathname(value) {
+      const path = String(value ?? "");
+      this._path = path.charAt(0) === "/" ? path : "/" + path;
+    }
+    get search() {
+      return this._query;
+    }
+    set search(value) {
+      const query = String(value ?? "");
+      this._query = !query ? "" : query.charAt(0) === "?" ? query : "?" + query;
+      this.searchParams.reset(this._query);
+    }
+    get hash() {
+      return this._fragment;
+    }
+    set hash(value) {
+      const hash = String(value ?? "");
+      this._fragment = !hash ? "" : hash.charAt(0) === "#" ? hash : "#" + hash;
+    }
+    get origin() {
+      return this._scheme + "//" + this._host;
     }
     toString() {
       return this.href;
+    }
+    toJSON() {
+      return this.href;
+    }
+    assign(abs) {
+      const m = abs.match(/^([a-zA-Z][\w+.-]*:)\/\/([^/?#]*)([^?#]*)(\?[^#]*)?(#.*)?$/) || [];
+      this._scheme = m[1] || "";
+      this._host = m[2] || "";
+      this._path = m[3] || "/";
+      this._query = m[4] || "";
+      this._fragment = m[5] || "";
     }
   };
 
@@ -4299,6 +4691,45 @@
     return Promise.reject(new TypeError("Failed to fetch"));
   }
 
+  // browser/BroadcastChannel.ts
+  var _channels = {};
+  var BroadcastChannel = class {
+    constructor(name) {
+      this.onmessage = null;
+      this.onmessageerror = null;
+      this.closed = false;
+      this.name = String(name);
+      (_channels[this.name] || (_channels[this.name] = [])).push(this);
+    }
+    postMessage(data) {
+      if (this.closed) return;
+      for (const peer of _channels[this.name] || []) {
+        if (peer === this || peer.closed) continue;
+        enqueue(() => {
+          if (peer.onmessage) peer.onmessage({ data, type: "message", target: peer });
+        });
+      }
+    }
+    close() {
+      this.closed = true;
+      const peers = _channels[this.name];
+      if (!peers) return;
+      const at = peers.indexOf(this);
+      if (at >= 0) peers.splice(at, 1);
+    }
+    addEventListener(type, cb) {
+      if (type === "message") this.onmessage = cb;
+      else if (type === "messageerror") this.onmessageerror = cb;
+    }
+    removeEventListener(type, cb) {
+      if (type === "message" && this.onmessage === cb) this.onmessage = null;
+      else if (type === "messageerror" && this.onmessageerror === cb) this.onmessageerror = null;
+    }
+    dispatchEvent() {
+      return true;
+    }
+  };
+
   // browser/MessageChannel.ts
   var MessagePort = class {
     constructor() {
@@ -4855,63 +5286,6 @@
     }
   };
 
-  // browser/DOMException.ts
-  var _legacyCodes = {
-    IndexSizeError: 1,
-    HierarchyRequestError: 3,
-    WrongDocumentError: 4,
-    InvalidCharacterError: 5,
-    NoModificationAllowedError: 7,
-    NotFoundError: 8,
-    NotSupportedError: 9,
-    InUseAttributeError: 10,
-    InvalidStateError: 11,
-    SyntaxError: 12,
-    InvalidModificationError: 13,
-    NamespaceError: 14,
-    InvalidAccessError: 15,
-    SecurityError: 18,
-    NetworkError: 19,
-    AbortError: 20,
-    URLMismatchError: 21,
-    QuotaExceededError: 22,
-    TimeoutError: 23,
-    InvalidNodeTypeError: 24,
-    DataCloneError: 25
-  };
-  var DOMException = class extends Error {
-    constructor(message, name) {
-      super(message == null ? "" : String(message));
-      this.name = name == null ? "Error" : String(name);
-      this.code = _legacyCodes[this.name] || 0;
-    }
-  };
-  DOMException.INDEX_SIZE_ERR = 1;
-  DOMException.DOMSTRING_SIZE_ERR = 2;
-  DOMException.HIERARCHY_REQUEST_ERR = 3;
-  DOMException.WRONG_DOCUMENT_ERR = 4;
-  DOMException.INVALID_CHARACTER_ERR = 5;
-  DOMException.NO_DATA_ALLOWED_ERR = 6;
-  DOMException.NO_MODIFICATION_ALLOWED_ERR = 7;
-  DOMException.NOT_FOUND_ERR = 8;
-  DOMException.NOT_SUPPORTED_ERR = 9;
-  DOMException.INUSE_ATTRIBUTE_ERR = 10;
-  DOMException.INVALID_STATE_ERR = 11;
-  DOMException.SYNTAX_ERR = 12;
-  DOMException.INVALID_MODIFICATION_ERR = 13;
-  DOMException.NAMESPACE_ERR = 14;
-  DOMException.INVALID_ACCESS_ERR = 15;
-  DOMException.VALIDATION_ERR = 16;
-  DOMException.TYPE_MISMATCH_ERR = 17;
-  DOMException.SECURITY_ERR = 18;
-  DOMException.NETWORK_ERR = 19;
-  DOMException.ABORT_ERR = 20;
-  DOMException.URL_MISMATCH_ERR = 21;
-  DOMException.QUOTA_EXCEEDED_ERR = 22;
-  DOMException.TIMEOUT_ERR = 23;
-  DOMException.INVALID_NODE_TYPE_ERR = 24;
-  DOMException.DATA_CLONE_ERR = 25;
-
   // browser/DOMParser.ts
   var DOMParser = class {
     parseFromString(input, type) {
@@ -5238,6 +5612,7 @@
     global.XMLHttpRequest = global.XMLHttpRequest || XMLHttpRequestStub;
     global.fetch = global.fetch || fetchStub;
     global.MessageChannel = global.MessageChannel || MessageChannel;
+    global.BroadcastChannel = global.BroadcastChannel || BroadcastChannel;
     global.MessagePort = global.MessagePort || MessagePort;
     global.postMessage = global.postMessage || ((message, targetOrigin, transfer) => {
       const ports = Array.isArray(targetOrigin) ? targetOrigin : Array.isArray(transfer) ? transfer : [];
@@ -5579,18 +5954,18 @@
   }
   function collectLinks() {
     const anchors = [];
-    let canonical = null;
+    let canonical2 = null;
     let robots = null;
-    if (!doc.documentElement) return { anchors, canonical, robots };
+    if (!doc.documentElement) return { anchors, canonical: canonical2, robots };
     function walk(n) {
       for (const c of n.childNodes) {
         if (c.nodeType !== 1 /* Element */) continue;
         const tag = c.localName;
         if (tag === "a") {
           anchors.push(c.getAttributeInternal("href"));
-        } else if (canonical == null && tag === "link") {
+        } else if (canonical2 == null && tag === "link") {
           const rel = (c.getAttributeInternal("rel") || "").toLowerCase().split(/\s+/);
-          if (rel.indexOf("canonical") >= 0) canonical = c.getAttributeInternal("href");
+          if (rel.indexOf("canonical") >= 0) canonical2 = c.getAttributeInternal("href");
         } else if (robots == null && tag === "meta") {
           if ((c.getAttributeInternal("name") || "").toLowerCase() === "robots") robots = c.getAttributeInternal("content");
         }
@@ -5598,7 +5973,7 @@
       }
     }
     walk(doc.documentElement);
-    return { anchors, canonical, robots };
+    return { anchors, canonical: canonical2, robots };
   }
   function countAnchors() {
     if (!doc.documentElement) return 0;

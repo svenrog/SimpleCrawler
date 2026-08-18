@@ -52,7 +52,7 @@ export class Element extends Node implements Animatable {
         this.tagName = this.localName.toUpperCase();
         this.nodeName = this.tagName;
         this.namespaceURI = ns || "http://www.w3.org/1999/xhtml";
-        this.style = createStyleDeclaration();
+        this.style = createStyleDeclaration(this);
         hideOwnFields(this);
     }
 
