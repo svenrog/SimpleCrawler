@@ -330,6 +330,13 @@ public sealed class JsRenderer
     private static string InlineModuleSpecifier(string pageUrl, int ordinal)
         => $"{pageUrl}#inline-{ordinal}";
 
+    /// <summary>
+    /// The same, for an inline module the page appended after parse. It counts on its own axis, so its
+    /// fragment is its own — sharing "#inline-n" with the markup's would collide the moment the ordinals met.
+    /// </summary>
+    private static string AppendedInlineModuleSpecifier(string pageUrl, int ordinal)
+        => $"{pageUrl}#appended-{ordinal}";
+
     private static void RunRegularJs(RenderingContext context, RegularScript script)
     {
         SetCurrentScript(context, script.Index >= 0 ? script.Index : script.External ? script.RawSrc : "");
@@ -410,7 +417,8 @@ public sealed class JsRenderer
                 id,
                 entry.TryGetProperty("tag", out var tagProp) ? tagProp.GetString() : null,
                 entry.TryGetProperty("src", out var srcProp) ? srcProp.GetString() : null,
-                entry.TryGetProperty("type", out var typeProp) ? typeProp.GetString() : null));
+                entry.TryGetProperty("type", out var typeProp) ? typeProp.GetString() : null,
+                entry.TryGetProperty("text", out var textProp) ? textProp.GetString() : null));
 
             loaded = true;
         }
@@ -435,7 +443,22 @@ public sealed class JsRenderer
             return;
         }
 
-        if (string.IsNullOrEmpty(resource.Src) || !Uri.TryCreate(context.DocumentBaseUri, resource.Src, out var absolute))
+        // An appended script with no src carries its own source: there is nothing to fetch and no origin to
+        // check, so it runs against the page's URL exactly as an inline script in the markup does.
+        if (string.IsNullOrEmpty(resource.Src))
+        {
+            if (string.IsNullOrEmpty(resource.Text))
+            {
+                FireResourceEvent(context, resource, "error");
+                return;
+            }
+
+            var inlineRan = RunAppendedInlineScript(context, resource);
+            FireResourceEvent(context, resource, inlineRan ? "load" : "error");
+            return;
+        }
+
+        if (!Uri.TryCreate(context.DocumentBaseUri, resource.Src, out var absolute))
         {
             FireResourceEvent(context, resource, "error");
             return;
@@ -454,6 +477,31 @@ public sealed class JsRenderer
 
         var ran = RunAppendedScript(context, resource, absolute, source);
         FireResourceEvent(context, resource, ran ? "load" : "error");
+    }
+
+    /// <summary>
+    /// An inline script the page connected after parse. It borrows the page URL the same way an inline script
+    /// in the markup does, and a module one borrows it under its own synthetic specifier — two of them would
+    /// otherwise collide on one name and the second would be answered from the loader's cache.
+    /// </summary>
+    private static bool RunAppendedInlineScript(RenderingContext context, PendingResource resource)
+    {
+        var source = resource.Text!;
+        if (string.Equals(resource.Type, "module", StringComparison.OrdinalIgnoreCase))
+        {
+            var specifier = AppendedInlineModuleSpecifier(context.PageUrl, ++context.AppendedInlineModules);
+            return RunModule(context, new ModuleScript(specifier, source, External: false));
+        }
+
+        SetCurrentScript(context, string.Empty);
+        try
+        {
+            return context.Isolation.Run("Inline script execution", () => context.Engine.Execute(source));
+        }
+        finally
+        {
+            SetCurrentScript(context, null);
+        }
     }
 
     /// <summary>

@@ -39,4 +39,11 @@ internal sealed class RenderingContext
     public required HttpClient Client { get; init; }
 
     public required CancellationToken CancellationToken { get; init; }
+
+    /// <summary>
+    /// How many inline modules this render has appended at runtime. It names each one, because the specifier
+    /// they borrow is the page's and a repeated specifier is answered from the module loader's cache rather
+    /// than evaluated. Per render, not per renderer: the renderer is reused across pages.
+    /// </summary>
+    public int AppendedInlineModules { get; set; }
 }

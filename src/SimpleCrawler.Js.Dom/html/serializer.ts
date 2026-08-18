@@ -1,13 +1,18 @@
 import type { Node } from "../dom/Node";
 import { NodeType } from "../types/NodeType";
-import { VOID_ELEMENTS } from "../constants";
+import { VOID_ELEMENTS, RAWTEXT_ELEMENTS } from "../constants";
 import { escapeAttr, escapeText } from "../dom/utils";
 
 export function serializeChildren(node: Node): string {
     const cached = (node as any).cachedInnerHTML;
     if (cached != null) return cached;
+    // A raw-text element's children serialize literally — the parser never decoded entities inside one, so
+    // escaping on the way out would corrupt what it holds rather than round-trip it. Page code round-trips
+    // exactly this: a tag manager reads a staged <script>'s innerHTML and assigns it to a live script's
+    // text, and every `&&` and `<` in the source comes back as an entity that no longer parses as JS.
+    const raw = RAWTEXT_ELEMENTS[(node as any).localName];
     let s = "";
-    for (const c of node.childNodes) s += serializeNode(c);
+    for (const c of node.childNodes) s += raw && c.nodeType === NodeType.Text ? (c as any).data : serializeNode(c);
     return s;
 }
 

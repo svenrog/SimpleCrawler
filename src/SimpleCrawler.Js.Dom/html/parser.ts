@@ -10,12 +10,15 @@ import { VOID_ELEMENTS, RAWTEXT_ELEMENTS } from "../constants";
 import { decodeEntities } from "./entities";
 import { isAlpha, skipSpace, matchTagName, scanAttrName, scanBareValue, findRawTextClose } from "./tokenizer";
 import { parserRef } from "./parserRef";
+import { markParserInserted } from "../dom/resourceLoader";
 
 // The element-class selection the parser uses: known tag → reflected subclass, else a plain Element.
 // Deliberately not document.createElement, which would consult customElements during the initial parse.
 export function createLocalElement(tag: string): Element {
     const factory = reflectedElementFactories[tag];
-    return factory ? factory() : new HTMLElement(tag);
+    const el = factory ? factory() : new HTMLElement(tag);
+    if (tag === "script") markParserInserted(el);
+    return el;
 }
 
 // Append a freshly created node to the end of a parent during construction. The child has no prior parent,

@@ -62,6 +62,12 @@ Entries before 4.0.0 are condensed to what changed; the reasoning behind each is
   `value`, `checked`, `type`, `name` or owner `form`, and a page that measures `field.value.length` or
   retargets `input.form.action` needs all of them. `form` reflects `action`/`method`/`name` and answers
   `elements`, so a retarget lands on the attribute instead of on an expando nothing serializes.
+- `HTMLScriptElement.noModule` and `.text`, `document.title`, and `Element.prototype.attachShadow` (it was
+  on `HTMLElement`, and support is tested against the prototype, not an instance). `noModule` is the one a
+  page tests against a *created* element — `'noModule' in document.createElement('script')` — and answering
+  false reads as a pre-2018 browser: one CMS's Stencil bundle responds by replacing `document.body` with an
+  "unsupported browser" page, which costs every script after it the whole DOM rather than its own globals.
+
 - An iframe carries a same-origin blank document on `contentWindow.document`/`contentDocument`, which is what
   a frame with no `src` is in a browser. A RUM beacon builds its loader by writing into it and reads
   `.open()` off it unguarded. Nothing written there is executed or serialized. Everything the frame's window
@@ -96,6 +102,19 @@ Entries before 4.0.0 are condensed to what changed; the reasoning behind each is
   matching and escaped identifiers are all honoured; anything still unrepresentable matches nothing rather
   than throwing, as do the pseudo-elements and the interaction pseudo-classes a single-pass render can never
   be in.
+- A `<script>` connected after parse runs the source it carries, by every route a page uses to connect one:
+  `appendChild` of an element whose `textContent` or `.text` was assigned, `createElementNS` in the HTML
+  namespace, and `document.write`. Only `src` scripts were fetched and run, so a tag manager's inline
+  snippet, and everything it defined, was silently dead. A parser-built script is excluded, as the HTML spec
+  requires — a fragment parse starts one "already started", which is why `innerHTML` never executes one —
+  with `document.write` the exception the spec carves out.
+- A `<script nomodule>` is not executed, because this renderer runs ES modules and so is the kind of browser
+  that skips the legacy half of a differential-serving pair. Running both initialises the same app twice
+  over one DOM.
+- `createElementNS` in the HTML namespace answers the same reflecting element classes as `createElement`
+  rather than a plain `Element`. Cloudflare's Rocket Loader rebuilds every script it deferred with
+  `createElementNS(script.namespaceURI, "script")`, and an element reflecting nothing loads nothing.
+
 - `classList` returns a real `DOMTokenList` instance, one per element, instead of a fresh object literal per
   read — so identity tests and `DOMTokenList.prototype` patches both work. The token operations are unchanged.
 
@@ -147,6 +166,12 @@ Entries before 4.0.0 are condensed to what changed; the reasoning behind each is
   else. DOMPurify feature-tests itself by replacing a scratch document's body and then looking the body up
   again, so the stripped wrapper left it dereferencing `undefined` — the sanitizer never defined its global,
   and every script that then named `DOMPurify` failed after it.
+- A raw-text element's children serialize literally, as the HTML spec requires. `script.innerHTML` and
+  `style.innerHTML` came back HTML-escaped, so a tag manager that stages a snippet in the markup and copies
+  it onto a live script got `&amp;&amp;` and `&lt;` where the source had `&&` and `<` — source that no
+  longer parses as JavaScript. The parser never decoded entities inside these elements, so escaping on the
+  way out corrupted what they hold rather than round-tripping it.
+
 - `document.getElementsByTagName`/`getElementsByClassName`/`getElementsByName` include the root element,
   which they searched strictly below. jQuery resolves a tag-only `$("html")` through the first of those, so
   a CMS bundle reading `$("html").attr("lang")` at init got undefined and threw. An *element's* own search

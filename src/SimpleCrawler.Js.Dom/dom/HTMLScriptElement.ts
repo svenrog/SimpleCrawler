@@ -34,4 +34,29 @@ export class HTMLScriptElement extends HTMLElement {
     set type(value: unknown) {
         this.setAttributeInternal("type", value == null ? "" : String(value));
     }
+
+    // The source of an inline script, as the IDL property rather than the node's text. jQuery's globalEval
+    // and every tag manager that injects a snippet assign this one, and an element that treats it as an
+    // ordinary expando keeps an empty textContent — so the script that was just written has nothing to run.
+    get text(): string {
+        return String(this.textContent ?? "");
+    }
+
+    set text(value: unknown) {
+        this.textContent = value == null ? "" : String(value);
+    }
+
+    // The module-support feature test, and the only one a page runs against a *created* element rather than
+    // the window: `'noModule' in document.createElement('script')`. An element that does not carry it reads
+    // as a pre-2018 browser, and a bundle that branches on it can replace document.body with an
+    // "unsupported browser" page — which costs every script that runs after it the whole DOM, not just its
+    // own globals. The renderer runs ES modules, so the honest answer is that the property exists.
+    get noModule(): boolean {
+        return this.hasAttribute("nomodule");
+    }
+
+    set noModule(value: unknown) {
+        if (value) this.setAttributeInternal("nomodule", "");
+        else this.removeAttributeInternal("nomodule");
+    }
 }

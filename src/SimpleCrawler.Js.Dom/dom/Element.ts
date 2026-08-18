@@ -12,6 +12,7 @@ import { viewportWidth, viewportHeight } from "../browser/viewport";
 import { Animatable } from "./Animatable";
 import { Animation } from "./Animation";
 import { HTMLCollection } from "./HTMLCollection";
+import { ShadowRoot } from "./ShadowRoot";
 
 // Every attribute name a browser takes is coerced to a string first, so `el.setAttribute(undefined, v)` — a
 // framework passing a name it failed to compute — stores it under "undefined" rather than under the value
@@ -34,6 +35,7 @@ function nthAttrNode(attrs: Map<string, string>, index: number, owner: Element):
 }
 
 export class Element extends Node implements Animatable {
+    shadowRoot: any = null;
     localName: string;
     tagName: string;
     nodeName: string;
@@ -52,6 +54,18 @@ export class Element extends Node implements Animatable {
         this.namespaceURI = ns || "http://www.w3.org/1999/xhtml";
         this.style = createStyleDeclaration();
         hideOwnFields(this);
+    }
+
+    // Shadow DOM lives on Element, not on HTMLElement: a page that tests support reads
+    // `Element.prototype.attachShadow` (or `'attachShadow' in Element.prototype`) rather than calling it on
+    // an instance, and a prototype that does not carry it reads as a browser without shadow DOM.
+    attachShadow(init?: { mode?: string }): any {
+        if (this.shadowRoot) return this.shadowRoot;
+        const root = new ShadowRoot();
+        root.host = this;
+        root.mode = init && init.mode ? init.mode : "open";
+        this.shadowRoot = root;
+        return root;
     }
 
     // The attribute steps a browser runs inside the platform, where page code cannot reach them. Every

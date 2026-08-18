@@ -907,8 +907,9 @@
   function serializeChildren(node) {
     const cached = node.cachedInnerHTML;
     if (cached != null) return cached;
+    const raw = RAWTEXT_ELEMENTS[node.localName];
     let s = "";
-    for (const c of node.childNodes) s += serializeNode(c);
+    for (const c of node.childNodes) s += raw && c.nodeType === 3 /* Text */ ? c.data : serializeNode(c);
     return s;
   }
   function serializeNode(node) {
@@ -985,14 +986,29 @@
   }
 
   // dom/resourceLoader.ts
+  var _parserInserted = /* @__PURE__ */ new WeakSet();
+  function markParserInserted(node) {
+    _parserInserted.add(node);
+  }
+  function clearParserInserted(node) {
+    _parserInserted.delete(node);
+    const kids = node.childNodes;
+    if (kids) for (let i = 0; i < kids.length; i++) clearParserInserted(kids[i]);
+  }
   var _counter = 0;
   var _pending = [];
   var _byId = /* @__PURE__ */ new Map();
   var _seen = /* @__PURE__ */ new WeakSet();
+  var runnableTypes = ["", "text/javascript", "module", "application/javascript"];
   function registerResource(node) {
     const tag = node.localName;
     if (tag !== "script" && tag !== "link") return;
-    if (tag === "script" && !node.getAttributeInternal("src")) return;
+    if (tag === "script" && _parserInserted.has(node)) return;
+    if (tag === "script" && !node.getAttributeInternal("src")) {
+      const type = (node.getAttributeInternal("type") || "").trim().toLowerCase();
+      if (runnableTypes.indexOf(type) === -1) return;
+      if (!String(node.textContent || "")) return;
+    }
     if (_seen.has(node)) return;
     _seen.add(node);
     const id = ++_counter;
@@ -1006,7 +1022,8 @@
       id: r.id,
       tag: r.node.localName,
       src: r.node.getAttributeInternal("src") || "",
-      type: r.node.getAttributeInternal("type") || ""
+      type: r.node.getAttributeInternal("type") || "",
+      text: r.node.getAttributeInternal("src") ? "" : String(r.node.textContent || "")
     })));
   }
   function pendingResourceCount() {
@@ -1312,6 +1329,44 @@
     }
   };
 
+  // dom/DocumentFragment.ts
+  var DocumentFragment = class _DocumentFragment extends Node {
+    constructor() {
+      super(11 /* DocumentFragment */);
+      hideOwnFields(this);
+    }
+    get nodeName() {
+      return "#document-fragment";
+    }
+    querySelector(sel) {
+      const r = querySelectorAll(this, sel);
+      return r.length ? r[0] : null;
+    }
+    querySelectorAll(sel) {
+      return querySelectorAll(this, sel);
+    }
+    getElementsByTagName(tag) {
+      const out = [];
+      collectByTag(this, String(tag).toLowerCase(), out);
+      return out;
+    }
+    _shallowClone() {
+      return new _DocumentFragment();
+    }
+  };
+
+  // dom/ShadowRoot.ts
+  var ShadowRoot = class extends DocumentFragment {
+    constructor() {
+      super(...arguments);
+      this.host = null;
+      this.mode = "open";
+    }
+    get nodeName() {
+      return "#document-fragment";
+    }
+  };
+
   // dom/Element.ts
   function attrKey(name) {
     return typeof name === "string" ? name : String(name);
@@ -1329,6 +1384,7 @@
   var Element = class _Element extends Node {
     constructor(tag, ns) {
       super(1 /* Element */);
+      this.shadowRoot = null;
       this.attrs = /* @__PURE__ */ new Map();
       this.cachedInnerHTML = null;
       this._sheet = null;
@@ -1338,6 +1394,17 @@
       this.namespaceURI = ns || "http://www.w3.org/1999/xhtml";
       this.style = createStyleDeclaration();
       hideOwnFields(this);
+    }
+    // Shadow DOM lives on Element, not on HTMLElement: a page that tests support reads
+    // `Element.prototype.attachShadow` (or `'attachShadow' in Element.prototype`) rather than calling it on
+    // an instance, and a prototype that does not carry it reads as a browser without shadow DOM.
+    attachShadow(init) {
+      if (this.shadowRoot) return this.shadowRoot;
+      const root = new ShadowRoot();
+      root.host = this;
+      root.mode = init && init.mode ? init.mode : "open";
+      this.shadowRoot = root;
+      return root;
     }
     // The attribute steps a browser runs inside the platform, where page code cannot reach them. Every
     // reflected IDL property (el.src, el.href, …) goes through these rather than through the public methods
@@ -1804,44 +1871,6 @@
     }
   };
 
-  // dom/DocumentFragment.ts
-  var DocumentFragment = class _DocumentFragment extends Node {
-    constructor() {
-      super(11 /* DocumentFragment */);
-      hideOwnFields(this);
-    }
-    get nodeName() {
-      return "#document-fragment";
-    }
-    querySelector(sel) {
-      const r = querySelectorAll(this, sel);
-      return r.length ? r[0] : null;
-    }
-    querySelectorAll(sel) {
-      return querySelectorAll(this, sel);
-    }
-    getElementsByTagName(tag) {
-      const out = [];
-      collectByTag(this, String(tag).toLowerCase(), out);
-      return out;
-    }
-    _shallowClone() {
-      return new _DocumentFragment();
-    }
-  };
-
-  // dom/ShadowRoot.ts
-  var ShadowRoot = class extends DocumentFragment {
-    constructor() {
-      super(...arguments);
-      this.host = null;
-      this.mode = "open";
-    }
-    get nodeName() {
-      return "#document-fragment";
-    }
-  };
-
   // dom/customElements.ts
   var CustomElementRegistry = class {
     constructor() {
@@ -1951,7 +1980,6 @@
   var HTMLElement = class extends Element {
     constructor(tag, ns) {
       super(tag || customElements.currentName() || "", ns);
-      this.shadowRoot = null;
       // Constraint Validation API. Frameworks grab a form control ref and call setCustomValidity during
       // render, so the methods must exist; they no-op and report valid.
       this.willValidate = true;
@@ -1959,14 +1987,6 @@
       hideOwnFields(this);
       const target = customElements.takeUpgradeTarget();
       if (target) return target;
-    }
-    attachShadow(init) {
-      if (this.shadowRoot) return this.shadowRoot;
-      const root = new ShadowRoot();
-      root.host = this;
-      root.mode = init && init.mode ? init.mode : "open";
-      this.shadowRoot = root;
-      return root;
     }
     focus() {
     }
@@ -2230,6 +2250,27 @@
     }
     set type(value) {
       this.setAttributeInternal("type", value == null ? "" : String(value));
+    }
+    // The source of an inline script, as the IDL property rather than the node's text. jQuery's globalEval
+    // and every tag manager that injects a snippet assign this one, and an element that treats it as an
+    // ordinary expando keeps an empty textContent — so the script that was just written has nothing to run.
+    get text() {
+      return String(this.textContent ?? "");
+    }
+    set text(value) {
+      this.textContent = value == null ? "" : String(value);
+    }
+    // The module-support feature test, and the only one a page runs against a *created* element rather than
+    // the window: `'noModule' in document.createElement('script')`. An element that does not carry it reads
+    // as a pre-2018 browser, and a bundle that branches on it can replace document.body with an
+    // "unsupported browser" page — which costs every script that runs after it the whole DOM, not just its
+    // own globals. The renderer runs ES modules, so the honest answer is that the property exists.
+    get noModule() {
+      return this.hasAttribute("nomodule");
+    }
+    set noModule(value) {
+      if (value) this.setAttributeInternal("nomodule", "");
+      else this.removeAttributeInternal("nomodule");
     }
   };
 
@@ -2971,7 +3012,9 @@
   // html/parser.ts
   function createLocalElement(tag) {
     const factory = reflectedElementFactories[tag];
-    return factory ? factory() : new HTMLElement(tag);
+    const el = factory ? factory() : new HTMLElement(tag);
+    if (tag === "script") markParserInserted(el);
+    return el;
   }
   function attachChild(parent, child) {
     child.parentNode = parent;
@@ -3485,6 +3528,23 @@
       const href = base ? base.getAttributeInternal("href") : null;
       return href ? resolveUrl(href, this.URL) : this.URL;
     }
+    // The <title> element's text, which analytics and consent code reads as a string on every page
+    // (`document.title.replace(...)`, `title.split("|")`). Absent, it answers undefined and the read after it
+    // throws. The setter creates the element when the document has none, exactly as a browser does.
+    get title() {
+      const el = this.querySelector("title");
+      return el ? String(el.textContent ?? "") : "";
+    }
+    set title(value) {
+      const text = value == null ? "" : String(value);
+      let el = this.querySelector("title");
+      if (!el) {
+        if (!this.head) return;
+        el = this.createElement("title");
+        this.head.appendChild(el);
+      }
+      el.textContent = text;
+    }
     // Bundles read document.referrer as a string (analytics, `referrer.split('/')[2] !== location.host`);
     // a single-pass render has no navigation history, so it's always the empty string.
     get referrer() {
@@ -3522,7 +3582,13 @@
       const custom = customElements.tryCreate(name);
       return custom || new HTMLElement(name);
     }
+    // In the HTML namespace this is createElement with the namespace spelled out, and it must answer the
+    // same classes: Cloudflare's Rocket Loader rebuilds every deferred script with
+    // createElementNS(script.namespaceURI, "script") and then assigns .src/.textContent, so a plain Element
+    // here means the page's own scripts are rebuilt into elements that reflect nothing and never load —
+    // on a Rocket Loader site that is the whole page.
     createElementNS(ns, tag) {
+      if (!ns || ns === "http://www.w3.org/1999/xhtml") return this.createElement(tag);
       return new Element(tag, ns);
     }
     createTextNode(data) {
@@ -3553,7 +3619,10 @@
       const parse = parserRef.parseFragment;
       if (!target || !parse) return;
       const html = parts.map((p) => p == null ? "" : String(p)).join("");
-      for (const node of parse(html)) target.appendChild(node);
+      for (const node of parse(html)) {
+        clearParserInserted(node);
+        target.appendChild(node);
+      }
     }
     writeln(...parts) {
       this.write(parts.map((p) => p == null ? "" : String(p)).join("") + "\n");
@@ -5465,6 +5534,10 @@
         if (c.localName === "script") {
           const type = c.getAttributeInternal("type") || "";
           if (type && type !== "text/javascript" && type !== "module" && type !== "application/javascript") {
+            walk(c);
+            continue;
+          }
+          if (c.hasAttribute("nomodule")) {
             walk(c);
             continue;
           }

@@ -17,6 +17,7 @@ import { NodeIterator } from "./NodeIterator";
 import { parserRef } from "../html/parserRef";
 import { resolveUrl } from "../url/resolve";
 import { HTMLCollection } from "./HTMLCollection";
+import { clearParserInserted } from "./resourceLoader";
 import { createFontFaceSet } from "../browser/fonts";
 import { Event } from "../browser/Event";
 import { CustomEvent } from "../browser/CustomEvent";
@@ -79,6 +80,25 @@ export class Document extends Node {
         return href ? resolveUrl(href, this.URL) : this.URL;
     }
 
+    // The <title> element's text, which analytics and consent code reads as a string on every page
+    // (`document.title.replace(...)`, `title.split("|")`). Absent, it answers undefined and the read after it
+    // throws. The setter creates the element when the document has none, exactly as a browser does.
+    get title(): string {
+        const el = this.querySelector("title");
+        return el ? String(el.textContent ?? "") : "";
+    }
+
+    set title(value: unknown) {
+        const text = value == null ? "" : String(value);
+        let el = this.querySelector("title");
+        if (!el) {
+            if (!this.head) return;
+            el = this.createElement("title");
+            this.head.appendChild(el as any);
+        }
+        el.textContent = text;
+    }
+
     // Bundles read document.referrer as a string (analytics, `referrer.split('/')[2] !== location.host`);
     // a single-pass render has no navigation history, so it's always the empty string.
     get referrer(): string {
@@ -121,7 +141,13 @@ export class Document extends Node {
         return custom || new HTMLElement(name);
     }
 
+    // In the HTML namespace this is createElement with the namespace spelled out, and it must answer the
+    // same classes: Cloudflare's Rocket Loader rebuilds every deferred script with
+    // createElementNS(script.namespaceURI, "script") and then assigns .src/.textContent, so a plain Element
+    // here means the page's own scripts are rebuilt into elements that reflect nothing and never load —
+    // on a Rocket Loader site that is the whole page.
     createElementNS(ns: string, tag: string): Element {
+        if (!ns || ns === "http://www.w3.org/1999/xhtml") return this.createElement(tag);
         return new Element(tag, ns);
     }
 
@@ -160,7 +186,12 @@ export class Document extends Node {
         if (!target || !parse) return;
 
         const html = parts.map((p) => (p == null ? "" : String(p))).join("");
-        for (const node of parse(html)) target.appendChild(node);
+        // A written script is the one exception to the parser-inserted rule: the spec runs it, and a loader
+        // that re-adds a script by writing its outerHTML depends on that.
+        for (const node of parse(html)) {
+            clearParserInserted(node);
+            target.appendChild(node);
+        }
     }
 
     writeln(...parts: unknown[]): void {

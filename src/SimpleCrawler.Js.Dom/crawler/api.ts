@@ -54,6 +54,13 @@ function collectScripts(): ScriptDescriptor[] {
                     walk(c);
                     continue;
                 }
+                // A module-capable browser skips the legacy half of a differential-serving pair, and this
+                // renderer is one. Running both halves is not merely wasted work: the legacy bundle
+                // initialises the same app a second time over a DOM the module bundle already owns.
+                if (c.hasAttribute("nomodule")) {
+                    walk(c);
+                    continue;
+                }
                 const external = !!c.getAttributeInternal("src");
                 out.push({
                     module: type === "module",

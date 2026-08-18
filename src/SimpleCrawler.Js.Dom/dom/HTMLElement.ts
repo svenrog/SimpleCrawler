@@ -1,5 +1,4 @@
 import { Element } from "./Element";
-import { ShadowRoot } from "./ShadowRoot";
 import { customElements } from "./customElements";
 import { hideOwnFields } from "./utils";
 
@@ -24,22 +23,11 @@ const ValidityStateAllValid = Object.freeze({
 // tag from the registry's name stack when the registry is constructing it, so a subclass `super()` lands
 // with the correct localName without the caller passing one.
 export class HTMLElement extends Element {
-    shadowRoot: any = null;
-
     constructor(tag?: string, ns?: string) {
         super(tag || customElements.currentName() || "", ns);
         hideOwnFields(this);
         const target = customElements.takeUpgradeTarget();
         if (target) return target;
-    }
-
-    attachShadow(init?: { mode?: string }): any {
-        if (this.shadowRoot) return this.shadowRoot;
-        const root = new ShadowRoot();
-        root.host = this;
-        root.mode = init && init.mode ? init.mode : "open";
-        this.shadowRoot = root;
-        return root;
     }
 
     focus(): void { }
