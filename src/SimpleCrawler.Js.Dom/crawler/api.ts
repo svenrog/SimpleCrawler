@@ -100,6 +100,27 @@ function getBaseHref(): string {
     return found;
 }
 
+// The page's own import map: the text of the first <script type="importmap">, or "" when it ships none.
+// The host resolves bare module specifiers through it, because a browser resolves them nowhere else — the
+// collector skips the tag itself, since a map is data rather than a script to run.
+function getImportMap(): string {
+    if (!doc.documentElement) return "";
+    let found = "";
+    function walk(n: any): boolean {
+        for (const c of n.childNodes) {
+            if (c.nodeType !== NodeType.Element) continue;
+            if (c.localName === "script" && (c.getAttributeInternal("type") || "").trim().toLowerCase() === "importmap") {
+                const text = String(c.textContent || "");
+                if (text) { found = text; return true; }
+            }
+            if (walk(c)) return true;
+        }
+        return false;
+    }
+    walk(doc.documentElement);
+    return found;
+}
+
 // Mirrors the AngleSharp static extractor (QuerySelectorAll("a"), link[rel=canonical], meta[name=robots])
 // but reads the live DOM directly, avoiding the serialize→reparse round trip. A naive childNodes walk is
 // true parity with serializeNode: the serializer also iterates childNodes, so template .content and
@@ -187,6 +208,7 @@ export function installCrawlerApi(global: any): void {
     global.__crawlerLoadHtml = (html: unknown) => { parseHTML(doc, html); };
     global.__crawlerCollectScripts = () => JSON.stringify(collectScripts());
     global.__crawlerGetBaseHref = () => getBaseHref();
+    global.__crawlerGetImportMap = () => getImportMap();
     global.__crawlerCollectLinks = () => JSON.stringify(collectLinks());
     global.__crawlerPending = () => pendingCount();
     global.__crawlerPump = () => pumpTasks();

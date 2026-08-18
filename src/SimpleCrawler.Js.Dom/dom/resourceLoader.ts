@@ -1,4 +1,5 @@
 import { Event } from "../browser/Event";
+import { objectUrlSource } from "../browser/objectUrl";
 import { reportSwallowed } from "../diagnostics";
 
 // A <script src> or <link> the bundle appends at runtime (webpack lazy-route JS/CSS chunks, React 18's
@@ -9,6 +10,9 @@ import { reportSwallowed } from "../diagnostics";
 interface PendingResource {
     id: number;
     node: any;
+    // The source of a src the render holds itself (an object URL), read when the node is connected because
+    // that is when a browser starts the fetch — the page may revoke the token on the next line.
+    held: string | null;
 }
 
 // Scripts the HTML parser built rather than page code: everything the fragment parser produces for
@@ -53,7 +57,8 @@ export function registerResource(node: any): void {
     if (_seen.has(node)) return;
     _seen.add(node);
     const id = ++_counter;
-    _pending.push({ id, node });
+    const src = tag === "script" ? node.getAttributeInternal("src") : null;
+    _pending.push({ id, node, held: src ? objectUrlSource(String(src)) : null });
     _byId.set(id, node);
 }
 
@@ -62,12 +67,13 @@ export function takeResources(): string {
     const batch = _pending.splice(0, _pending.length);
     // type carries the script's own type attribute: an appended type="module" has to reach the host's module
     // loader rather than its classic-script entry, or its imports never resolve and its exports never run.
+    // text carries a source beside a src only for one the render built: there is nothing to fetch for it.
     return JSON.stringify(batch.map((r) => ({
         id: r.id,
         tag: r.node.localName,
         src: r.node.getAttributeInternal("src") || "",
         type: r.node.getAttributeInternal("type") || "",
-        text: r.node.getAttributeInternal("src") ? "" : String(r.node.textContent || ""),
+        text: r.node.getAttributeInternal("src") ? (r.held || "") : String(r.node.textContent || ""),
     })));
 }
 

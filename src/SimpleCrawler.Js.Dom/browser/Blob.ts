@@ -39,7 +39,11 @@ export class Blob {
     }
 
     text(): Promise<string> {
-        return Promise.resolve(_decoder.decode(this._bytes()));
+        return Promise.resolve(this._text());
+    }
+
+    _text(): string {
+        return _decoder.decode(this._bytes());
     }
 
     slice(start?: number, end?: number, contentType?: string): Blob {

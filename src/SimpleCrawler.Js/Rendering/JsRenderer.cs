@@ -174,6 +174,9 @@ public sealed class JsRenderer
             CancellationToken = cancellationToken,
         };
 
+        // Before any module resolves, because the map is what a bare specifier resolves through.
+        fetcher.ImportMap = ReadImportMap(context);
+
         var collectTime = RenderProfiler.Start();
         var (regularScripts, moduleEntries) = await CollectScriptsFromJsAsync(context);
         RenderProfiler.Stop("phase.collect", collectTime);
@@ -264,6 +267,18 @@ public sealed class JsRenderer
     /// not the page URL — matching the browser. Without this, a &lt;base href="/"&gt; page served from a nested
     /// path fetches the site's HTML fallback for every relative &lt;script src&gt;, and the engine aborts on it.
     /// </summary>
+    /// <summary>
+    /// The page's import map, read off the parsed document. Addresses in it are relative to the document
+    /// base, as the spec has them — a map next to a <c>&lt;base href&gt;</c> means what the page meant by it.
+    /// </summary>
+    private static ImportMap? ReadImportMap(RenderingContext context)
+    {
+        var json = context.Isolation.Run(
+            "Import map read", () => context.Engine.Evaluate<string>("__crawlerGetImportMap()"), string.Empty);
+
+        return ImportMap.Parse(json, context.DocumentBaseUri);
+    }
+
     private static Uri ResolveDocumentBase(IJsEngine engine, RenderIsolation isolation, Uri pageUri)
     {
         var baseHref = isolation.Run("Base href read", () => engine.Evaluate<string>("__crawlerGetBaseHref()"), string.Empty);
@@ -458,8 +473,28 @@ public sealed class JsRenderer
             return;
         }
 
+        // A src the page built from its own bytes with URL.createObjectURL. The blob never left the render,
+        // so the prelude sent the source along with the queue entry and there is nothing to fetch — a scheme
+        // no HttpClient can answer would otherwise cost the page a module shim's whole chunk graph.
+        if (!string.IsNullOrEmpty(resource.Text))
+        {
+            var heldRan = RunHeldScript(context, resource);
+            FireResourceEvent(context, resource, heldRan ? "load" : "error");
+            return;
+        }
+
         if (!Uri.TryCreate(context.DocumentBaseUri, resource.Src, out var absolute))
         {
+            FireResourceEvent(context, resource, "error");
+            return;
+        }
+
+        // A scheme no fetch can answer — an object URL this render was not handed, so nothing holds its
+        // bytes — is the node's error rather than a cross-origin script left pending: no later turn can
+        // load it, and the page is waiting on the event either way.
+        if (absolute.Scheme != Uri.UriSchemeHttp && absolute.Scheme != Uri.UriSchemeHttps)
+        {
+            _logger.LogWarning("Script source '{url}' is not fetchable over HTTP.", absolute);
             FireResourceEvent(context, resource, "error");
             return;
         }
@@ -497,6 +532,28 @@ public sealed class JsRenderer
         try
         {
             return context.Isolation.Run("Inline script execution", () => context.Engine.Execute(source));
+        }
+        finally
+        {
+            SetCurrentScript(context, null);
+        }
+    }
+
+    /// <summary>
+    /// A script whose source the render already holds, run under its own <c>src</c> as its specifier: a module
+    /// one resolves its relative imports against that, as it would in a browser, and a classic one becomes the
+    /// <c>document.currentScript</c> the same way a fetched chunk does.
+    /// </summary>
+    private static bool RunHeldScript(RenderingContext context, PendingResource resource)
+    {
+        var source = resource.Text!;
+        if (string.Equals(resource.Type, "module", StringComparison.OrdinalIgnoreCase))
+            return RunModule(context, new ModuleScript(resource.Src!, source, External: true));
+
+        SetCurrentScript(context, resource.Src);
+        try
+        {
+            return context.Isolation.Run("Chunk execution", () => context.Engine.ExecuteCached(resource.Src!, source));
         }
         finally
         {

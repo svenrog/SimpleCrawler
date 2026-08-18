@@ -14,6 +14,17 @@ Entries before 4.0.0 are condensed to what changed; the reasoning behind each is
 
 ### Added
 
+- A `<script>` whose `src` the page built with `URL.createObjectURL` runs from the bytes the page handed
+  over. An object URL was a bare token and the blob was dropped, so a module shim rewriting its own imports,
+  or a bundler inlining a worker body, ended as "not fetchable over HTTP" and everything the chunk defined
+  was lost. The source is read when the node is connected — which is when a browser starts its fetch, and
+  why revoking the token on the next line, as pages do, is not a lost source.
+- Bare module specifiers resolve through the page's own `<script type="importmap">`. Without the map there
+  is nowhere for one to resolve, and resolving it as a path asked the target for `/@scope/pkg` — a URL it
+  never published, so the answer was its 404 page and the package's whole graph was lost on a page that said
+  exactly where the package lives. The `imports` member is read (exact keys and trailing-slash subtrees);
+  `scopes` and `integrity` are declined — neither changes what a single-pass render collects.
+
 - The DOM prelude gained the browser APIs a survey of production pages found it missing, each one an
   exception inside a real bundle's init rather than a missed lookup: `document.URL`/`documentURI` and
   `Node.baseURI`; `performance.timing` with its `navigation` counterpart from
@@ -125,6 +136,10 @@ Entries before 4.0.0 are condensed to what changed; the reasoning behind each is
 
 ### Fixed
 
+- A script source with a scheme no fetch can answer now fires the node's error event instead of being left
+  pending as a cross-origin one. Nothing later can load it, and the page is waiting on the event either way.
+- A specifier no import map covers is answered an empty module without a request, rather than being fetched
+  from the page's own origin as a path.
 - One isolation policy at every crossing into the JS engine, stated once instead of per call site:
   cancellation and a page-scoped ceiling propagate, everything else is a counted warning and the render
   continues. A raw CLR exception — most often Jint's per-script `TimeoutException`, but equally anything host

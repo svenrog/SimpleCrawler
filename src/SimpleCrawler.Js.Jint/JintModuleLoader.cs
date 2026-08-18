@@ -20,13 +20,8 @@ internal sealed class JintModuleLoader : IModuleLoader
 
     public ResolvedSpecifier Resolve(string? referencingModuleLocation, ModuleRequest moduleRequest)
     {
-        var specifier = moduleRequest.Specifier;
-
-        Uri uri;
-        if (UriHelper.TryCreateHttpAbsolute(specifier, out var absolute))
-            uri = absolute;
-        else
-            uri = new Uri(ResolveReferrer(referencingModuleLocation), specifier);
+        var uri = ModuleSpecifier.Resolve(
+            moduleRequest.Specifier, ResolveReferrer(referencingModuleLocation), _fetcher.ImportMap);
 
         return new ResolvedSpecifier(moduleRequest, uri.AbsoluteUri, uri, SpecifierType.RelativeOrAbsolute);
     }

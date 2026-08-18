@@ -38,6 +38,7 @@ import { XMLHttpRequestEventTarget } from "../network/XMLHttpRequestEventTarget"
 import { XMLHttpRequestStub } from "../network/XMLHttpRequestStub";
 import { fetchStub } from "../network/fetchStub";
 import { BroadcastChannel } from "./BroadcastChannel";
+import { createObjectUrl, revokeObjectUrl } from "./objectUrl";
 import { MessageChannel, MessagePort } from "./MessageChannel";
 import { Storage, createStorage } from "./Storage";
 import { performance } from "./Performance";
@@ -198,9 +199,10 @@ export function installDOM(global: any): void {
     global.FileList = global.FileList || FileList;
     global.btoa = global.btoa || btoa;
     global.atob = global.atob || atob;
-    // Blobs never leave the render, so an object URL only needs to be a unique, revocable token.
-    (URL as any).createObjectURL = (URL as any).createObjectURL || (() => "blob:" + Math.random().toString(36).slice(2));
-    (URL as any).revokeObjectURL = (URL as any).revokeObjectURL || (() => { });
+    // An object URL is a token for bytes the render already holds — see browser/objectUrl.ts for why the
+    // bytes are kept rather than dropped.
+    (URL as any).createObjectURL = (URL as any).createObjectURL || createObjectUrl;
+    (URL as any).revokeObjectURL = (URL as any).revokeObjectURL || revokeObjectUrl;
     global.URL = URL;
     global.URLSearchParams = URLSearchParams;
     global.EventTarget = EventTarget;

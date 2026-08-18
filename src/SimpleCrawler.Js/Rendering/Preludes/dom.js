@@ -1225,6 +1225,26 @@
     }
   };
 
+  // browser/objectUrl.ts
+  var _held = /* @__PURE__ */ new Map();
+  function createObjectUrl(source) {
+    const url = "blob:" + Math.random().toString(36).slice(2);
+    if (source && typeof source._text === "function") {
+      try {
+        _held.set(url, source._text());
+      } catch {
+      }
+    }
+    return url;
+  }
+  function revokeObjectUrl(url) {
+    _held.delete(String(url));
+  }
+  function objectUrlSource(url) {
+    const held = _held.get(url);
+    return held === void 0 ? null : held;
+  }
+
   // diagnostics.ts
   function reportSwallowed(context, error) {
     try {
@@ -1269,7 +1289,8 @@
     if (_seen.has(node)) return;
     _seen.add(node);
     const id = ++_counter;
-    _pending.push({ id, node });
+    const src = tag === "script" ? node.getAttributeInternal("src") : null;
+    _pending.push({ id, node, held: src ? objectUrlSource(String(src)) : null });
     _byId.set(id, node);
   }
   function takeResources() {
@@ -1280,7 +1301,7 @@
       tag: r.node.localName,
       src: r.node.getAttributeInternal("src") || "",
       type: r.node.getAttributeInternal("type") || "",
-      text: r.node.getAttributeInternal("src") ? "" : String(r.node.textContent || "")
+      text: r.node.getAttributeInternal("src") ? r.held || "" : String(r.node.textContent || "")
     })));
   }
   function pendingResourceCount() {
@@ -5137,7 +5158,10 @@
       return Promise.resolve(this._bytes().buffer);
     }
     text() {
-      return Promise.resolve(_decoder.decode(this._bytes()));
+      return Promise.resolve(this._text());
+    }
+    _text() {
+      return _decoder.decode(this._bytes());
     }
     slice(start, end, contentType) {
       const bytes = this._bytes();
@@ -5643,9 +5667,8 @@
     global.FileList = global.FileList || FileList;
     global.btoa = global.btoa || btoa;
     global.atob = global.atob || atob;
-    URL.createObjectURL = URL.createObjectURL || (() => "blob:" + Math.random().toString(36).slice(2));
-    URL.revokeObjectURL = URL.revokeObjectURL || (() => {
-    });
+    URL.createObjectURL = URL.createObjectURL || createObjectUrl;
+    URL.revokeObjectURL = URL.revokeObjectURL || revokeObjectUrl;
     global.URL = URL;
     global.URLSearchParams = URLSearchParams;
     global.EventTarget = EventTarget;
@@ -6037,6 +6060,26 @@
     walk(doc.documentElement);
     return found;
   }
+  function getImportMap() {
+    if (!doc.documentElement) return "";
+    let found = "";
+    function walk(n) {
+      for (const c of n.childNodes) {
+        if (c.nodeType !== 1 /* Element */) continue;
+        if (c.localName === "script" && (c.getAttributeInternal("type") || "").trim().toLowerCase() === "importmap") {
+          const text = String(c.textContent || "");
+          if (text) {
+            found = text;
+            return true;
+          }
+        }
+        if (walk(c)) return true;
+      }
+      return false;
+    }
+    walk(doc.documentElement);
+    return found;
+  }
   function collectLinks() {
     const anchors = [];
     let canonical2 = null;
@@ -6103,6 +6146,7 @@
     };
     global.__crawlerCollectScripts = () => JSON.stringify(collectScripts());
     global.__crawlerGetBaseHref = () => getBaseHref();
+    global.__crawlerGetImportMap = () => getImportMap();
     global.__crawlerCollectLinks = () => JSON.stringify(collectLinks());
     global.__crawlerPending = () => pendingCount();
     global.__crawlerPump = () => pumpTasks();

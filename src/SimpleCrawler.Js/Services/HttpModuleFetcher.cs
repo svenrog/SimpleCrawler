@@ -19,6 +19,13 @@ internal sealed class HttpModuleFetcher : IModuleFetcher
         _cancellationToken = cancellationToken;
     }
 
+    /// <inheritdoc />
+    /// <remarks>
+    /// Set once, after the document is parsed and before any script runs, because that is when the page's
+    /// own map first exists.
+    /// </remarks>
+    public ImportMap? ImportMap { get; set; }
+
     public string? Fetch(Uri absolute)
     {
         if (_cache.TryGet(absolute, out var cached))
