@@ -140,6 +140,9 @@ Entries before 4.0.0 are condensed to what changed; the reasoning behind each is
   pending as a cross-origin one. Nothing later can load it, and the page is waiting on the event either way.
 - A specifier no import map covers is answered an empty module without a request, rather than being fetched
   from the page's own origin as a path.
+- A module built from an object URL resolves its own imports against the page. The token carries no path of
+  its own, where a browser's `blob:` URL carries the page's origin, so a relative import from one reached
+  nothing.
 - One isolation policy at every crossing into the JS engine, stated once instead of per call site:
   cancellation and a page-scoped ceiling propagate, everything else is a counted warning and the render
   continues. A raw CLR exception — most often Jint's per-script `TimeoutException`, but equally anything host
