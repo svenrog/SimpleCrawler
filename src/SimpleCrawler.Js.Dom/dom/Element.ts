@@ -405,13 +405,8 @@ export class Element extends Node implements Animatable {
     }
 
     // Element-only traversal. Slider/drag libraries step through slides via nextElementSibling and cache
-    // the track's parentElement/firstElementChild; a missing accessor returns undefined where they expect an
+    // the track's firstElementChild; a missing accessor returns undefined where they expect an
     // element-or-null, so the next `.removeAttribute`/`.classList` call throws instead of skipping.
-    get parentElement(): Element | null {
-        const p = this.parentNode;
-        return p && p.nodeType === NodeType.Element ? (p as unknown as Element) : null;
-    }
-
     get firstElementChild(): Element | null {
         return this.children[0] || null;
     }

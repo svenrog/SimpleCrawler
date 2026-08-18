@@ -75,6 +75,15 @@ export abstract class Node extends EventTarget {
         return this.childNodes[this.childNodes.length - 1] || null;
     }
 
+    // Every node answers this, not only elements: it is Node.prototype's in a browser, and a text node's
+    // parentElement is what a text-measuring or highlight library reads to find the box it sits in. An
+    // accessibility overlay copies the descriptor off Node.prototype to wrap it, and finding none there
+    // threw at defineProperty rather than skipping the wrap.
+    get parentElement(): any {
+        const p = this.parentNode;
+        return p && p.nodeType === NodeType.Element ? p : null;
+    }
+
     get nextSibling(): Node | null {
         if (!this.parentNode) return null;
         const s = this.parentNode.childNodes;

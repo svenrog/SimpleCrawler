@@ -47,10 +47,19 @@ Entries before 4.0.0 are condensed to what changed; the reasoning behind each is
   skipped update.
 - An iframe carries a same-origin blank document on `contentWindow.document`/`contentDocument`, which is what
   a frame with no `src` is in a browser. A RUM beacon builds its loader by writing into it and reads
-  `.open()` off it unguarded. Nothing written there is executed or serialized.
+  `.open()` off it unguarded. Nothing written there is executed or serialized. Everything the frame's window
+  does not define is answered from this realm, because there is only one: an accessibility overlay opens a
+  frame precisely to read constructors off it (`win.Node.prototype`), and a window carrying a document but no
+  `Node` is a throw where the missing frame was merely a skipped feature.
 
 ### Changed
 
+- The Jint floor is 4.16.0. A range floored at 4.15.0 restores exactly 4.15.0, which predates the fix for
+  calling a bound function whose target is itself bound (`f.bind(a).bind(b)()`, jint#2853, released in
+  4.15.2) — so every consumer that did not pin Jint itself got the throw, and webpack's own chunk-loading
+  shim binds an already-bound `push`: nine executions lost on one surveyed site, three on another. The floor
+  is the current release rather than the first one carrying the fix, so what this package is tested on and
+  what a consumer restores are the same engine.
 - `FormData`, `Headers`, `Request` and `Response` moved out from behind `EnableFetch` into the base prelude.
   They construct and hold data and issue nothing; a caller declines the fetch shim to keep the page's
   requests off the network, not to lose four constructors a form widget builds its payload in. Only
@@ -83,6 +92,11 @@ Entries before 4.0.0 are condensed to what changed; the reasoning behind each is
   called the method straight back, and the recursion spent the stack before the page ran. A browser is immune
   because its setters never call the method. Every internal read and write in the DOM — the parser, the
   serializer, selector matching, `classList`, resource registration — now takes the same internal path.
+- `parentElement` is `Node.prototype`'s, where a browser keeps it, rather than `Element`'s. A text node has
+  one, and a library that wraps the accessor copies its descriptor off `Node.prototype` — finding none there
+  threw at `defineProperty` instead of skipping the wrap. The window's own `addEventListener`/
+  `removeEventListener`/`dispatchEvent` are mirrored onto `Window.prototype` for the same reason; a patch
+  made there does not reach the engine's global, and surviving the descriptor read is the point.
 - Fragment parsing takes its insertion mode from the context element: in `<html>` context the implied `head`
   and `body` are part of the result, instead of being stripped as the parser scaffolding they are everywhere
   else. DOMPurify feature-tests itself by replacing a scratch document's body and then looking the body up

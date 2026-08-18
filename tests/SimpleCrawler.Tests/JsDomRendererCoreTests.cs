@@ -781,4 +781,45 @@ public class JsDomRendererCoreTests : JsDomRendererTestBase, IClassFixture<JsRen
         Assert.Contains("svg=true", rendered);
         Assert.Contains("plain=1kept", rendered);
     }
+
+    // parentElement is Node.prototype's in a browser, not Element's: a text node has one, and a library that
+    // wraps the accessor copies its descriptor off Node.prototype — finding none there threw at
+    // defineProperty instead of skipping the wrap. The window's own event methods are mirrored onto
+    // Window.prototype for the same reason; a patch made there does not reach the engine's global, and
+    // surviving the descriptor read is the point.
+    [Theory]
+    [InlineData(JsEngine.Jint)]
+    [InlineData(JsEngine.V8)]
+    public async Task JsMode_ParentElementAndWindowMethods_LiveWhereABrowserKeepsThem(JsEngine engine)
+    {
+        if (engine == JsEngine.V8)
+            Assert.SkipUnless(V8Support.IsAvailable, V8Support.UnavailableReason);
+
+        const string html = """
+            <!doctype html><html><head></head><body>
+            <div id="host">text</div>
+            <script>
+            var host = document.getElementById('host');
+            var text = host.firstChild;
+            var l = document.createElement('a');
+            l.setAttribute('href', '/n?text=' + (text.parentElement === host) +
+                                   '&onNode=' + !!Object.getOwnPropertyDescriptor(Node.prototype, 'parentElement') +
+                                   '&element=' + (host.parentElement.tagName) +
+                                   '&detached=' + document.createElement('div').parentElement +
+                                   '&win=' + !!Object.getOwnPropertyDescriptor(Window.prototype, 'addEventListener'));
+            document.body.appendChild(l);
+            </script>
+            </body></html>
+            """;
+
+        var renderer = CreateJsRenderer(engine);
+        var result = await renderer.RenderAsync(Encoding.UTF8.GetBytes(html), "http://localhost:5000/", new HttpClient(), CancellationToken.None);
+        var rendered = Encoding.UTF8.GetString(result);
+
+        Assert.Contains("text=true", rendered);
+        Assert.Contains("onNode=true", rendered);
+        Assert.Contains("element=BODY", rendered);
+        Assert.Contains("detached=null", rendered);
+        Assert.Contains("win=true", rendered);
+    }
 }

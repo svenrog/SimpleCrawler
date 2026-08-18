@@ -170,6 +170,14 @@
     get lastChild() {
       return this.childNodes[this.childNodes.length - 1] || null;
     }
+    // Every node answers this, not only elements: it is Node.prototype's in a browser, and a text node's
+    // parentElement is what a text-measuring or highlight library reads to find the box it sits in. An
+    // accessibility overlay copies the descriptor off Node.prototype to wrap it, and finding none there
+    // threw at defineProperty rather than skipping the wrap.
+    get parentElement() {
+      const p = this.parentNode;
+      return p && p.nodeType === 1 /* Element */ ? p : null;
+    }
     get nextSibling() {
       if (!this.parentNode) return null;
       const s = this.parentNode.childNodes;
@@ -1250,12 +1258,8 @@
       return this.children.length;
     }
     // Element-only traversal. Slider/drag libraries step through slides via nextElementSibling and cache
-    // the track's parentElement/firstElementChild; a missing accessor returns undefined where they expect an
+    // the track's firstElementChild; a missing accessor returns undefined where they expect an
     // element-or-null, so the next `.removeAttribute`/`.classList` call throws instead of skipping.
-    get parentElement() {
-      const p = this.parentNode;
-      return p && p.nodeType === 1 /* Element */ ? p : null;
-    }
     get firstElementChild() {
       return this.children[0] || null;
     }
@@ -1860,33 +1864,33 @@
       this.setAttributeInternal("src", value == null ? "" : String(value));
     }
     get contentWindow() {
-      let win = this._contentWindow;
-      if (!win) {
-        const frame = this;
-        win = {
-          get document() {
-            return frame.contentDocument;
-          },
-          postMessage() {
-          },
-          close() {
-          },
-          focus() {
-          },
-          blur() {
-          }
-        };
-        Object.defineProperty(this, "_contentWindow", { value: win, enumerable: false });
-      }
-      return win;
+      return this._contentWindow || this._openFrame().window;
     }
     get contentDocument() {
-      let doc2 = this._contentDocument;
-      if (!doc2) {
-        doc2 = documentRef.current.implementation.createHTMLDocument("");
-        Object.defineProperty(this, "_contentDocument", { value: doc2, enumerable: false });
-      }
-      return doc2;
+      return this._contentDocument || this._openFrame().document;
+    }
+    _openFrame() {
+      const doc2 = documentRef.current.implementation.createHTMLDocument("");
+      const own = {
+        document: doc2,
+        postMessage() {
+        },
+        close() {
+        },
+        focus() {
+        },
+        blur() {
+        }
+      };
+      const realm = globalThis;
+      const win = new Proxy(own, {
+        get: (target, prop) => prop in target ? target[prop] : realm[prop],
+        has: (target, prop) => prop in target || prop in realm
+      });
+      doc2.defaultView = win;
+      Object.defineProperty(this, "_contentWindow", { value: win, enumerable: false });
+      Object.defineProperty(this, "_contentDocument", { value: doc2, enumerable: false });
+      return { window: win, document: doc2 };
     }
   };
 
@@ -4343,6 +4347,9 @@
     global.addEventListener = (t, cb) => addListener(_windowListeners, t, cb);
     global.removeEventListener = (t, cb) => removeListener(_windowListeners, t, cb);
     global.dispatchEvent = (event) => fireEvent(global, _windowListeners, event);
+    for (const method of ["addEventListener", "removeEventListener", "dispatchEvent"]) {
+      Window.prototype[method] = global[method];
+    }
     for (const on of [
       "onresize",
       "onscroll",

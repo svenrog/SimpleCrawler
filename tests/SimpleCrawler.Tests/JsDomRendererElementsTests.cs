@@ -165,7 +165,9 @@ public class JsDomRendererElementsTests : JsDomRendererTestBase, IClassFixture<J
     // The frame is same-origin, so it carries a blank document: a RUM beacon builds its loader by writing
     // into `frame.contentWindow.document` and reads `.open()` off it with no guard, which is a throw that
     // ends the page's whole inline block when the frame answers no document. Nothing written there is
-    // executed or serialized.
+    // executed or serialized. Everything the frame's window does not define is this realm's, since there is
+    // only one — an accessibility overlay opens a frame to read constructors off it (`win.Node.prototype`),
+    // and a window carrying a document but no Node throws where the missing frame merely skipped a feature.
     [Theory]
     [InlineData(JsEngine.Jint)]
     [InlineData(JsEngine.V8)]
@@ -190,6 +192,9 @@ public class JsDomRendererElementsTests : JsDomRendererTestBase, IClassFixture<J
             a.setAttribute('href', '/f?same=' + (inner === frame.contentDocument) +
                                    '&body=' + !!inner.body +
                                    '&kept=' + (frame.contentWindow.document === inner) +
+                                   '&realm=' + (frame.contentWindow.Node === window.Node) +
+                                   '&view=' + (inner.defaultView === frame.contentWindow) +
+                                   '&own=' + (frame.contentWindow.document !== document) +
                                    '&threw=' + threw);
             document.getElementById('t').appendChild(a);
             </script>
@@ -203,6 +208,9 @@ public class JsDomRendererElementsTests : JsDomRendererTestBase, IClassFixture<J
         Assert.Contains("same=true", rendered);
         Assert.Contains("body=true", rendered);
         Assert.Contains("kept=true", rendered);
+        Assert.Contains("realm=true", rendered);
+        Assert.Contains("view=true", rendered);
+        Assert.Contains("own=true", rendered);
         Assert.Contains("threw=none", rendered);
     }
 

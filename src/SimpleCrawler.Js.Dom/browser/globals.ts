@@ -100,6 +100,14 @@ export function installDOM(global: any): void {
     global.addEventListener = (t: string, cb: (...args: any[]) => void) => addListener(_windowListeners, t, cb);
     global.removeEventListener = (t: string, cb: (...args: any[]) => void) => removeListener(_windowListeners, t, cb);
     global.dispatchEvent = (event: any) => fireEvent(global, _windowListeners, event);
+    // The same three functions on the interface object's prototype, which is where a browser keeps them. The
+    // realm's global belongs to the engine, so its methods are its own and `Window.prototype` carried none —
+    // an accessibility overlay that copies the descriptor off it to wrap listener registration read undefined
+    // and threw at defineProperty. A patch made there does not reach this global; surviving the read is the
+    // point, and a library that patches the instance instead is unaffected either way.
+    for (const method of ["addEventListener", "removeEventListener", "dispatchEvent"]) {
+        (Window.prototype as any)[method] = global[method];
+    }
     // Handler props declared null so `'onX' in window` feature-detection passes and bundle assignments stick;
     // events never fire in the single-pass render, so the assigned handlers are only ever stored.
     for (const on of ["onresize", "onscroll", "onload", "onerror", "onunload", "onbeforeunload",
