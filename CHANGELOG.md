@@ -177,6 +177,11 @@ Entries before 4.0.0 are condensed to what changed; the reasoning behind each is
   longer parses as JavaScript. The parser never decoded entities inside these elements, so escaping on the
   way out corrupted what they hold rather than round-tripping it.
 
+- The tags HTML lets a page leave open are closed by the one that implies their end. The parser pushed every
+  element unconditionally, so `<li>a<li>b` and `<p>one<p>two` — ordinary markup — nested instead of becoming
+  siblings, and every structural query the page then ran answered wrongly with nothing thrown: a list of
+  thirty items looked like one. The implied start tags came with it, so `<table><tr>` puts the row in the
+  row group a browser inserts.
 - A selector the CSS grammar rejects now throws a `SyntaxError`, where the engine used to match nothing.
   jQuery decides whether it can use `querySelectorAll` at all by handing it deliberate garbage (`*,:x`,
   `[s!='']:x`) and watching for the exception; an empty list told it the native engine was buggy, and it fell

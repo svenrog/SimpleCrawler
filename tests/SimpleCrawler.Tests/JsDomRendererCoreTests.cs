@@ -822,4 +822,56 @@ public class JsDomRendererCoreTests : JsDomRendererTestBase, IClassFixture<JsRen
         Assert.Contains("detached=null", rendered);
         Assert.Contains("win=true", rendered);
     }
+
+    // HTML does not require these tags to be closed, so `<li>a<li>b` and `<p>one<p>two` are ordinary markup a
+    // browser reads as siblings. Nesting them instead answers every structural query wrongly — `ul > li`
+    // finds one item, a paragraph count is one — and nothing throws to say so, which is the whole class:
+    // the page's own code decides what to render from a shape that was never in the markup.
+    [Theory]
+    [InlineData(JsEngine.Jint)]
+    [InlineData(JsEngine.V8)]
+    public async Task JsMode_AnUnclosedTagIsClosedByTheOneThatImpliesIt(JsEngine engine)
+    {
+        if (engine == JsEngine.V8)
+            Assert.SkipUnless(V8Support.IsAvailable, V8Support.UnavailableReason);
+
+        const string html = """
+            <!doctype html><html><body>
+            <ul id="u"><li>a<li>b<li>c</ul>
+            <div id="p"><p>one<p>two</div>
+            <select id="s"><option>1<option>2</select>
+            <dl id="d"><dt>t<dd>v<dt>t2<dd>v2</dl>
+            <table id="t"><tr><td>x</td><tr><td>y</td></table>
+            <script>
+            function count(sel) { return document.querySelectorAll(sel).length; }
+            var probe = document.createElement('a');
+            probe.setAttribute('href', '/probe'
+              + '?items=' + count('#u > li')
+              + '&nested=' + count('#u li li')
+              + '&paragraphs=' + count('#p > p')
+              + '&options=' + count('#s > option')
+              + '&terms=' + count('#d > dt')
+              + '&rows=' + count('#t > tbody > tr')
+              + '&loose=' + count('#t > tr')
+              + '&cells=' + count('#t td'));
+            document.body.appendChild(probe);
+            </script>
+            </body></html>
+            """;
+
+        var renderer = CreateJsRenderer(engine);
+        var result = await renderer.RenderAsync(
+            Encoding.UTF8.GetBytes(html), "https://example.test/", new HttpClient(), TestContext.Current.CancellationToken);
+        var rendered = Encoding.UTF8.GetString(result);
+
+        Assert.Contains("items=3", rendered);
+        Assert.Contains("nested=0", rendered);
+        Assert.Contains("paragraphs=2", rendered);
+        Assert.Contains("options=2", rendered);
+        Assert.Contains("terms=2", rendered);
+        // A row lands in the implied row group, which is where a page looks for it.
+        Assert.Contains("rows=2", rendered);
+        Assert.Contains("loose=0", rendered);
+        Assert.Contains("cells=2", rendered);
+    }
 }

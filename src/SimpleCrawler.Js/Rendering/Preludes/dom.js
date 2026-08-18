@@ -3402,6 +3402,60 @@
   }
 
   // html/parser.ts
+  var _impliedEnd = {
+    li: { li: 1 },
+    dt: { dt: 1, dd: 1 },
+    dd: { dt: 1, dd: 1 },
+    option: { option: 1 },
+    optgroup: { option: 1, optgroup: 1 },
+    tr: { td: 1, th: 1, tr: 1 },
+    td: { td: 1, th: 1 },
+    th: { td: 1, th: 1 },
+    tbody: { td: 1, th: 1, tr: 1, tbody: 1, thead: 1, tfoot: 1 },
+    thead: { td: 1, th: 1, tr: 1, tbody: 1, thead: 1, tfoot: 1 },
+    tfoot: { td: 1, th: 1, tr: 1, tbody: 1, thead: 1, tfoot: 1 },
+    rt: { rt: 1, rp: 1 },
+    rp: { rt: 1, rp: 1 }
+  };
+  var _closesParagraph = {
+    address: 1,
+    article: 1,
+    aside: 1,
+    blockquote: 1,
+    center: 1,
+    details: 1,
+    dialog: 1,
+    dir: 1,
+    div: 1,
+    dl: 1,
+    fieldset: 1,
+    figcaption: 1,
+    figure: 1,
+    footer: 1,
+    form: 1,
+    h1: 1,
+    h2: 1,
+    h3: 1,
+    h4: 1,
+    h5: 1,
+    h6: 1,
+    header: 1,
+    hgroup: 1,
+    hr: 1,
+    li: 1,
+    main: 1,
+    menu: 1,
+    nav: 1,
+    ol: 1,
+    p: 1,
+    pre: 1,
+    search: 1,
+    section: 1,
+    summary: 1,
+    table: 1,
+    ul: 1
+  };
+  var _impliedRowGroup = { tbody: 1, thead: 1, tfoot: 1 };
   function createLocalElement(tag) {
     const factory = reflectedElementFactories[tag];
     const el = factory ? factory() : new HTMLElement(tag);
@@ -3432,6 +3486,35 @@
       const last = parent.childNodes[parent.childNodes.length - 1];
       if (last && last.nodeType === 3 /* Text */) last.data += text;
       else attachChild(parent, new Text(text));
+    }
+    function closeImplied(tag) {
+      const ends = _impliedEnd[tag];
+      while (open.length > 1) {
+        const current = open[open.length - 1].localName;
+        if (ends && ends[current]) {
+          open.pop();
+          continue;
+        }
+        if (current === "p" && _closesParagraph[tag]) {
+          open.pop();
+          continue;
+        }
+        return;
+      }
+    }
+    function openImplied(tag) {
+      if (tag === "tr" || tag === "td" || tag === "th") {
+        if (open[open.length - 1].localName === "table") {
+          const group = createLocalElement("tbody");
+          attachChild(open[open.length - 1], group);
+          open.push(group);
+        }
+      }
+      if ((tag === "td" || tag === "th") && _impliedRowGroup[open[open.length - 1].localName]) {
+        const row = createLocalElement("tr");
+        attachChild(open[open.length - 1], row);
+        open.push(row);
+      }
     }
     let i = 0;
     while (i < len) {
@@ -3496,6 +3579,8 @@
         }
         i = j;
         if (structural) continue;
+        closeImplied(tag);
+        openImplied(tag);
         if (RAWTEXT_ELEMENTS[tag]) {
           const rawFrom = j;
           const rawTo = findRawTextClose(src, tag, rawFrom);
