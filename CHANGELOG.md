@@ -10,7 +10,7 @@ Entries before 4.0.0 are condensed to what changed; the reasoning behind each is
 
 ## [Unreleased]
 
-## [4.1.0] - 2026-08-17
+## [4.1.0] - 2026-08-18
 
 ### Added
 
